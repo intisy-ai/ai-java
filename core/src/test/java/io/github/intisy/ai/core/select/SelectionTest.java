@@ -125,4 +125,58 @@ class SelectionTest {
         org.junit.jupiter.api.Assertions.assertFalse(RateLimitMath.isAvailable(a, "lane", now));
         org.junit.jupiter.api.Assertions.assertTrue(RateLimitMath.isAvailable(a, "other-lane", now));
     }
+
+    @Test
+    void selectIndexWithNullLaneUsesGlobalActiveIndexCursor() {
+        // lane == null routes laneCursor/setLaneCursor through the else-branch (pool.activeIndex),
+        // never touching activeIndexByLane. Every other test in this file passes a lane, so this
+        // is the only coverage of the global (no-lane) cursor path.
+        long now = 1_000_000L;
+        Account a0 = account("a0");
+        Account a1 = account("a1");
+        Account a2 = account("a2");
+        a1.enabled = false; // a1 unavailable regardless of lane
+
+        AccountPool pool = poolOf(a0, a1, a2);
+        pool.activeIndex = 0;
+
+        int first = Selection.selectIndex(pool, null, now, Strategy.ROUND_ROBIN, null);
+        assertEquals(2, first); // (0+1)%3=1 is disabled, so skip to 2
+        assertEquals(2, pool.activeIndex);
+        org.junit.jupiter.api.Assertions.assertTrue(pool.activeIndexByLane.isEmpty()); // global cursor only
+
+        int second = Selection.selectIndex(pool, null, now, Strategy.ROUND_ROBIN, null);
+        assertEquals(0, second); // (2+1)%3=0, a0 is available
+        assertEquals(0, pool.activeIndex);
+        org.junit.jupiter.api.Assertions.assertTrue(pool.activeIndexByLane.isEmpty());
+    }
+
+    @Test
+    void hybridWithCustomPredicateFloorsSoonestFreeToNow() {
+        // JS ratelimit.ts: availableAt(account, lane, now) = Math.max(t, now) -- every candidate
+        // is floored to `now` before comparison. When a custom predicate (e.g. antigravity's
+        // verificationRequired check, ported later) is the ONLY reason accounts are unavailable,
+        // and their raw coolingDownUntil timestamps already lie in the past, un-floored math would
+        // rank accounts by "how far in the past" and pick whichever happens to be smallest (most
+        // stale) -- the WRONG account. Flooring makes all three tie at `now`, and the tie is broken
+        // by the first index in scan order (strict `<` in soonestFree). This pins the JS-parity
+        // behavior: index 0 wins even though a2 has the smallest raw (unfloored) timestamp.
+        long now = 1_000_000L;
+        Account a0 = account("a0");
+        Account a1 = account("a1");
+        Account a2 = account("a2");
+        a0.coolingDownUntil = now - 500; // past
+        a1.coolingDownUntil = now - 100; // past, closest to now
+        a2.coolingDownUntil = now - 900; // furthest in the past -- would "win" without the now-floor
+
+        AccountPool pool = poolOf(a0, a1, a2);
+        pool.activeIndexByLane.put("lane", 0);
+
+        // Unavailable purely via the custom predicate; the raw timestamps above are all in the
+        // past so the built-in isAvailable would actually consider them free.
+        int result = Selection.selectIndex(pool, "lane", now, Strategy.HYBRID, (a, l) -> false);
+
+        assertEquals(0, result); // all three floor to `now` and tie; index 0 wins the scan
+        assertEquals(0, pool.activeIndexByLane.get("lane"));
+    }
 }

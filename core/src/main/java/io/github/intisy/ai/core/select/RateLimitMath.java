@@ -35,9 +35,12 @@ public final class RateLimitMath {
 
     /**
      * Soonest epoch ms this account is usable again for {@code lane}; {@code Long.MAX_VALUE}
-     * (the "Infinity" sentinel) if the account is disabled.
+     * (the "Infinity" sentinel) if the account is disabled. Floors to {@code now} (matches JS
+     * {@code Math.max(t, now)}) so an account whose cooldown/rate-limit timestamps are already
+     * in the past (but is still unavailable via a custom predicate) reports "now", not a stale
+     * past instant.
      */
-    public static long availableAt(Account account, String lane) {
+    public static long availableAt(Account account, String lane, long now) {
         if (!isEnabled(account)) return Long.MAX_VALUE;
         long t = 0L;
         if (account.coolingDownUntil != null) t = Math.max(t, account.coolingDownUntil);
@@ -45,7 +48,7 @@ public final class RateLimitMath {
             Long until = account.rateLimitResetTimes.get(lane);
             if (until != null) t = Math.max(t, until);
         }
-        return t;
+        return Math.max(t, now);
     }
 
     /**

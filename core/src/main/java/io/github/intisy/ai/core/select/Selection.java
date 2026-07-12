@@ -51,7 +51,7 @@ public final class Selection {
 
         if (s == Strategy.HYBRID) {
             // last resort: claim whoever frees up soonest, even though nobody is available now
-            int best = soonestFree(pool, lane);
+            int best = soonestFree(pool, lane, now);
             if (best >= 0) setLaneCursor(pool, lane, best);
             return best;
         }
@@ -86,11 +86,11 @@ public final class Selection {
     }
 
     /** Soonest-free account across the whole pool, the hybrid fallback so the caller can wait. */
-    private static int soonestFree(AccountPool pool, String lane) {
+    private static int soonestFree(AccountPool pool, String lane, long now) {
         int best = -1;
         long bestAt = Long.MAX_VALUE;
         for (int i = 0; i < pool.accounts.size(); i++) {
-            long at = RateLimitMath.availableAt(pool.accounts.get(i), lane);
+            long at = RateLimitMath.availableAt(pool.accounts.get(i), lane, now);
             if (at < bestAt) {
                 bestAt = at;
                 best = i;
