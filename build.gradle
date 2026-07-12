@@ -1,0 +1,41 @@
+plugins {
+    id "com.github.johnrengelman.shadow" version "8.1.1" apply false
+    id "io.github.intisy.online-gradle" version "1.7.2" apply false
+    id "io.github.intisy.github-gradle" version "1.8.2.1" apply false
+}
+
+// online-gradle's `online {}` preset block is intended for single-module repos (see
+// docker-java's root build.gradle). Applying it project-wide here caused subproject
+// configuration issues in this multi-module layout, so for now it stays declared
+// (apply false) but unapplied; revisit once :proxy/:providers exist and it's clearer
+// whether it should live at the root or per-module.
+
+subprojects {
+    apply plugin: "java-library"
+    apply plugin: "com.github.johnrengelman.shadow"
+    apply plugin: "io.github.intisy.github-gradle"
+
+    group = artifact_group
+
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    dependencies {
+        testImplementation "org.junit.jupiter:junit-jupiter:5.10.1"
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+
+    github {
+        accessToken = System.getenv("GITHUB_TOKEN") ?: ""
+    }
+}
