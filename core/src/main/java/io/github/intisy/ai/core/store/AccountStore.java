@@ -35,7 +35,16 @@ public class AccountStore {
     private static final long LOCK_WAIT_MS = 5_000;
     private static final long LOCK_POLL_MS = 25;
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    // LONG_OR_DOUBLE matches JS `number` semantics: whole numbers deserialize to Long (so they
+    // reserialize without a trailing ".0"), fractional numbers to Double. Without this, Gson's
+    // default ToNumberPolicy.DOUBLE deserializes every JSON number in the opaque Account.meta
+    // map to java.lang.Double, so a whole number like {"count":5} round-trips as {"count":5.0}
+    // and corrupts byte-compatibility with the JS core-auth store on every AccountStore write.
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .setObjectToNumberStrategy(com.google.gson.ToNumberPolicy.LONG_OR_DOUBLE)
+            .create();
 
     private final Path configFolder;
 
