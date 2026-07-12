@@ -55,13 +55,21 @@ class ModelsCacheTest {
     }
 
     @Test
-    void read_returnsNullWhenProviderMissingOrHasNoModels() throws Exception {
+    void read_returnsEntryWhenModelsPresentEvenIfEmpty_nullWhenMissing() throws Exception {
         Path cf = Files.createTempDirectory("ai-models-empty");
-        Files.write(cf.resolve("models.json"), "{ \"other\": { \"models\": {} } }".getBytes());
+        Files.write(cf.resolve("models.json"), (""
+                + "{\n"
+                + "  \"empty-models\": { \"models\": {} },\n"
+                + "  \"no-models-field\": { \"defaultModelId\": \"x\" }\n"
+                + "}\n").getBytes());
 
         ModelsCache cache = new ModelsCache(cf);
-        assertNull(cache.read("claude-code")); // absent entirely
-        assertNull(cache.read("other"));       // present but empty models map
+        assertNull(cache.read("claude-code"));       // (a) provider missing entirely
+        assertNull(cache.read("no-models-field"));   // (b) entry present but models is null/absent
+        // (c) JS parity: entry.models is {} (truthy in JS) -> entry is returned, not null
+        ModelsCache.Entry entry = cache.read("empty-models");
+        assertTrue(entry != null);
+        assertTrue(entry.models.isEmpty());
     }
 
     @Test

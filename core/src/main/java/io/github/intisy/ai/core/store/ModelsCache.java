@@ -100,7 +100,7 @@ public class ModelsCache {
      */
     public Entry read(String providerId) {
         Entry entry = readAll().get(providerId);
-        return entry != null && entry.models != null && !entry.models.isEmpty() ? entry : null;
+        return entry != null && entry.models != null ? entry : null;
     }
 
     /**
