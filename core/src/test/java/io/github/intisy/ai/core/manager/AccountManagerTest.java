@@ -305,10 +305,27 @@ class AccountManagerTest {
         store.add("provider", a1);
 
         AccountManager manager = new AccountManager("provider", store, new ManagerOptions());
-        long next = manager.nextAvailableAt(null);
+        Long next = manager.nextAvailableAt(null);
 
+        assertNotNull(next);
         assertTrue(next <= now + 10_000L);
         assertTrue(next >= now + 2_000L - 1000); // soonest of the two, floored to "now" internally
+    }
+
+    @Test
+    void nextAvailableAt_returnsNullWhenNoAccountEverBecomesAvailable() throws Exception {
+        Path configFolder = Files.createTempDirectory("ai-manager-next-null");
+        AccountStore store = new AccountStore(configFolder);
+
+        Account disabled = new Account();
+        disabled.id = "acc0";
+        disabled.enabled = false;
+        store.add("provider", disabled);
+
+        AccountManager manager = new AccountManager("provider", store, new ManagerOptions());
+        Long next = manager.nextAvailableAt(null);
+
+        assertNull(next);
     }
 
     @Test

@@ -27,6 +27,14 @@ subprojects {
         targetCompatibility = JavaVersion.VERSION_1_8
     }
 
+    // Validate the MAIN compilation against the Java 8 API surface (not just source syntax),
+    // so a Java 9+ API leak (e.g. java.lang.System.Logger) fails the build instead of only
+    // failing at runtime on a Java 8 JRE. compileTestJava is intentionally excluded: tests
+    // legitimately use newer JDK APIs (e.g. Files.readString, List.of).
+    tasks.matching { it.name == "compileJava" }.configureEach {
+        options.release = 8
+    }
+
     dependencies {
         testImplementation "org.junit.jupiter:junit-jupiter:5.10.1"
     }

@@ -90,9 +90,11 @@ public final class TokenRefresh {
         return el != null && !el.isJsonNull() ? el.getAsString() : null;
     }
 
+    /** Matches JS {@code typeof x === "number" ? x : default}: a non-numeric value (e.g. a string) falls back to {@code null} instead of throwing. */
     private static Double numberField(JsonObject obj, String field) {
         JsonElement el = obj.get(field);
-        return el != null && !el.isJsonNull() ? el.getAsDouble() : null;
+        if (el == null || !el.isJsonPrimitive() || !el.getAsJsonPrimitive().isNumber()) return null;
+        return el.getAsDouble();
     }
 
     private static String joinNonNull(String a, String b) {

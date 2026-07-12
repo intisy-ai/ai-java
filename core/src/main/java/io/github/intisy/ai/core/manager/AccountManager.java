@@ -7,7 +7,6 @@ import io.github.intisy.ai.core.oauth.TokenRefreshError;
 import io.github.intisy.ai.core.select.RateLimitMath;
 import io.github.intisy.ai.core.select.Selection;
 import io.github.intisy.ai.core.store.Account;
-import io.github.intisy.ai.core.store.AccountPool;
 import io.github.intisy.ai.core.store.AccountStore;
 
 import java.util.LinkedHashMap;
@@ -123,13 +122,18 @@ public class AccountManager {
         });
     }
 
-    public long nextAvailableAt(String lane) {
+    /**
+     * Soonest epoch-ms any account in the pool becomes available for {@code lane}, or
+     * {@code null} if none ever will (matches JS {@code manager.ts}: {@code best === Infinity
+     * ? null : best}).
+     */
+    public Long nextAvailableAt(String lane) {
         long now = System.currentTimeMillis();
         long best = Long.MAX_VALUE;
         for (Account account : store.list(providerId)) {
             best = Math.min(best, RateLimitMath.availableAt(account, lane, now));
         }
-        return best;
+        return best == Long.MAX_VALUE ? null : best;
     }
 
     /** Forces a token refresh regardless of expiry (manual "refresh token" action). Returns the new access token, or {@code null} if there's nothing to refresh. */
