@@ -1,0 +1,47 @@
+[
+  {
+    "id": "basic-claude-tiers-skip-nonmatching",
+    "tierRegex": "^claude-([a-z]+)-\\d",
+    "tierOrder": ["opus", "sonnet", "haiku"],
+    "tierFallback": ["opus", "sonnet", "haiku"],
+    "tierSourceProvider": "anthropic",
+    "modelIds": ["claude-sonnet-4-20250514", "claude-opus-4-1-20250805", "claude-haiku-3-20240307", "gpt-4o"],
+    "expectedTiers": ["opus", "sonnet", "haiku"]
+  },
+  {
+    "id": "all-nonmatching-falls-back-to-fallback",
+    "tierRegex": "^claude-([a-z]+)-\\d",
+    "tierOrder": ["default"],
+    "tierFallback": ["default"],
+    "tierSourceProvider": "openai",
+    "modelIds": ["gpt-4o", "gpt-4o-mini", "o1-preview"],
+    "expectedTiers": ["default"]
+  },
+  {
+    "id": "dedupes-repeated-tier",
+    "tierRegex": "^claude-([a-z]+)-\\d",
+    "tierOrder": ["opus"],
+    "tierFallback": ["opus"],
+    "tierSourceProvider": "anthropic",
+    "modelIds": ["claude-opus-4-1-20250805", "claude-opus-4-5-20260101"],
+    "expectedTiers": ["opus"]
+  },
+  {
+    "id": "case-sensitive-no-match-falls-back",
+    "tierRegex": "^claude-([a-z]+)-\\d",
+    "tierOrder": ["opus"],
+    "tierFallback": ["opus"],
+    "tierSourceProvider": "anthropic",
+    "modelIds": ["Claude-Opus-4-1-20250805"],
+    "expectedTiers": ["opus"]
+  },
+  {
+    "id": "newer-version-first-naming-not-matched-by-legacy-regex",
+    "tierRegex": "^claude-([a-z]+)-\\d",
+    "tierOrder": ["opus", "fable"],
+    "tierFallback": ["opus", "fable"],
+    "tierSourceProvider": "anthropic",
+    "modelIds": ["claude-4-5-opus-20260101", "claude-fable-5-20260201"],
+    "expectedTiers": ["fable"]
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "small-whole-number",
+    "input": "{\"count\":5}",
+    "expectContains": ["\"count\":5"],
+    "expectNotContains": ["\"count\":5.0"]
+  },
+  {
+    "id": "long-range-integer-epoch-ms",
+    "input": "{\"expires\":1752345678901}",
+    "expectContains": ["\"expires\":1752345678901"],
+    "expectNotContains": ["1752345678901.0"]
+  },
+  {
+    "id": "fractional-number-keeps-decimal",
+    "input": "{\"fraction\":0.5}",
+    "expectContains": ["\"fraction\":0.5"],
+    "expectNotContains": []
+  },
+  {
+    "id": "mixed-object-roundtrip",
+    "input": "{\"expires\":1752345678901,\"count\":5,\"fraction\":0.5}",
+    "expectContains": ["\"expires\":1752345678901", "\"count\":5", "\"fraction\":0.5"],
+    "expectNotContains": ["1752345678901.0", "\"count\":5.0"]
+  },
+  {
+    "id": "bare-long-max-value",
+    "input": "9223372036854775807",
+    "expectContains": ["9223372036854775807"],
+    "expectNotContains": [".0"]
+  },
+  {
+    "id": "zero-is-whole",
+    "input": "{\"attempt\":0}",
+    "expectContains": ["\"attempt\":0"],
+    "expectNotContains": ["\"attempt\":0.0"]
+  }
+]

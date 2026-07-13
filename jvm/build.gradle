@@ -8,6 +8,19 @@ dependencies {
     testImplementation "com.h2database:h2:2.2.224"
 }
 
+// Phase 2 Task 7 (JVM<->JS parity vectors): expose shared's test-resource vector files
+// (shared/src/test/resources/parity/*.json) on THIS module's test classpath too, so
+// ParityVectorsTest can load them via getResourceAsStream("/parity/...") without a copy --
+// shared/src/test/resources/parity/ stays the single source of truth the JS consumer test
+// (js/npm/test/parity.test.ts) also reads directly off disk.
+sourceSets {
+    test {
+        resources {
+            srcDir "../shared/src/test/resources"
+        }
+    }
+}
+
 // Match docker-java's "standalone" naming for the shaded jar (Shadow's own
 // default classifier is "all"); the plain jar keeps no classifier.
 shadowJar {

@@ -4,7 +4,15 @@
 // `fetch`-based transport and a plain in-memory Store. The String/JSON boundary proven in
 // Phase 2 Task 5 is preserved end-to-end: every function below is string-in/string-out (or a
 // Promise of one) at the point it crosses into the TeaVM module.
-import { routeJsonAsync, routeJsonSync, jsonRoundTrip } from "./dist/aijava.js";
+import {
+  routeJsonAsync,
+  routeJsonSync,
+  jsonRoundTrip,
+  calculateBackoffMsJson,
+  rateLimitResetMsJson,
+  resolveTiersJson,
+  resolveModelMapJson,
+} from "./dist/aijava.js";
 
 /**
  * Plain in-memory Store snapshot holder. Values are opaque JSON strings, matching shared's
@@ -120,3 +128,12 @@ export function routeJsonSyncWith(requestJson, opts = {}) {
 }
 
 export { jsonRoundTrip };
+
+// -- Phase 2 Task 7 (JVM<->JS parity vectors) pure-function exports ---------------------------
+// Thin passthroughs to AiJavaJs's exported wrappers (see js/src/main/java/io/github/intisy/ai/js/
+// AiJavaJs.java) -- string-in/string-out (JSON), no Store/HttpClient plumbing needed. Used by
+// js/npm/test/parity.test.ts to run the SAME input->expected vectors
+// (shared/src/test/resources/parity/*.json) the JVM parity test
+// (jvm/src/test/java/io/github/intisy/ai/jvm/ParityVectorsTest.java) runs, through the actually-
+// shipped npm package rather than a reimplementation.
+export { calculateBackoffMsJson, rateLimitResetMsJson, resolveTiersJson, resolveModelMapJson };

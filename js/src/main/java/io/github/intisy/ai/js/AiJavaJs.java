@@ -1,8 +1,12 @@
 package io.github.intisy.ai.js;
 
 import io.github.intisy.ai.shared.logic.HandlerResolvers;
+import io.github.intisy.ai.shared.logic.ModelMap;
+import io.github.intisy.ai.shared.logic.RateLimit;
+import io.github.intisy.ai.shared.logic.RateLimitMath;
 import io.github.intisy.ai.shared.logic.Router;
 import io.github.intisy.ai.shared.logic.RouterOptions;
+import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.HttpClient;
@@ -14,8 +18,11 @@ import org.teavm.jso.JSExport;
 import org.teavm.jso.core.JSPromise;
 import org.teavm.jso.core.JSString;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -63,6 +70,133 @@ public final class AiJavaJs {
     public static String jsonRoundTrip(String json) {
         JsonCodec codec = new SimpleJsonCodec();
         return codec.stringify(codec.parse(json));
+    }
+
+    /**
+     * Phase 2 Task 7 (JVM&lt;-&gt;JS parity vectors) export: {@code RateLimitMath.calculateBackoffMs}
+     * over the {@code jitter == false} exact-value path (the deterministic one; {@code jitter ==
+     * true} consults an RNG and is intentionally out of scope for a byte-identical parity check).
+     * {@code argsJson} is {@code {"attempt":int,"baseMs":long,"maxMs":long,"jitter":boolean}};
+     * returns the bare JSON number result (a {@code Long}, so a whole value never gets a
+     * spurious {@code .0} -- see {@link #jsonRoundTrip}'s javadoc for why that matters).
+     */
+    @JSExport
+    public static String calculateBackoffMsJson(String argsJson) {
+        JsonCodec json = new SimpleJsonCodec();
+        Map<?, ?> args = (Map<?, ?>) json.parse(argsJson);
+        int attempt = toInt(args.get("attempt"));
+        long baseMs = toLong(args.get("baseMs"));
+        long maxMs = toLong(args.get("maxMs"));
+        boolean jitter = Boolean.TRUE.equals(args.get("jitter"));
+        long result = RateLimitMath.calculateBackoffMs(attempt, baseMs, maxMs, jitter);
+        return json.stringify(result);
+    }
+
+    /**
+     * Phase 2 Task 7 export: {@code RateLimit.rateLimitResetMs} over a synthesized
+     * {@code HttpResponse} built from {@code argsJson} = {@code {"headers":{...},"now":long}}.
+     * Returns the bare JSON number result.
+     */
+    @JSExport
+    public static String rateLimitResetMsJson(String argsJson) {
+        JsonCodec json = new SimpleJsonCodec();
+        Map<?, ?> args = (Map<?, ?>) json.parse(argsJson);
+        long now = toLong(args.get("now"));
+
+        Map<String, String> headers = new HashMap<>();
+        Object headersObj = args.get("headers");
+        if (headersObj instanceof Map) {
+            for (Map.Entry<?, ?> e : ((Map<?, ?>) headersObj).entrySet()) {
+                headers.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
+            }
+        }
+        HttpResponse resp = new HttpResponse();
+        resp.status = 200;
+        resp.headers = headers;
+        resp.body = "";
+
+        long result = RateLimit.rateLimitResetMs(resp, now);
+        return json.stringify(result);
+    }
+
+    /**
+     * Phase 2 Task 7 export: {@code ModelMap.resolveTiers} -- the highest-risk regex surface
+     * for JVM/JS divergence (tier family extraction via {@code profile.tierRegex}).
+     * {@code profileJson} supplies {@code tierSourceProvider}/{@code tierOrder}/
+     * {@code tierFallback}/{@code tierRegex}; {@code storeJson} is a Store snapshot (typically
+     * just a seeded {@code models.json}). Returns the resolved tier list as a JSON array.
+     */
+    @JSExport
+    public static String resolveTiersJson(String profileJson, String storeJson) {
+        JsonCodec json = new SimpleJsonCodec();
+        Store store = seedStore(storeJson);
+        RoutingProfile p = profileFromJson(json, profileJson);
+        List<String> tiers = ModelMap.resolveTiers(store, json, p);
+        return json.stringify(tiers);
+    }
+
+    /**
+     * Phase 2 Task 7 export: {@code ModelMap.resolveModelMap} -- the heal/derive engine.
+     * {@code profileJson} supplies {@code configFile}/{@code tierSourceProvider}/
+     * {@code tierOrder}/{@code tierFallback}/{@code tierRegex}/{@code envPrefix}; {@code
+     * storeJson} is a Store snapshot (the config file's {@code modelMap} plus {@code
+     * models.json}). Returns {@code {tier: [{provider,model,name,derived}, ...]}} as JSON.
+     */
+    @JSExport
+    public static String resolveModelMapJson(String profileJson, String storeJson) {
+        JsonCodec json = new SimpleJsonCodec();
+        Store store = seedStore(storeJson);
+        RoutingProfile p = profileFromJson(json, profileJson);
+        Map<String, List<Assignment>> eff = ModelMap.resolveModelMap(store, json, p);
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Assignment>> entry : eff.entrySet()) {
+            List<Object> chain = new ArrayList<>();
+            for (Assignment a : entry.getValue()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("provider", a.provider);
+                m.put("model", a.model);
+                m.put("name", a.name);
+                m.put("derived", a.derived);
+                chain.add(m);
+            }
+            out.put(entry.getKey(), chain);
+        }
+        return json.stringify(out);
+    }
+
+    // -- parity-export helpers ------------------------------------------------------
+
+    private static RoutingProfile profileFromJson(JsonCodec json, String profileJson) {
+        Map<?, ?> m = (Map<?, ?>) json.parse(profileJson);
+        RoutingProfile p = new RoutingProfile();
+        Object configFile = m.get("configFile");
+        p.configFile = configFile instanceof String ? (String) configFile : null;
+        p.routingKey = "providerRouting";
+        p.tierSourceProvider = (String) m.get("tierSourceProvider");
+        p.tierOrder = toStringList(m.get("tierOrder"));
+        p.tierFallback = toStringList(m.get("tierFallback"));
+        p.tierRegex = Pattern.compile((String) m.get("tierRegex"));
+        p.envPrefix = (String) m.get("envPrefix");
+        p.defaultContext = 200000;
+        p.defaultOutput = 64000;
+        return p;
+    }
+
+    private static List<String> toStringList(Object o) {
+        List<String> out = new ArrayList<>();
+        if (o instanceof List) {
+            for (Object v : (List<?>) o) out.add(String.valueOf(v));
+        }
+        return out;
+    }
+
+    private static int toInt(Object o) {
+        return o instanceof Number ? ((Number) o).intValue() : 0;
+    }
+
+    private static long toLong(Object o) {
+        return o instanceof Number ? ((Number) o).longValue() : 0L;
     }
 
     /**

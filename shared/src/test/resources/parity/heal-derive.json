@@ -1,0 +1,62 @@
+[
+  {
+    "id": "heals-stale-model-within-provider",
+    "profile": {
+      "configFile": "parity-model-map.json",
+      "tierSourceProvider": "antigravity",
+      "tierOrder": ["opus", "sonnet", "haiku", "fable"],
+      "tierFallback": ["opus", "sonnet", "haiku", "fable"],
+      "tierRegex": "^claude-([a-z]+)-\\d",
+      "envPrefix": "ANTHROPIC"
+    },
+    "store": {
+      "parity-model-map.json": "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus-old\"}}}",
+      "models.json": "{\"antigravity\":{\"models\":{\"m-opus-new\":{\"name\":\"M Opus New\"}},\"ranking\":[\"m-opus-new\"]}}"
+    },
+    "expected": {
+      "opus": [ { "provider": "antigravity", "model": "m-opus-new", "name": "M Opus New", "derived": true } ],
+      "sonnet": [],
+      "haiku": [],
+      "fable": [],
+      "default": [ { "provider": "antigravity", "model": "m-opus-new", "name": "M Opus New", "derived": true } ]
+    }
+  },
+  {
+    "id": "explicit-mapping-passthrough-plus-derived-default",
+    "profile": {
+      "configFile": "parity-model-map-2.json",
+      "tierSourceProvider": "antigravity",
+      "tierOrder": ["opus", "sonnet"],
+      "tierFallback": ["opus", "sonnet"],
+      "tierRegex": "^claude-([a-z]+)-\\d",
+      "envPrefix": "ANTHROPIC"
+    },
+    "store": {
+      "parity-model-map-2.json": "{\"modelMap\":{\"opus\":{\"provider\":\"antigravity\",\"model\":\"m-opus\"},\"sonnet\":{\"provider\":\"antigravity\",\"model\":\"m-sonnet\"}}}",
+      "models.json": "{\"antigravity\":{\"models\":{\"m-opus\":{\"name\":\"M Opus\"},\"m-sonnet\":{\"name\":\"M Sonnet\"}},\"ranking\":[\"m-opus\",\"m-sonnet\"]}}"
+    },
+    "expected": {
+      "opus": [ { "provider": "antigravity", "model": "m-opus", "name": "M Opus", "derived": false } ],
+      "sonnet": [ { "provider": "antigravity", "model": "m-sonnet", "name": "M Sonnet", "derived": false } ],
+      "default": [ { "provider": "antigravity", "model": "m-opus", "name": "M Opus", "derived": true } ]
+    }
+  },
+  {
+    "id": "no-stored-mapping-derives-across-whole-catalog",
+    "profile": {
+      "configFile": "parity-model-map-3.json",
+      "tierSourceProvider": "antigravity",
+      "tierOrder": ["opus"],
+      "tierFallback": ["opus"],
+      "tierRegex": "^claude-([a-z]+)-\\d",
+      "envPrefix": "ANTHROPIC"
+    },
+    "store": {
+      "models.json": "{\"antigravity\":{\"models\":{\"m-opus-flagship\":{\"name\":\"M Opus Flagship\"}},\"ranking\":[\"m-opus-flagship\"]}}"
+    },
+    "expected": {
+      "opus": [ { "provider": "antigravity", "model": "m-opus-flagship", "name": "M Opus Flagship", "derived": true } ],
+      "default": [ { "provider": "antigravity", "model": "m-opus-flagship", "name": "M Opus Flagship", "derived": true } ]
+    }
+  }
+]

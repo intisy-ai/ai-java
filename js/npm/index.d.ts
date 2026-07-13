@@ -66,3 +66,37 @@ export function routeJsonSyncWith(requestJson: string, opts?: { store?: StoreIni
  * `LONG_OR_DOUBLE` behavior for the same input.
  */
 export function jsonRoundTrip(json: string): string;
+
+// -- Phase 2 Task 7 (JVM<->JS parity vectors) pure-function exports ---------------------------
+// String(JSON)-in/string(JSON)-out wrappers over shared's RateLimitMath/RateLimit/ModelMap,
+// used to run the SAME input->expected vectors (shared/src/test/resources/parity/*.json) the
+// JVM parity test (jvm/src/test/.../ParityVectorsTest.java) runs, through this actually-shipped
+// package. See js/src/main/java/io/github/intisy/ai/js/AiJavaJs.java for the Java side.
+
+/**
+ * `argsJson`: `{attempt: number, baseMs: number, maxMs: number, jitter: boolean}`.
+ * Returns the bare JSON number result of `RateLimitMath.calculateBackoffMs` (the deterministic
+ * `jitter === false` path -- `min(maxMs, baseMs * 2^max(0, attempt))`).
+ */
+export function calculateBackoffMsJson(argsJson: string): string;
+
+/**
+ * `argsJson`: `{headers: Record<string, string>, now: number}`.
+ * Returns the bare JSON number result of `RateLimit.rateLimitResetMs` against a synthesized
+ * response carrying those headers.
+ */
+export function rateLimitResetMsJson(argsJson: string): string;
+
+/**
+ * `profileJson`: `{tierSourceProvider, tierOrder, tierFallback, tierRegex, envPrefix}`.
+ * `storeJson`: a Store snapshot (typically just a seeded `models.json`).
+ * Returns the resolved tier list (`ModelMap.resolveTiers`) as a JSON array of strings.
+ */
+export function resolveTiersJson(profileJson: string, storeJson: string): string;
+
+/**
+ * `profileJson`: `{configFile, tierSourceProvider, tierOrder, tierFallback, tierRegex,
+ * envPrefix}`. `storeJson`: a Store snapshot (the config file's `modelMap` plus `models.json`).
+ * Returns `{tier: [{provider, model, name, derived}, ...]}` (`ModelMap.resolveModelMap`) as JSON.
+ */
+export function resolveModelMapJson(profileJson: string, storeJson: string): string;

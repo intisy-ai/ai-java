@@ -1,0 +1,11 @@
+[
+  { "id": "attempt0-noop", "attempt": 0, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 1000 },
+  { "id": "attempt1-doubles", "attempt": 1, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 2000 },
+  { "id": "attempt2-quadruples", "attempt": 2, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 4000 },
+  { "id": "attempt3-octuples", "attempt": 3, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 8000 },
+  { "id": "attempt-large-caps-at-max", "attempt": 10, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 60000 },
+  { "id": "negative-attempt-clamped-to-zero", "attempt": -1, "baseMs": 1000, "maxMs": 60000, "jitter": false, "expectedMs": 1000 },
+  { "id": "different-base-and-cap", "attempt": 5, "baseMs": 500, "maxMs": 100000, "jitter": false, "expectedMs": 16000 },
+  { "id": "base-equals-cap", "attempt": 0, "baseMs": 1, "maxMs": 1, "jitter": false, "expectedMs": 1 },
+  { "id": "exact-cap-boundary", "attempt": 6, "baseMs": 1000, "maxMs": 64000, "jitter": false, "expectedMs": 64000 }
+]
