@@ -15,7 +15,7 @@ import java.util.Map;
  * {@link Integer} print without a decimal point and {@link Double}/{@link Float} print via
  * {@code toString()} (so a genuinely fractional value keeps its decimal).
  */
-class TestJsonCodec implements JsonCodec {
+public class TestJsonCodec implements JsonCodec {
 
     @Override
     public Object parse(String jsonText) {

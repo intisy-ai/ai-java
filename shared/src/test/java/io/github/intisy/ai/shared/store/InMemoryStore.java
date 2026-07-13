@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.UnaryOperator;
 
 /** In-memory {@link Store} fake for tests: a plain {@code Map<String,String>}, no I/O. */
-class InMemoryStore implements Store {
+public class InMemoryStore implements Store {
     private final Map<String, String> data = new LinkedHashMap<>();
 
     @Override
