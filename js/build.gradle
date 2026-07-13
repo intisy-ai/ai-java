@@ -35,3 +35,12 @@ teavm.js {
     optimization = OptimizationLevel.NONE
     targetFileName = "aijava.js"
 }
+
+// The root subprojects{} block applies io.github.intisy.github-gradle uniformly, which gives
+// every module a publishGithub task defaulting to that module's plain jar. :js's plain jar is
+// just the compiled TeaVM-entrypoint Java sources (AiJavaJs etc.) - not a useful release
+// artifact. :js's real output is the npm package (js/npm), published to npm, not GitHub
+// releases, so disable the inherited task here instead of publishing a meaningless jar.
+tasks.named("publishGithub") {
+    enabled = false
+}
