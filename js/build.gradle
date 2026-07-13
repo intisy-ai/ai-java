@@ -1,0 +1,37 @@
+import org.teavm.gradle.api.JSModuleType
+import org.teavm.gradle.api.OptimizationLevel
+
+plugins {
+    id "org.teavm" version "0.15.0"
+}
+
+dependencies {
+    // js transpiles :shared's pure logic — no gson/nio/etc, matching shared's own zero-dependency
+    // policy (Router/ModelMap already avoid java.net/nio for exactly this reason).
+    implementation project(":shared")
+    teavm teavm.libs.jsoApis
+}
+
+// The root subprojects{} block pins Java 8 (sourceCompatibility/targetCompatibility +
+// compileJava --release 8) for portability of the other modules. TeaVM 0.15.0's own
+// classlib/jso-apis/extension-spi artifacts publish a minimum JVM-version metadata of 11-17,
+// so :js needs a newer compile target than the rest of the multi-module build; override both
+// the extension's compatibility (fixes Gradle's dependency-resolution JVM-version attribute
+// matching) and the compileJava task's --release option (which the root block sets via
+// tasks.matching{}.configureEach{}, applied before this script runs, last-registered-wins).
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.named("compileJava") {
+    options.release = 17
+}
+
+teavm.js {
+    mainClass = "io.github.intisy.ai.js.AiJavaJs"
+    moduleType = JSModuleType.ES2015
+    obfuscated = false
+    optimization = OptimizationLevel.NONE
+    targetFileName = "aijava.js"
+}
