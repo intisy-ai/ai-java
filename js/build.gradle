@@ -10,6 +10,11 @@ dependencies {
     // policy (Router/ModelMap already avoid java.net/nio for exactly this reason).
     implementation project(":shared")
     teavm teavm.libs.jsoApis
+    // Test-only: locks SimpleJsonCodec's byte-compat with the JVM's gson-backed GsonJsonCodec by
+    // running the SAME inputs through both codecs in one JUnit test (JsonCodecParityTest). This
+    // is testImplementation, not implementation — it never reaches the "main" runtime classpath
+    // TeaVM transpiles, so gson still never leaks into the compiled JS output.
+    testImplementation project(":jvm")
 }
 
 // The root subprojects{} block pins Java 8 (sourceCompatibility/targetCompatibility +

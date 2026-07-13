@@ -93,8 +93,43 @@ function runIntegerFidelityCheck(): void {
   check(parsedBack.expires === 1752345678901, "round-tripped value is numerically exact in JS too");
 }
 
+// -- 3. reject path: a fetch that REJECTS must surface as a 502 JSON error, not a hang or an ----
+// unhandled rejection. Router.route() catches the HttpClient exception thrown when
+// JsHttpClientBridge's @Async bridge resumes via AsyncCallback.error(...) and turns it into
+// errorResponse(502, ...) -- see shared's Router.java catch around handler.handle(...).
+
+const mockFetchReject: typeof fetch = ((_url: string, _init?: RequestInit) => {
+  return new Promise((_resolve, reject) => {
+    setTimeout(() => reject(new Error("simulated network failure")), 30);
+  });
+}) as typeof fetch;
+
+async function runRejectPathCheck(): Promise<void> {
+  let threw = false;
+  let result = "";
+  try {
+    result = await routeJson(requestJson, { fetch: mockFetchReject, store });
+  } catch (e) {
+    threw = true;
+    console.error("routeJson threw instead of resolving on a rejecting fetch:", e);
+  }
+  check(!threw, "routeJson resolves (does not throw/hang) when the supplied fetch rejects");
+  if (threw) return;
+
+  const parsed = JSON.parse(result) as { status: number; body: string };
+  check(parsed.status === 502, `rejecting fetch surfaces as a 502 (got ${parsed.status})`);
+
+  const body = JSON.parse(parsed.body) as { type?: string; error?: { type?: string; message?: string } };
+  check(body.type === "error", `502 body has type "error" (got ${JSON.stringify(body)})`);
+  check(
+    !!body.error && typeof body.error.message === "string" && body.error.message.length > 0,
+    "502 body carries a non-empty error message"
+  );
+}
+
 await runAsyncCheck();
 runIntegerFidelityCheck();
+await runRejectPathCheck();
 
 if (failed) {
   console.error("CONSUMER TEST FAILED");
@@ -102,5 +137,6 @@ if (failed) {
 }
 console.log(
   "CONSUMER TEST OK — @intisy-ai/ai-core's routeJson() round-tripped a mocked fetch-backed HttpClient " +
-    "through the TeaVM-compiled Router, and jsonRoundTrip() preserved integer fidelity (incl. Long range)."
+    "through the TeaVM-compiled Router, jsonRoundTrip() preserved integer fidelity (incl. Long range), " +
+    "and a rejecting fetch resolved to a native 502 with no hang/unhandled rejection."
 );

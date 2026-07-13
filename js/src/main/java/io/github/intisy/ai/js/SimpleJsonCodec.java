@@ -19,7 +19,14 @@ public class SimpleJsonCodec implements JsonCodec {
 
     @Override
     public Object parse(String jsonText) {
+        // Matches GsonJsonCodec.parse exactly: null/empty -> null. A whitespace-only string
+        // ALSO parses to null under gson (JsonReader.peek() hits EOFException before reading any
+        // token, so Gson.fromJson's isEmpty flag stays true and it returns null) — mirrored below
+        // by skipping leading whitespace first and returning null if that reaches the end.
+        if (jsonText == null || jsonText.isEmpty()) return null;
         Parser p = new Parser(jsonText);
+        p.skipWhitespace();
+        if (p.atEnd()) return null;
         Object value = p.parseValue();
         p.skipWhitespace();
         return value;
@@ -76,6 +83,11 @@ public class SimpleJsonCodec implements JsonCodec {
         sb.append(']');
     }
 
+    // Byte-compatible with gson's JsonWriter.string(...) under disableHtmlEscaping: '"', '\\',
+    // and the named control escapes (\n \r \t \b \f) get their short form; every OTHER control
+    // char in 0x00-0x1F gets a unicode escape (lowercase hex, 4 digits); nothing else is escaped
+    // — in particular '<' '>' '&' '=' '\'' '/' are all passed through literally (gson only
+    // escapes those when HTML-escaping is enabled, which this codec's JVM counterpart disables).
     private static void writeString(String s, StringBuilder sb) {
         sb.append('"');
         for (int i = 0; i < s.length(); i++) {
@@ -96,11 +108,30 @@ public class SimpleJsonCodec implements JsonCodec {
                 case '\t':
                     sb.append("\\t");
                     break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
                 default:
-                    sb.append(c);
+                    if (c < 0x20) {
+                        appendUnicodeEscape(sb, c);
+                    } else {
+                        sb.append(c);
+                    }
             }
         }
         sb.append('"');
+    }
+
+    // Hand-rolled (no String.format, for TeaVM transpilability): unicode-escape prefix + 4-digit
+    // lowercase hex.
+    private static void appendUnicodeEscape(StringBuilder sb, char c) {
+        sb.append("\\u");
+        String hex = Integer.toHexString(c);
+        for (int pad = hex.length(); pad < 4; pad++) sb.append('0');
+        sb.append(hex);
     }
 
     private static final class Parser {
@@ -213,6 +244,12 @@ public class SimpleJsonCodec implements JsonCodec {
                         case 't':
                             sb.append('\t');
                             break;
+                        case 'b':
+                            sb.append('\b');
+                            break;
+                        case 'f':
+                            sb.append('\f');
+                            break;
                         case 'u':
                             String hex = s.substring(i, i + 4);
                             i += 4;
@@ -266,6 +303,10 @@ public class SimpleJsonCodec implements JsonCodec {
 
         void skipWhitespace() {
             while (i < s.length() && Character.isWhitespace(s.charAt(i))) i++;
+        }
+
+        boolean atEnd() {
+            return i >= s.length();
         }
     }
 }
