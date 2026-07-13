@@ -1,6 +1,7 @@
 rootProject.name = artifact_name
 include ":core"
 include ":proxy"
+include ":shared"
 // :providers is scaffolded in a later plan (its dir doesn't exist yet).
 // Add it here once its module dir exists, e.g.:
 // include ":providers"
