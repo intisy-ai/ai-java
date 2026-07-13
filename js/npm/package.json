@@ -1,0 +1,39 @@
+{
+  "name": "@intisy-ai/ai-core",
+  "version": "0.1.0",
+  "description": "TeaVM-compiled JS build of ai-java's shared routing engine (Router/ModelMap), with a fetch-based HttpClient and an in-memory Store wired in. PROPOSED package name — not published; Task 8 owns publish wiring.",
+  "type": "module",
+  "main": "./index.js",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "dist/aijava.js"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/intisy/ai-java.git",
+    "directory": "js/npm"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "pretest": "npm run build",
+    "test": "node scripts/run-consumer-test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

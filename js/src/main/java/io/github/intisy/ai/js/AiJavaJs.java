@@ -50,6 +50,22 @@ public final class AiJavaJs {
     }
 
     /**
+     * Task 6 integer-fidelity check: a bare parse+stringify round trip through
+     * {@link SimpleJsonCodec} (the same codec {@link #routeJsonSync}/{@link #routeJsonAsync}
+     * use internally), with no {@code Router} involved. Exists so the npm package's TS consumer
+     * test can prove — through the actually-shipped export surface, not a JVM-only unit test —
+     * that a whole-number JSON value (including one outside 32-bit {@code int} range, exercising
+     * TeaVM's emulated {@code Long}) reserializes without a spurious trailing {@code .0}, i.e.
+     * stays byte-compatible with the JVM {@code GsonJsonCodec} (LONG_OR_DOUBLE) output for the
+     * same input.
+     */
+    @JSExport
+    public static String jsonRoundTrip(String json) {
+        JsonCodec codec = new SimpleJsonCodec();
+        return codec.stringify(codec.parse(json));
+    }
+
+    /**
      * THE decisive export: routes {@code requestJson} through shared's {@code Router}, whose
      * single registered provider handler forwards the request to an upstream via
      * {@link JsHttpClientBridge} — a blocking-shaped {@code HttpClient.send} actually backed
