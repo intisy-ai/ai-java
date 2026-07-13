@@ -77,6 +77,12 @@ class ProxyServerTest {
         Files.write(configDir.resolve("config").resolve(CONFIG_FILE), json.getBytes(StandardCharsets.UTF_8));
     }
 
+    // Raw core.ModelsCache fixture ("<configDir>/config/models.json"), keyed by provider id —
+    // see ModelMap.catalogEntries for the shape it reads ({provider: {models, ranking}}).
+    private static void writeModelsCache(Path configDir, String json) throws IOException {
+        Files.write(configDir.resolve("config").resolve("models.json"), json.getBytes(StandardCharsets.UTF_8));
+    }
+
     private static ProxyOptions baseOptions(Path configDir) {
         ProxyOptions opts = new ProxyOptions();
         opts.configDir = configDir.toString();
@@ -140,6 +146,30 @@ class ProxyServerTest {
             HttpURLConnection conn = postJson("http://127.0.0.1:" + port + "/v1/messages", "{}");
             assertEquals(200, conn.getResponseCode());
             assertEquals("served m-ok", body(conn));
+        } finally {
+            server.close();
+        }
+    }
+
+    @Test
+    void modelsEndpoint_decodesPlusInIdExactlyOnce() throws Exception {
+        // Regression for the double-decode bug: the request path arrives already decoded
+        // once (java.net.URI, matching JS's single decodeURIComponent), so a model id
+        // containing a literal '+' must survive as "some+model", NOT be turned into
+        // "some model" by a second URLDecoder pass in modelsResponse.
+        Path configDir = tempConfigDir();
+        writeModelsCache(configDir,
+                "{\"ok\":{\"models\":{\"some+model\":{\"name\":\"Some Plus Model\"}},\"ranking\":[\"some+model\"]}}");
+        ProxyServer server = ProxyServer.createProxyServer(baseOptions(configDir));
+        int port = server.listen();
+        try {
+            HttpURLConnection conn = (HttpURLConnection)
+                    new URL("http://127.0.0.1:" + port + "/v1/models/some%2Bmodel").openConnection();
+            conn.setRequestMethod("GET");
+            assertEquals(200, conn.getResponseCode());
+            String body = body(conn);
+            assertTrue(body.contains("\"id\":\"some+model\""));
+            assertTrue(!body.contains("\"id\":\"some model\""));
         } finally {
             server.close();
         }

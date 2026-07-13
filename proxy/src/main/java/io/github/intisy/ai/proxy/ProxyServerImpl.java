@@ -19,7 +19,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -315,7 +314,11 @@ final class ProxyServerImpl implements ProxyServer {
             if (!e.model.endsWith("-auto")) entries.add(e);
         }
 
-        String id = decode(path.replaceFirst("^/v1/models/?", ""));
+        // `path` is exchange.getRequestURI().getPath(), which java.net.URI has already
+        // percent-decoded exactly once (JS parity: server.ts decodes the WHATWG URL's raw
+        // pathname exactly once too) — decoding again here would double-decode ids
+        // containing a literal '+' (e.g. "foo+bar" -> URLDecoder turns '+' into a space).
+        String id = path.replaceFirst("^/v1/models/?", "");
         if (!id.isEmpty()) {
             for (CatalogEntry e : entries) {
                 if (e.model.equals(id)) return jsonResponse(200, modelInfo(e));
@@ -353,14 +356,6 @@ final class ProxyServerImpl implements ProxyServer {
         m.put("max_input_tokens", entry.contextLimit != null ? entry.contextLimit : opts.profile.defaultContext);
         m.put("max_tokens", entry.outputLimit != null ? entry.outputLimit : opts.profile.defaultOutput);
         return m;
-    }
-
-    private static String decode(String s) {
-        try {
-            return URLDecoder.decode(s, "UTF-8");
-        } catch (Exception e) {
-            return s;
-        }
     }
 
     // -- shared response builders -----------------------------------------------
