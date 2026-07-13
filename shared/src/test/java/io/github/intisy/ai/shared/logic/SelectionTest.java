@@ -187,4 +187,22 @@ class SelectionTest {
         assertEquals(0, result); // all three floor to `now` and tie; index 0 wins the scan
         assertEquals(0, pool.activeIndexByLane.get("lane"));
     }
+
+    @Test
+    void selectIndexClampedCorruptNegativeCursor() {
+        // Corrupt persisted cursor (e.g., activeIndexByLane = -1) should be clamped to 0
+        // instead of throwing IndexOutOfBoundsException. Uses a custom predicate to ensure
+        // accounts are available regardless of rate-limit state.
+        long now = 1_000_000L;
+        Account a0 = account("a0");
+        Account a1 = account("a1");
+        AccountPool pool = poolOf(a0, a1);
+        pool.activeIndexByLane.put("lane", -1); // corrupt persisted cursor in the lane map
+
+        // Custom predicate always returns true to verify selection logic succeeds
+        int result = Selection.selectIndex(pool, "lane", now, Strategy.STICKY, (a, l) -> true);
+
+        // Should not throw; the clamped cursor allows selection to proceed
+        org.junit.jupiter.api.Assertions.assertTrue(result >= 0, "selectIndex should return valid index, not -1");
+    }
 }

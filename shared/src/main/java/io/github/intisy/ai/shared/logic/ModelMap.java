@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 
@@ -313,9 +314,9 @@ public final class ModelMap {
 
     private static CatalogEntry deriveIn(List<CatalogEntry> entries, String keyword) {
         if (keyword == null || keyword.isEmpty()) return null;
-        String kw = keyword.toLowerCase();
+        String kw = keyword.toLowerCase(Locale.ROOT);
         for (CatalogEntry e : entries) {
-            if (e.model.toLowerCase().contains(kw)) return e;
+            if (e.model.toLowerCase(Locale.ROOT).contains(kw)) return e;
         }
         return null;
     }
@@ -374,7 +375,7 @@ public final class ModelMap {
             List<Assignment> chain = entry.getValue();
             Assignment primary = chain != null && !chain.isEmpty() ? chain.get(0) : null; // tier's primary drives /model display
             if (primary == null || primary.model == null || primary.model.isEmpty()) continue;
-            String upper = tier.toUpperCase(); // e.g. fable -> ..._DEFAULT_FABLE_MODEL
+            String upper = tier.toUpperCase(Locale.ROOT); // e.g. fable -> ..._DEFAULT_FABLE_MODEL
             pairs.add(new KV(p.envPrefix + "_DEFAULT_" + upper + "_MODEL", primary.model));
             pairs.add(new KV(p.envPrefix + "_DEFAULT_" + upper + "_MODEL_NAME",
                     primary.name != null ? primary.name : primary.model));

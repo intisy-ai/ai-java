@@ -30,6 +30,8 @@ public final class Selection {
                 ? available
                 : (a, l) -> RateLimitMath.isAvailable(a, l, now);
         int cursor = laneCursor(pool, lane);
+        // Clamp corrupt cursor to valid range
+        if (cursor < 0 || cursor >= n) cursor = 0;
         Strategy s = strat != null ? strat : Strategy.HYBRID;
 
         if (s == Strategy.ROUND_ROBIN) {
