@@ -28,32 +28,52 @@ import java.util.function.UnaryOperator;
  * {@code LONGTEXT}, PostgreSQL gets {@code TEXT}. Any other/unrecognized database falls back
  * to {@code CLOB}, the ANSI SQL large-object type.
  *
- * <p><b>Upsert.</b> {@code put} (and the write half of {@code update}) uses a portable
- * UPDATE-then-INSERT upsert run inside one transaction, rather than a vendor-specific
- * {@code MERGE} (H2) / {@code ON DUPLICATE KEY UPDATE} (MySQL) / {@code ON CONFLICT} (Postgres)
- * statement: try the {@code UPDATE} first, and only {@code INSERT} if no row was updated. This
- * needs no per-vendor SQL branching and works unchanged on all three databases.
+ * <p><b>Atomic {@code update} — ensure-row-then-lock.</b> {@code SELECT ... FOR UPDATE} only
+ * locks a row that already exists; on an absent key it locks nothing, so two concurrent
+ * {@code update} calls on the SAME absent key could both read {@code null} and one's
+ * {@code UPDATE} would silently clobber the other's already-committed {@code INSERT} — a lost
+ * write with no exception. To make the lock always cover the eventual write, {@code update}
+ * first <b>ensures the row exists</b> ({@code INSERT ... (k, v) VALUES (?, NULL)}, swallowing
+ * the duplicate-key {@code SQLException} if another transaction just did the same insert —
+ * a portable, DB-agnostic "insert-if-absent"), THEN runs
+ * {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE}. A real row is now always locked, so a
+ * second {@code update} on the same key — whether it started out present or absent — blocks
+ * until the first transaction commits, deterministically, with no retry needed for this race.
  *
- * <p><b>Atomic {@code update}.</b> Runs the whole read-mutate-upsert cycle inside a single
- * transaction (autoCommit off): {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE} row-locks
- * the key (H2, MySQL/InnoDB, and PostgreSQL all honor {@code FOR UPDATE}) for the rest of the
- * transaction, so a second {@code update} on the SAME key blocks until the first commits —
- * no lost update. {@code FOR UPDATE} locks an existing row, not a not-yet-existing one, so a
- * race between two {@code update} calls both creating the SAME absent key can still collide on
- * the {@code INSERT}'s primary key; that case is handled by retrying the whole cycle (bounded
- * by {@link #MAX_ATTEMPTS}) rather than losing the write. {@code put}/{@code delete}/{@code get}
- * don't need that row lock since they aren't a read-then-conditionally-write cycle.
+ * <p><b>NULL {@code v} means logically absent.</b> The placeholder row inserted by
+ * ensure-row-then-lock has {@code v = NULL}; reading it back must not be mistaken for a real
+ * empty-string value. So a row with {@code v IS NULL} is treated the same as "no row" by every
+ * method: {@link #get} returns {@code null}, {@link #exists} returns {@code false},
+ * {@link #listKeys} excludes it, and inside {@code update}/{@code put} the mutator sees
+ * {@code current == null} exactly as it would for a genuinely absent key.
+ *
+ * <p><b>{@code put} shares {@code update}'s atomic path.</b> A separate UPDATE-then-INSERT
+ * upsert for {@code put} has the exact same absent-key race as the old {@code update} did (two
+ * concurrent {@code put}s on a fresh key can both miss the {@code UPDATE} and collide on
+ * {@code INSERT}). Rather than duplicate the ensure-row-then-lock logic, {@code put(key, value)}
+ * is simply {@code update(key, ignored -> value)}.
+ *
+ * <p><b>Failure handling.</b> The whole read-mutate-write cycle runs in one transaction
+ * (autoCommit off) and is wrapped so that ANY throwable — a JDBC failure or a {@code
+ * RuntimeException} thrown by the caller's mutator — triggers a rollback before propagating,
+ * so a failure never leaves an open transaction on a pooled {@link DataSource}. A bounded retry
+ * ({@link #MAX_ATTEMPTS}) is kept only for genuinely transient SQL failures (deadlock /
+ * serialization-failure SQLStates) — not for the absent-key race, which ensure-row-then-lock
+ * now makes deterministic without needing a retry.
  *
  * <p>Semantics match {@link FileStore}: {@link #get} of an absent key returns {@code null},
- * {@link #delete} of an absent key is a no-op, {@link #listKeys} returns keys starting with
- * {@code prefix} (a literal prefix — {@code %}/{@code _} in it are escaped, not treated as SQL
- * wildcards).
+ * {@link #delete} of an absent key is a no-op, a {@code null} mutator result still creates/keeps
+ * the key written as an empty string (never {@code null}, so it doesn't look absent), and
+ * {@link #listKeys} returns keys starting with {@code prefix} (a literal prefix — {@code %}/
+ * {@code _} in it are escaped, not treated as SQL wildcards).
  */
 public class JdbcStore implements Store {
 
     private static final String DEFAULT_TABLE = "ai_kv";
-    // bounds the retry loop in update() for the absent-key insert/insert race described above;
-    // each attempt is a full transaction, so this is not a busy spin.
+    // bounds the retry loop in update() for genuinely transient failures (deadlock /
+    // serialization-failure SQLStates); each attempt is a full transaction, so this is not a
+    // busy spin. The absent-key race is handled deterministically by ensure-row-then-lock and
+    // does not rely on this retry.
     private static final int MAX_ATTEMPTS = 5;
 
     private final DataSource dataSource;
@@ -75,6 +95,8 @@ public class JdbcStore implements Store {
              PreparedStatement ps = conn.prepareStatement("SELECT v FROM " + table + " WHERE k = ?")) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
+                // getString(...) returns Java null for a SQL NULL v, which is exactly the
+                // "absent" convention we want for a NULL-v placeholder row too.
                 return rs.next() ? rs.getString(1) : null;
             }
         } catch (SQLException e) {
@@ -82,26 +104,18 @@ public class JdbcStore implements Store {
         }
     }
 
+    // put shares update()'s ensure-row-then-lock path so it can't race the same way a
+    // standalone UPDATE-then-INSERT upsert would on a freshly-absent key (see class javadoc).
     @Override
     public void put(String key, String value) {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                upsert(conn, key, value);
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw new RuntimeException("failed to write key " + key, e);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("failed to write key " + key, e);
-        }
+        update(key, ignored -> value);
     }
 
     @Override
     public boolean exists(String key) {
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM " + table + " WHERE k = ?")) {
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM " + table + " WHERE k = ? AND v IS NOT NULL")) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
@@ -129,21 +143,38 @@ public class JdbcStore implements Store {
             try (Connection conn = dataSource.getConnection()) {
                 conn.setAutoCommit(false);
                 try {
+                    // ensure-row-then-lock: guarantees there is always a real row for the
+                    // FOR UPDATE below to lock, even when the key has never been written.
+                    ensureRowExists(conn, key);
                     String current = selectForUpdate(conn, key);
                     String next = mutator.apply(current);
                     // mirror FileStore/InMemoryStore: a null mutator result still creates/keeps
-                    // the key, written as an empty string, rather than deleting it.
-                    upsert(conn, key, next != null ? next : "");
+                    // the key, written as an empty string, rather than looking absent.
+                    setValue(conn, key, next != null ? next : "");
                     conn.commit();
                     return;
-                } catch (SQLException e) {
-                    conn.rollback();
-                    lastError = e;
-                    // most likely a primary-key collision from a concurrent update() that also
-                    // just inserted this same previously-absent key (FOR UPDATE locks an
-                    // existing row, not one that doesn't exist yet) - retry the whole cycle.
+                } catch (Throwable t) {
+                    // roll back on ANY throwable, including a RuntimeException from the
+                    // caller's mutator - never leave an open transaction on a pooled connection.
+                    safeRollback(conn);
+                    if (t instanceof SQLException && attempt < MAX_ATTEMPTS - 1
+                            && isTransient((SQLException) t)) {
+                        lastError = (SQLException) t;
+                        continue;
+                    }
+                    if (t instanceof RuntimeException) throw (RuntimeException) t;
+                    if (t instanceof Error) throw (Error) t;
+                    throw new RuntimeException("failed to update key " + key, t);
+                } finally {
+                    try {
+                        conn.setAutoCommit(true);
+                    } catch (SQLException ignored) {
+                        // best-effort restore; the connection is about to be closed/returned
+                        // to the pool either way.
+                    }
                 }
             } catch (SQLException e) {
+                // failed to even obtain a connection / flip autoCommit for this attempt
                 lastError = e;
             }
         }
@@ -156,7 +187,7 @@ public class JdbcStore implements Store {
         List<String> keys = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT k FROM " + table + " WHERE k LIKE ? ESCAPE '\\'")) {
+                     "SELECT k FROM " + table + " WHERE k LIKE ? ESCAPE '\\' AND v IS NOT NULL")) {
             ps.setString(1, escapeLikePattern(prefix) + "%");
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) keys.add(rs.getString(1));
@@ -167,19 +198,18 @@ public class JdbcStore implements Store {
         return keys;
     }
 
-    // Portable UPDATE-then-INSERT upsert (see class javadoc): avoids H2 MERGE / MySQL
-    // ON DUPLICATE KEY UPDATE / Postgres ON CONFLICT dialect differences. Runs inside the
-    // caller's transaction so the two statements commit/rollback together.
-    private void upsert(Connection conn, String key, String value) throws SQLException {
-        try (PreparedStatement update = conn.prepareStatement("UPDATE " + table + " SET v = ? WHERE k = ?")) {
-            update.setString(1, value);
-            update.setString(2, key);
-            if (update.executeUpdate() > 0) return;
-        }
-        try (PreparedStatement insert = conn.prepareStatement("INSERT INTO " + table + " (k, v) VALUES (?, ?)")) {
+    // Portable "insert-if-absent": always leaves a row behind for the FOR UPDATE select that
+    // follows to lock, even if the key has never been written. A duplicate-key SQLException
+    // (another transaction already has - or just inserted - this row) is swallowed: that's
+    // exactly the outcome we want, we just need SOME row to exist and be lockable.
+    private void ensureRowExists(Connection conn, String key) throws SQLException {
+        try (PreparedStatement insert = conn.prepareStatement(
+                "INSERT INTO " + table + " (k, v) VALUES (?, NULL)")) {
             insert.setString(1, key);
-            insert.setString(2, value);
             insert.executeUpdate();
+        } catch (SQLException e) {
+            if (!isDuplicateKey(e)) throw e;
+            // row already exists - fine, ensureRowExists only needed a row to exist at all.
         }
     }
 
@@ -188,9 +218,44 @@ public class JdbcStore implements Store {
                 "SELECT v FROM " + table + " WHERE k = ? FOR UPDATE")) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
+                // getString(...) maps SQL NULL to Java null - our placeholder row's NULL v
+                // and a (defensive, shouldn't happen after ensureRowExists) missing row both
+                // read as "absent" for the mutator, matching FileStore's convention.
                 return rs.next() ? rs.getString(1) : null;
             }
         }
+    }
+
+    private void setValue(Connection conn, String key, String value) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("UPDATE " + table + " SET v = ? WHERE k = ?")) {
+            ps.setString(1, value);
+            ps.setString(2, key);
+            ps.executeUpdate();
+        }
+    }
+
+    private static void safeRollback(Connection conn) {
+        try {
+            conn.rollback();
+        } catch (SQLException ignored) {
+            // best-effort; the original throwable is what the caller needs to see.
+        }
+    }
+
+    // SQLState class "23" (Integrity Constraint Violation) covers primary-key/unique
+    // violations on H2, MySQL, and PostgreSQL alike - portable without vendor-specific
+    // error-code checks.
+    private static boolean isDuplicateKey(SQLException e) {
+        String state = e.getSQLState();
+        return state != null && state.startsWith("23");
+    }
+
+    // SQLState class "40" (Transaction Rollback, e.g. 40001 serialization failure / 40P01
+    // Postgres deadlock) plus "41000" (lock timeout, used by some MySQL drivers for deadlocks)
+    // are genuinely transient - worth a bounded retry. Anything else fails fast.
+    private static boolean isTransient(SQLException e) {
+        String state = e.getSQLState();
+        return state != null && (state.startsWith("40") || state.equals("41000"));
     }
 
     private void createTableIfAbsent() {
