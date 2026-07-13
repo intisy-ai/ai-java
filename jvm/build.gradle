@@ -1,0 +1,5 @@
+dependencies {
+    api project(":shared")
+    api "com.google.code.gson:gson:2.10.1"
+    githubApi "intisy:simple-logger:1.12.7"
+}
