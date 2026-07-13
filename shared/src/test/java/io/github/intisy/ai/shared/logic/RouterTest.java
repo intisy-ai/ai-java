@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -164,5 +165,43 @@ class RouterTest {
 
         assertTrue(responseJson.contains("\"status\":200"));
         assertTrue(responseJson.contains("served m-ok"));
+    }
+
+    // -- /v1/models catalog -------------------------------------------------------
+
+    @Test
+    void modelsEndpoint_listsCatalogWithFallbackLimits() {
+        // Raw core.ModelsCache fixture ("models.json"), keyed by provider id — see
+        // ModelMap.catalogEntries for the shape it reads ({provider: {models, ranking}}).
+        // No "limit" on the entry -> modelInfo must fall back to profile.defaultContext/
+        // defaultOutput (200000 / 64000, see testProfile()).
+        InMemoryStore store = new InMemoryStore();
+        store.put("models.json", "{\"ok\":{\"models\":{\"m-ok\":{\"name\":\"M Ok\"}},\"ranking\":[\"m-ok\"]}}");
+        RouterOptions opts = baseOptions(store);
+
+        HttpResponse resp = Router.route(get("/v1/models"), opts);
+
+        assertEquals(200, resp.status);
+        assertTrue(resp.body.contains("\"id\":\"m-ok\""), resp.body);
+        assertTrue(resp.body.contains("\"display_name\":\"M Ok\""), resp.body);
+        assertTrue(resp.body.contains("\"max_input_tokens\":200000"), resp.body);
+        assertTrue(resp.body.contains("\"max_tokens\":64000"), resp.body);
+    }
+
+    @Test
+    void modelsEndpoint_decodesPlusInIdExactlyOnce() {
+        // Regression for the double-decode bug: the request path arrives already decoded
+        // once (mirrors JS's single decodeURIComponent), so a model id containing a literal
+        // '+' must survive as "some+model", NOT be turned into "some model" by a second
+        // decode pass in Router.modelsResponse.
+        InMemoryStore store = new InMemoryStore();
+        store.put("models.json", "{\"ok\":{\"models\":{\"some+model\":{\"name\":\"Some Plus Model\"}},\"ranking\":[\"some+model\"]}}");
+        RouterOptions opts = baseOptions(store);
+
+        HttpResponse resp = Router.route(get("/v1/models/some%2Bmodel"), opts);
+
+        assertEquals(200, resp.status);
+        assertTrue(resp.body.contains("\"id\":\"some+model\""), resp.body);
+        assertFalse(resp.body.contains("\"id\":\"some model\""), resp.body);
     }
 }
