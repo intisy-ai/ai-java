@@ -15,13 +15,13 @@ import {
 } from "./dist/aijava.js";
 
 /**
- * Plain in-memory Store snapshot holder. Values are opaque JSON strings, matching shared's
+ * Plain in-memory Store SNAPSHOT holder. Values are opaque JSON strings, matching shared's
  * `Store` SPI contract (e.g. `store.put("router-test.json", JSON.stringify({modelMap: {...}}))`).
- * This is NOT a live JSO-bridged Store — routeJson takes a one-shot snapshot of it before each
- * call (mirrors AiJavaJs.seedStore, which seeds a fresh Java-side InMemoryStore per call); any
- * mutation Router makes during routing (selection cursors, rate-limit backoff, etc.) is scoped
- * to that single call and is not written back. A live, round-tripping JS Store is a separate,
- * larger follow-up (see Phase 2 Task 5 report, "Store is Java-side in-memory, not JSO-bridged").
+ * Used ONLY by `routeJsonSyncWith` (mirrors `AiJavaJs.seedStore`, which seeds a fresh Java-side
+ * `InMemoryStore` per call): any mutation Router makes during that call (selection cursors,
+ * rate-limit backoff, etc.) is scoped to that single call and is not written back. `routeJson`
+ * (the async/production entrypoint) uses `LiveStore` below instead — a real, round-tripping
+ * Store — so THAT path does not have this limitation.
  */
 export class InMemoryStore {
   constructor(initial = {}) {
@@ -54,6 +54,60 @@ function toStore(store) {
   if (typeof store.snapshot === "function") return store;
   // Plain {key: jsonString} snapshot object, passed straight through.
   return new InMemoryStore(store);
+}
+
+/**
+ * LIVE Store: `get`/`put`/`exists`/`delete`/`listKeys` are all synchronous and operate directly
+ * on the backing `Map` — no snapshot/restore step. This is the shape `JsStoreBridge` (the
+ * TeaVM/Java side — see js/src/main/java/io/github/intisy/ai/js/JsStoreBridge.java) expects:
+ * every mutation the routing engine makes during a `routeJson()` call (round-robin cursor
+ * advance in `Selection`, rate-limit `coolingDownUntil`/`rateLimitResetTimes` writes, etc.)
+ * lands directly on THIS Map, so it is visible to the next `routeJson()` call that reuses the
+ * same `LiveStore` instance — the actual point of a "live" (as opposed to snapshot) Store.
+ *
+ * A caller may pass any duck-typed object exposing these five synchronous methods instead of
+ * this class (e.g. one backed by a file or a database) — `routeJson` just forwards whatever it
+ * receives straight to the compiled Java bridge.
+ */
+export class LiveStore {
+  constructor(initial = {}) {
+    this._data = new Map(Object.entries(initial));
+  }
+
+  get(key) {
+    return this._data.has(key) ? this._data.get(key) : null;
+  }
+
+  put(key, value) {
+    this._data.set(key, value);
+  }
+
+  exists(key) {
+    return this._data.has(key);
+  }
+
+  delete(key) {
+    this._data.delete(key);
+  }
+
+  listKeys(prefix) {
+    const out = [];
+    for (const key of this._data.keys()) {
+      if (key.startsWith(prefix)) out.push(key);
+    }
+    return out;
+  }
+}
+
+// Module-scoped default LIVE store, lazily created: if a caller never passes opts.store to
+// routeJson(), successive calls on THIS package instance still share state (rather than each
+// silently getting a fresh, empty store) — matching what "live" is supposed to mean by default.
+let defaultLiveStore = null;
+
+function toLiveStore(store) {
+  if (store != null) return store; // duck-typed: assumed to implement get/put/exists/delete/listKeys
+  if (defaultLiveStore == null) defaultLiveStore = new LiveStore();
+  return defaultLiveStore;
 }
 
 function defaultFetch() {
@@ -98,7 +152,11 @@ function makeHttpSend(fetchImpl) {
 
 /**
  * Routes requestJson (the JSON-encoded HttpRequest) through shared's Router asynchronously,
- * via a fetch-backed HttpClient. Resolves to the JSON-encoded HttpResponse.
+ * via a fetch-backed HttpClient and a LIVE Store (see `LiveStore`/`toLiveStore` above): any
+ * mutation shared's routing logic makes during this call (round-robin cursor advance, rate-limit
+ * writes, ...) persists on `opts.store` (or the package-scoped default when omitted), so it is
+ * visible to the next `routeJson()` call — unlike `routeJsonSyncWith`, which only ever sees a
+ * one-shot snapshot. Resolves to the JSON-encoded HttpResponse.
  *
  * @param {string} requestJson
  * @param {{fetch?: typeof fetch, store?: object}} [opts]
@@ -106,10 +164,9 @@ function makeHttpSend(fetchImpl) {
  */
 export async function routeJson(requestJson, opts = {}) {
   const fetchImpl = opts.fetch || defaultFetch();
-  const store = toStore(opts.store);
-  const storeJson = JSON.stringify(store.snapshot());
+  const store = toLiveStore(opts.store);
   const httpSend = makeHttpSend(fetchImpl);
-  const result = await routeJsonAsync(httpSend, storeJson, requestJson);
+  const result = await routeJsonAsync(httpSend, store, requestJson);
   return String(result);
 }
 

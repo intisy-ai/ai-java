@@ -18,9 +18,10 @@ export interface StoreLike {
 export type StoreInit = StoreLike | StoreSnapshot;
 
 /**
- * Plain in-memory holder for a Store snapshot. NOT a live, round-tripping Store — routeJson
- * takes a one-shot snapshot of it before each call; mutations Router makes during routing are
- * not written back (see index.js's class doc for the full rationale).
+ * Plain in-memory holder for a Store SNAPSHOT. Used only by `routeJsonSyncWith` — NOT a live,
+ * round-tripping Store: that call takes a one-shot snapshot of it before routing; mutations
+ * Router makes during routing are not written back (see index.js's class doc for the full
+ * rationale). `routeJson` uses `LiveStore` (below) instead, which has no such limitation.
  */
 export class InMemoryStore implements StoreLike {
   constructor(initial?: StoreSnapshot);
@@ -31,21 +32,55 @@ export class InMemoryStore implements StoreLike {
   snapshot(): StoreSnapshot;
 }
 
+/**
+ * A LIVE Store: every method is synchronous and reads/writes straight through to the backing
+ * storage, matching shared's `Store` SPI shape (`get`/`put`/`exists`/`delete`/`listKeys`,
+ * `update` is derived as get-then-put on the Java side — see `JsStoreBridge`). Passed to
+ * `routeJson`, any mutation the routing engine makes during that call (round-robin cursor
+ * advance in `Selection`, rate-limit `coolingDownUntil`/`rateLimitResetTimes` writes, etc.) is
+ * visible to the NEXT `routeJson` call that reuses the same instance.
+ */
+export interface LiveStoreLike {
+  /** Returns the stored JSON string for `key`, or `null`/`undefined` when absent. */
+  get(key: string): string | null | undefined;
+  put(key: string, value: string): void;
+  exists(key: string): boolean;
+  delete(key: string): void;
+  /** Every stored key starting with `prefix`. */
+  listKeys(prefix: string): string[];
+}
+
+/**
+ * `Map`-backed default implementation of {@link LiveStoreLike}. This is what `routeJson` uses
+ * internally (lazily, module-scoped) when no `opts.store` is supplied, and is also usable
+ * directly by a caller that wants an explicit, inspectable live store shared across several
+ * `routeJson` calls.
+ */
+export class LiveStore implements LiveStoreLike {
+  constructor(initial?: StoreSnapshot);
+  get(key: string): string | null;
+  put(key: string, value: string): void;
+  exists(key: string): boolean;
+  delete(key: string): void;
+  listKeys(prefix: string): string[];
+}
+
 export interface RouteJsonOptions {
   /** fetch-compatible function used as the HttpClient transport for any provider handler that
    *  forwards the request upstream. Defaults to the global `fetch`. */
   fetch?: typeof fetch;
-  /** Store snapshot (or a StoreLike) to seed the routing engine's Store with for this call.
-   *  Defaults to an empty in-memory store. */
-  store?: StoreInit;
+  /** LIVE store (see `LiveStore`/`LiveStoreLike`) backing the routing engine's Store for this
+   *  call, and every subsequent `routeJson` call the caller passes it to again. Defaults to a
+   *  package-scoped `LiveStore` instance shared across calls that omit this option. */
+  store?: LiveStoreLike;
 }
 
 /**
  * Routes `requestJson` — a JSON-encoded HttpRequest (`{method, url, headers, body}`) — through
- * shared's `Router`, asynchronously. Any registered provider handler that forwards the request
- * upstream does so via a `fetch`-backed HttpClient (real `fetch` by default, or `opts.fetch`),
- * bridged into the TeaVM-compiled routing engine via the `@Async`/`AsyncCallback` mechanism
- * proven in Phase 2 Task 5.
+ * shared's `Router`, asynchronously, against a LIVE Store (see `RouteJsonOptions.store`). Any
+ * registered provider handler that forwards the request upstream does so via a `fetch`-backed
+ * HttpClient (real `fetch` by default, or `opts.fetch`), bridged into the TeaVM-compiled routing
+ * engine via the `@Async`/`AsyncCallback` mechanism proven in Phase 2 Task 5.
  *
  * Resolves to a JSON-encoded HttpResponse (`{status, headers, body}`).
  */
@@ -54,7 +89,8 @@ export function routeJson(requestJson: string, opts?: RouteJsonOptions): Promise
 /**
  * Synchronous variant — no HttpClient/`fetch` involved at all. Only useful when the routing
  * profile's registered handler(s) never call out (mirrors `AiJavaJs.routeJsonSync`'s canned
- * in-Java-handler shape used for the Step-1 transpile smoke test).
+ * in-Java-handler shape used for the Step-1 transpile smoke test). Takes a Store SNAPSHOT (see
+ * `InMemoryStore`), not a live store — mutations made during routing are discarded.
  */
 export function routeJsonSyncWith(requestJson: string, opts?: { store?: StoreInit }): string;
 

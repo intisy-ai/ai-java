@@ -1,9 +1,10 @@
-// TS consumer test for the @intisy-ai/ai-core package (Phase 2 Task 6). Imports the built
-// package exactly as an external consumer would, provides a MOCK async `fetch` (a genuinely
-// delayed Promise, not a same-tick resolve) plus an in-memory Store seeded with a modelMap
-// config, calls routeJson(...), and asserts the routed JSON. Bundled with esbuild and run under
-// node (mirrors the Phase 2 Task 5 spike's app.ts -> out.mjs flow) — see scripts/run-consumer-test.mjs.
-import { routeJson, InMemoryStore, jsonRoundTrip } from "../index.js";
+// TS consumer test for the @intisy-ai/ai-core package (Phase 2 Task 6; Phase 3 Task 1 adds the
+// LIVE-store writeback proof in section 4 below). Imports the built package exactly as an
+// external consumer would, provides a MOCK async `fetch` (a genuinely delayed Promise, not a
+// same-tick resolve) plus a live Store seeded with a modelMap config, calls routeJson(...), and
+// asserts the routed JSON. Bundled with esbuild and run under node (mirrors the Phase 2 Task 5
+// spike's app.ts -> out.mjs flow) — see scripts/run-consumer-test.mjs.
+import { routeJson, LiveStore, jsonRoundTrip } from "../index.js";
 
 let failed = false;
 function check(condition: boolean, message: string): void {
@@ -15,9 +16,9 @@ function check(condition: boolean, message: string): void {
   }
 }
 
-// -- 1. routeJson through a mock fetch + seeded in-memory Store -------------------------------
+// -- 1. routeJson through a mock fetch + seeded LIVE Store -------------------------------------
 
-const store = new InMemoryStore();
+const store = new LiveStore();
 store.put(
   "router-test.json",
   JSON.stringify({ modelMap: { default: [{ provider: "test", model: "m-test" }] } })
@@ -127,9 +128,93 @@ async function runRejectPathCheck(): Promise<void> {
   );
 }
 
+// -- 4. LIVE store writeback: a mutation from call 1 must persist and be observed by call 2 ----
+// (Phase 3 Task 1 — THE key test). AiJavaJs's "test" provider handler claims an account via
+// AccountStore/Selection (ROUND_ROBIN) before forwarding, purely so this test has something
+// real to observe: seed 2 accounts under the "test" provider in a fresh LiveStore, then call
+// routeJson() TWICE against the SAME store instance. If the Store were still a one-shot
+// snapshot (the pre-Phase-3 behavior), Selection would see activeIndex reset to 0 on every call
+// and BOTH calls would round-robin-advance to the SAME account (index 1). Seeing the cursor
+// actually alternate across the two calls proves the mutation from call 1 was written back to
+// the JS store, not discarded.
+
+const persistFetch: typeof fetch = (() => {
+  return Promise.resolve({
+    status: 200,
+    headers: { forEach: (_cb: (v: string, k: string) => void) => {} },
+    text: async () => JSON.stringify({ ok: true }),
+  } as unknown as Response);
+}) as typeof fetch;
+
+async function runStoreWritebackPersistenceCheck(): Promise<void> {
+  const liveStore = new LiveStore();
+  // Same modelMap seed as section 1 -- Router needs a resolved {provider,model} chain for the
+  // "test" tier before it will even invoke the "test" provider handler that does the account
+  // selection this check is actually about.
+  liveStore.put(
+    "router-test.json",
+    JSON.stringify({ modelMap: { default: [{ provider: "test", model: "m-test" }] } })
+  );
+  liveStore.put(
+    "accounts.json",
+    JSON.stringify({
+      version: 1,
+      providers: {
+        test: {
+          accounts: [
+            { id: "acc-a", enabled: true },
+            { id: "acc-b", enabled: true },
+          ],
+          activeIndex: 0,
+          activeIndexByLane: {},
+        },
+      },
+    })
+  );
+
+  const call1 = JSON.parse(
+    await routeJson(requestJson, { fetch: persistFetch, store: liveStore })
+  ) as { status: number; headers: Record<string, string> };
+  const call2 = JSON.parse(
+    await routeJson(requestJson, { fetch: persistFetch, store: liveStore })
+  ) as { status: number; headers: Record<string, string> };
+
+  console.log("writeback call1 x-account-id:", call1.headers["x-account-id"]);
+  console.log("writeback call2 x-account-id:", call2.headers["x-account-id"]);
+
+  check(call1.status === 200, `writeback call1 status is 200 (got ${call1.status})`);
+  check(call2.status === 200, `writeback call2 status is 200 (got ${call2.status})`);
+  check(
+    call1.headers["x-account-id"] === "acc-b",
+    `writeback call1 round-robins from activeIndex 0 to account "acc-b" (got ${call1.headers["x-account-id"]})`
+  );
+  check(
+    call2.headers["x-account-id"] === "acc-a",
+    `writeback call2 picks the NEXT account "acc-a", proving call1's cursor advance was ` +
+      `persisted rather than discarded (got ${call2.headers["x-account-id"]})`
+  );
+  check(
+    call1.headers["x-account-id"] !== call2.headers["x-account-id"],
+    "the two calls selected DIFFERENT accounts -- Selection's round-robin cursor advance from " +
+      "call 1 was written back to the live store and observed by call 2 (a snapshot Store " +
+      "would show the SAME account picked both times)"
+  );
+
+  // Independent corroboration straight from the persisted JSON (not just the response header):
+  // two round-robin picks over a 2-account pool starting at activeIndex 0 cycle 0 -> 1 -> 0.
+  const accountsDoc = JSON.parse(liveStore.get("accounts.json") as string) as {
+    providers: { test: { activeIndex: number } };
+  };
+  check(
+    accountsDoc.providers.test.activeIndex === 0,
+    `persisted activeIndex cycled 0->1->0 across the two calls (got ${accountsDoc.providers.test.activeIndex})`
+  );
+}
+
 await runAsyncCheck();
 runIntegerFidelityCheck();
 await runRejectPathCheck();
+await runStoreWritebackPersistenceCheck();
 
 if (failed) {
   console.error("CONSUMER TEST FAILED");
@@ -138,5 +223,7 @@ if (failed) {
 console.log(
   "CONSUMER TEST OK — @intisy-ai/ai-core's routeJson() round-tripped a mocked fetch-backed HttpClient " +
     "through the TeaVM-compiled Router, jsonRoundTrip() preserved integer fidelity (incl. Long range), " +
-    "and a rejecting fetch resolved to a native 502 with no hang/unhandled rejection."
+    "a rejecting fetch resolved to a native 502 with no hang/unhandled rejection, and a mutation " +
+    "made during one routeJson() call (Selection's round-robin cursor advance) was written back to " +
+    "the live JS store and observed by a second routeJson() call reusing it."
 );

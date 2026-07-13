@@ -6,6 +6,8 @@ import io.github.intisy.ai.shared.logic.RateLimit;
 import io.github.intisy.ai.shared.logic.RateLimitMath;
 import io.github.intisy.ai.shared.logic.Router;
 import io.github.intisy.ai.shared.logic.RouterOptions;
+import io.github.intisy.ai.shared.logic.Selection;
+import io.github.intisy.ai.shared.logic.Strategy;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
@@ -13,6 +15,7 @@ import io.github.intisy.ai.shared.spi.HttpClient;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.shared.store.AccountStore;
 
 import org.teavm.jso.JSExport;
 import org.teavm.jso.core.JSPromise;
@@ -209,10 +212,22 @@ public final class AiJavaJs {
      * suspends at the {@code @Async} native boundary and resumes when the JS Promise the
      * caller supplied settles, all inside the {@link Thread} started below (TeaVM's own
      * {@code JSPromise.callAsync} uses the identical Thread-based mechanism internally).
+     *
+     * <p>Phase 3 Task 1: {@code jsStore} is no longer a one-shot JSON snapshot — it is the LIVE
+     * JS store object itself, bridged via {@link JsStoreBridge}. The "test" provider handler
+     * below additionally claims an account via {@code AccountStore}/{@link Selection} (a
+     * round-robin pick over whatever accounts are seeded under the {@code "test"} provider in
+     * {@code accounts.json}) purely to give the npm consumer test something real to observe:
+     * the cursor {@link Selection} advances lives in the store the caller passed in, so a
+     * second {@code routeJsonAsync} call reusing the same JS store object picks the NEXT
+     * account, proving the mutation was written back rather than discarded. When no
+     * {@code accounts.json}/{@code "test"} entry exists (e.g. every other existing test's
+     * store), {@code Selection.selectIndex} sees an empty pool and this is a no-op — the
+     * response is byte-identical to before this change.
      */
     @JSExport
     public static JSPromise<JSString> routeJsonAsync(JsHttpClientBridge.JsHttpSend httpSend,
-                                                       String storeJson, String requestJson) {
+                                                       JsStoreBridge.JsStore jsStore, String requestJson) {
         // Not JSPromise.callAsync(Callable<T>): its internal resolve.accept(result) is a
         // generic JSConsumer<T> call, which (per the JsHttpSend javadoc) leaks a raw jl_String
         // wrapper into the resolved value instead of a real JS string. Building the promise by
@@ -222,13 +237,31 @@ public final class AiJavaJs {
         return new JSPromise<>((resolve, reject) -> new Thread(() -> {
             try {
                 JsonCodec json = new SimpleJsonCodec();
-                Store store = seedStore(storeJson);
+                Store store = new JsStoreBridge(jsStore); // LIVE — no snapshot, no discard on return
                 HttpClient httpClient = new JsHttpClientBridge(httpSend, json);
+                AccountStore accountStore = new AccountStore(store, json);
 
                 Map<String, ProxyHandler> registry = new HashMap<>();
                 // The "provider handler" a real provider module would supply: forwards the
-                // inbound request upstream via HttpClient.send (the async-bridged call).
-                registry.put("test", (req, ctx) -> httpClient.send(req));
+                // inbound request upstream via HttpClient.send (the async-bridged call), after
+                // claiming an account round-robin-style (see this method's javadoc).
+                registry.put("test", (req, ctx) -> {
+                    long now = System.currentTimeMillis();
+                    String[] pickedId = new String[1];
+                    accountStore.update("test", pool -> {
+                        int idx = Selection.selectIndex(pool, null, now, Strategy.ROUND_ROBIN,
+                                (a, l) -> RateLimitMath.isAvailable(a, l, now));
+                        if (idx >= 0) pickedId[0] = pool.accounts.get(idx).id;
+                    });
+                    HttpResponse resp = httpClient.send(req);
+                    if (pickedId[0] != null) {
+                        Map<String, String> headers = resp.headers != null
+                                ? new HashMap<>(resp.headers) : new HashMap<>();
+                        headers.put("x-account-id", pickedId[0]);
+                        resp.headers = headers;
+                    }
+                    return resp;
+                });
 
                 RouterOptions opts = baseOptions(store, registry);
                 opts.json = json;
