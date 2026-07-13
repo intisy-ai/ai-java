@@ -36,8 +36,12 @@ public class AccountStore {
 
     private Map<String, Object> parseOrDefault(String raw) {
         if (raw != null) {
-            Map<String, Object> doc = JsonUtil.asMap(json.parse(raw));
-            if (doc != null) return doc;
+            try {
+                Map<String, Object> doc = JsonUtil.asMap(json.parse(raw));
+                if (doc != null) return doc;
+            } catch (Exception ignored) {
+                // swallow-all, mirrors the JS readStore's try/catch degrading to an empty store
+            }
         }
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("version", 1);

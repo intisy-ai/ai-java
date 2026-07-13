@@ -37,4 +37,17 @@ class AuthConfigTest {
         assertEquals("y", cfg.activeProvider());
         assertTrue(store.get("auth.json").contains("\"other\":\"kept\""));
     }
+
+    /**
+     * Best-effort read resilience (JS/core parity): a corrupted {@code auth.json} must degrade
+     * to the default empty config rather than throwing out of {@code activeProvider}.
+     */
+    @Test
+    void activeProvider_defaultsToEmptyStringWhenStoreContainsMalformedJson() {
+        Store store = new InMemoryStore();
+        store.put("auth.json", "{ not json");
+        AuthConfig cfg = new AuthConfig(store, new TestJsonCodec());
+
+        assertEquals("", cfg.activeProvider());
+    }
 }

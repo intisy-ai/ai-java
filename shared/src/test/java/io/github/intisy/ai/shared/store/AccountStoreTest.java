@@ -105,4 +105,17 @@ class AccountStoreTest {
         assertFalse(raw.contains("\"count\":5.0"));
         assertTrue(raw.contains("\"remainingFraction\":0.5"));
     }
+
+    /**
+     * Best-effort read resilience (JS/core parity): a corrupted {@code accounts.json} must
+     * degrade to an empty pool rather than throwing out of {@code list}/{@code load}.
+     */
+    @Test
+    void list_returnsEmptyPoolWhenStoreContainsMalformedJson() {
+        Store store = new InMemoryStore();
+        store.put("accounts.json", "{ not json");
+        AccountStore s = new AccountStore(store, new TestJsonCodec());
+
+        assertTrue(s.list("claude-code").isEmpty());
+    }
 }

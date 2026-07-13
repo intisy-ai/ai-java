@@ -115,6 +115,40 @@ class ModelsCacheTest {
         assertEquals(0L, roundTripped.fetchedAt);
     }
 
+    /**
+     * Best-effort read resilience (JS/core parity): a corrupted {@code models.json} must degrade
+     * to no cache rather than throwing out of {@code read}.
+     */
+    @Test
+    void read_returnsNullWhenStoreContainsMalformedJson() {
+        Store store = new InMemoryStore();
+        store.put("models.json", "{ not json");
+        ModelsCache cache = new ModelsCache(store, new TestJsonCodec());
+
+        assertNull(cache.read("claude-code"));
+    }
+
+    /**
+     * gson (no serializeNulls) parity: an entry with {@code models == null} must OMIT the
+     * {@code models} field on write (not serialize it as {@code {}}), so a later read sees
+     * {@code models == null} and returns null (no cache) rather than an empty-but-present entry.
+     */
+    @Test
+    void write_omitsModelsFieldWhenNull_andReadReturnsNull() {
+        Store store = new InMemoryStore();
+        ModelsCache cache = new ModelsCache(store, new TestJsonCodec());
+
+        ModelsCache.Entry entry = new ModelsCache.Entry();
+        entry.defaultModelId = "x";
+        entry.models = null;
+        cache.write("prov", entry);
+
+        String raw = store.get("models.json");
+        assertFalse(raw.contains("\"models\":{}"));
+
+        assertNull(cache.read("prov"));
+    }
+
     private static Map<String, Object> singleton(String key, Object value) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put(key, value);

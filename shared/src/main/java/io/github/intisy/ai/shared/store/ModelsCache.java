@@ -45,8 +45,12 @@ public class ModelsCache {
     private Map<String, Object> readAllRaw() {
         String raw = store.get(KEY);
         if (raw != null) {
-            Map<String, Object> all = JsonUtil.asMap(json.parse(raw));
-            if (all != null) return all;
+            try {
+                Map<String, Object> all = JsonUtil.asMap(json.parse(raw));
+                if (all != null) return all;
+            } catch (Exception ignored) {
+                // swallow-all, mirrors the JS readAll's try/catch degrading to an empty cache
+            }
         }
         return new LinkedHashMap<>();
     }
@@ -92,7 +96,7 @@ public class ModelsCache {
 
     private static Map<String, Object> entryToMap(Entry e) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("models", e.models != null ? e.models : new LinkedHashMap<>());
+        if (e.models != null) m.put("models", e.models);
         if (e.ranking != null) m.put("ranking", e.ranking);
         if (e.defaultModelId != null) m.put("defaultModelId", e.defaultModelId);
         if (e.source != null) m.put("source", e.source);

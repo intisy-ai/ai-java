@@ -27,8 +27,12 @@ public class AuthConfig {
     private Map<String, Object> readConfig() {
         String raw = store.get(KEY);
         if (raw != null) {
-            Map<String, Object> cfg = JsonUtil.asMap(json.parse(raw));
-            if (cfg != null) return cfg;
+            try {
+                Map<String, Object> cfg = JsonUtil.asMap(json.parse(raw));
+                if (cfg != null) return cfg;
+            } catch (Exception ignored) {
+                // swallow-all, mirrors the JS readConfig's try/catch degrading to {}
+            }
         }
         return new LinkedHashMap<>();
     }
