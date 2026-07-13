@@ -1,2 +1,14 @@
 dependencies {
 }
+
+publishGithub {
+    releaseName = "Release ${project.findProperty('artifact_version') ?: project.version}"
+    // Multi-module release artifacts are aggregated at the repo level in Plan C;
+    // here we just ensure this module builds a plain jar.
+    artifacts {
+        artifact {
+            classifier = ""
+            jar = file("build/libs/shared.jar")
+        }
+    }
+}

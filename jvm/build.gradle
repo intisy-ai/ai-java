@@ -3,3 +3,25 @@ dependencies {
     api "com.google.code.gson:gson:2.10.1"
     githubApi "intisy:simple-logger:1.12.7"
 }
+
+// Match docker-java's "standalone" naming for the shaded jar (Shadow's own
+// default classifier is "all"); the plain jar keeps no classifier.
+shadowJar {
+    archiveClassifier = "standalone"
+}
+
+publishGithub {
+    releaseName = "Release ${project.findProperty('artifact_version') ?: project.version}"
+    // Multi-module release artifacts are aggregated at the repo level in Plan C;
+    // here we just ensure this module builds a plain jar + a standalone shaded jar.
+    artifacts {
+        artifact {
+            classifier = ""
+            jar = file("build/libs/jvm.jar")
+        }
+        artifact {
+            classifier = "standalone"
+            jar = file("build/libs/jvm-standalone.jar")
+        }
+    }
+}

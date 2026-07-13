@@ -1,6 +1,4 @@
 rootProject.name = artifact_name
-include ":core"
-include ":proxy"
 include ":shared"
 include ":jvm"
 // :providers is scaffolded in a later plan (its dir doesn't exist yet).
