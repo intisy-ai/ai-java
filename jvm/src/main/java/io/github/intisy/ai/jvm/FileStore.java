@@ -3,18 +3,21 @@ package io.github.intisy.ai.jvm;
 import io.github.intisy.ai.shared.spi.Store;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.FileTime;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -23,9 +26,17 @@ import java.util.function.UnaryOperator;
  * boundary SPI. A key (e.g. {@code accounts.json}, {@code models.json}, {@code auth.json})
  * is a filename directly under the {@code configFolder} passed to the constructor —
  * the store location is EXPLICIT (this is a server; no CLI-style home-directory sniffing
- * as the primary path). {@link #update} is atomic: a cross-process {@code .lock} file
- * guards a read-modify-write, and the new content is written to a temp file then
- * {@code ATOMIC_MOVE}d into place, so a concurrent reader never observes a partial write.
+ * as the primary path). {@link #update} is atomic: mutual exclusion is enforced two ways —
+ * a per-key {@link ReentrantLock} serializes threads within this JVM, and a real OS-level
+ * {@link FileChannel#lock()} on a per-key {@code .lock} file serializes across processes.
+ * The new content is written to a temp file then {@code ATOMIC_MOVE}d into place, so a
+ * concurrent reader never observes a partial write.
+ *
+ * <p>Neither lock ever degrades to running unlocked: both are acquired with blocking calls,
+ * so a caller either gets exclusive access or blocks — it never silently loses a write.
+ * {@code FileChannel.lock()} is released automatically if the JVM holding it dies, so (unlike
+ * the old sentinel-file-{@code createFile} approach this replaced) there is no stale-lock
+ * problem to work around.
  *
  * <p>Reference: the old {@code core} module's {@code AccountStore}
  * ({@code core/src/main/java/.../store/AccountStore.java}) {@code withLock}/{@code writeStore}
@@ -35,9 +46,11 @@ import java.util.function.UnaryOperator;
  */
 public class FileStore implements Store {
 
-    private static final long LOCK_STALE_MS = 15_000;
-    private static final long LOCK_WAIT_MS = 5_000;
-    private static final long LOCK_POLL_MS = 25;
+    // Per-key in-process locks, shared across all FileStore instances so two instances
+    // pointing at the same underlying file still serialize correctly within this JVM
+    // (a FileChannel lock alone is not reliable for that — see FileChannel.lock() javadoc).
+    // Keyed by the absolute lock-file path so different configFolders never collide.
+    private static final ConcurrentHashMap<String, ReentrantLock> KEY_LOCKS = new ConcurrentHashMap<>();
 
     private final Path configFolder;
 
@@ -75,8 +88,12 @@ public class FileStore implements Store {
 
     @Override
     public void put(String key, String value) {
-        ensureDir();
-        writeAtomic(key, value);
+        // Guarded by the same per-key lock as update() so a put() racing an update() on the
+        // same key serializes instead of interleaving.
+        withLock(key, () -> {
+            writeAtomic(key, value);
+            return null;
+        });
     }
 
     @Override
@@ -159,47 +176,31 @@ public class FileStore implements Store {
         }
     }
 
-    // best-effort exclusive per-key lock; degrades to running unlocked rather than deadlocking
-    // if the lock can't be acquired (mirrors the old AccountStore.withLock).
+    /**
+     * Exclusive per-key lock — never degrades to running unlocked. Two layers, both acquired
+     * with blocking calls:
+     * <ol>
+     *   <li>a {@link ReentrantLock} keyed by this file's absolute path, serializing threads
+     *       within this JVM (this is what makes the intra-JVM concurrency test deterministic);</li>
+     *   <li>inside that, a real OS-level {@link FileChannel#lock()} on the per-key {@code .lock}
+     *       file, serializing across processes. It blocks until acquired; if that's ever not
+     *       viable, the {@link IOException} propagates rather than silently proceeding unlocked.</li>
+     * </ol>
+     */
     private <T> T withLock(String key, Supplier<T> fn) {
         ensureDir();
         Path lockPath = fileFor(key + ".lock");
-        long deadline = System.currentTimeMillis() + LOCK_WAIT_MS;
-        boolean acquired = false;
-        while (!acquired) {
-            try {
-                Files.createFile(lockPath);
-                acquired = true;
-            } catch (FileAlreadyExistsException e) {
-                try {
-                    FileTime mtime = Files.getLastModifiedTime(lockPath);
-                    if (System.currentTimeMillis() - mtime.toMillis() > LOCK_STALE_MS) {
-                        Files.deleteIfExists(lockPath);
-                        continue;
-                    }
-                } catch (IOException ignored) {
-                    // stale-check is best-effort; fall through to the wait/deadline check below
-                }
-                if (System.currentTimeMillis() > deadline) break;
-                try {
-                    Thread.sleep(LOCK_POLL_MS);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            } catch (IOException e) {
-                break; // can't create the lock file at all; degrade to unlocked
+        ReentrantLock jvmLock = KEY_LOCKS.computeIfAbsent(lockPath.toAbsolutePath().toString(), k -> new ReentrantLock());
+        jvmLock.lock();
+        try (FileChannel channel = FileChannel.open(lockPath,
+                StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+            try (FileLock osLock = channel.lock()) {
+                return fn.get();
             }
-        }
-        try {
-            return fn.get();
+        } catch (IOException e) {
+            throw new RuntimeException("failed to acquire cross-process lock for " + key, e);
         } finally {
-            if (acquired) {
-                try {
-                    Files.deleteIfExists(lockPath);
-                } catch (IOException ignored) {
-                }
-            }
+            jvmLock.unlock();
         }
     }
 

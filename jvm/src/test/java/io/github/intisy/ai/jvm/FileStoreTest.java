@@ -90,7 +90,7 @@ class FileStoreTest {
         store.put("counter.json", "{\"n\":0}");
 
         int threads = 8;
-        int incrementsPerThread = 10;
+        int incrementsPerThread = 50;
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         CountDownLatch done = new CountDownLatch(threads);
         AtomicInteger errors = new AtomicInteger();
