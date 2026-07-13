@@ -26,9 +26,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "pretest": "npm run build",
-    "test": "npm run test:consumer && npm run test:parity",
+    "test": "npm run test:consumer && npm run test:parity && npm run test:fine-grained",
     "test:consumer": "node scripts/run-consumer-test.mjs",
     "test:parity": "node scripts/run-parity-test.mjs",
+    "test:fine-grained": "node scripts/run-fine-grained-test.mjs",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {

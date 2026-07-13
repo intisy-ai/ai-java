@@ -200,6 +200,50 @@ class AccountManagerTest {
         assertNotNull(persisted.lastUsed); // claimed by acquire
     }
 
+    // ---- AccountManager.selectAndClaim (Phase 3 Task 1: select+claim without network refresh) --
+
+    @Test
+    void selectAndClaim_claimsWithoutTriggeringNetworkRefresh() {
+        Store rawStore = new InMemoryStore();
+        JsonCodec json = new TestJsonCodec();
+        AccountStore store = new AccountStore(rawStore, json);
+
+        Account account = new Account();
+        account.id = "acc1";
+        account.enabled = true;
+        account.refresh = "old-refresh";
+        account.access = "stale-access";
+        account.expires = 0L; // already expired -- acquire() would refresh; selectAndClaim must not
+
+        store.add("provider", account);
+
+        FakeHttpClient fake = new FakeHttpClient();
+        ManagerOptions opts = new ManagerOptions();
+        opts.oauth = oauthConfig(); // present, so a call WOULD be able to refresh if this leaked through
+
+        AccountManager manager = manager("provider", store, opts, fake, new FixedClock(1_000_000L), () -> 0.5, json);
+
+        Acquired claimed = manager.selectAndClaim("messages");
+
+        assertNotNull(claimed);
+        assertEquals("acc1", claimed.account.id);
+        assertEquals("stale-access", claimed.access); // returned AS-IS, not refreshed
+        assertEquals(0, fake.callCount); // no network call made
+
+        Account persisted = store.list("provider").get(0);
+        assertEquals("stale-access", persisted.access); // untouched
+        assertNotNull(persisted.lastUsed); // still claimed (lastUsed set)
+    }
+
+    @Test
+    void selectAndClaim_returnsNullWhenPoolIsEmpty() {
+        AccountStore store = new AccountStore(new InMemoryStore(), new TestJsonCodec());
+        AccountManager manager = manager("provider", store, new ManagerOptions(),
+                new FakeHttpClient(), new FixedClock(1_000_000L), () -> 0.5, new TestJsonCodec());
+
+        assertNull(manager.selectAndClaim("messages"));
+    }
+
     @Test
     void acquire_returnsNullWhenPoolIsEmpty() {
         AccountStore store = new AccountStore(new InMemoryStore(), new TestJsonCodec());

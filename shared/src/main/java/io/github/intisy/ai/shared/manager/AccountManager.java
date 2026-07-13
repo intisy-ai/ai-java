@@ -57,11 +57,16 @@ public class AccountManager {
     }
 
     /**
-     * Selection + the {@code lastUsed} claim run inside {@code store.update} (atomic per the
-     * {@code Store} SPI's contract); the network token refresh ({@link #ensureAccess}) runs
-     * OUTSIDE that call so a slow refresh never blocks other writers (JS manager.ts: {@code acquire}).
+     * Selection + the {@code lastUsed} claim ONLY -- NO network token refresh. This is the
+     * persisted half of {@link #acquire}, split out (Phase 3 Task 1 of the npm migration) so a
+     * caller that wants to interleave the refresh call with its own proxy/fetch plumbing --
+     * rather than {@link #ensureAccess}'s built-in {@code HttpClient} -- can claim here and run
+     * {@link io.github.intisy.ai.shared.oauth.TokenRefresh#refresh} itself afterward. Runs inside
+     * {@code store.update} (atomic per the {@code Store} SPI's contract). Returns the claimed
+     * account's CURRENT stored {@code access} token as-is (no expiry check, no refresh) --
+     * {@code null} when nobody in the pool is available.
      */
-    public Acquired acquire(String lane) {
+    public Acquired selectAndClaim(String lane) {
         long now = clock.now();
         String[] claimedId = new String[1];
         store.update(providerId, pool -> {
@@ -72,9 +77,22 @@ public class AccountManager {
             claimedId[0] = account.id;
         });
         if (claimedId[0] == null) return null;
-
-        String access = ensureAccess(claimedId[0]);
         Account account = findAccount(claimedId[0]);
+        return new Acquired(account, account != null ? account.access : null);
+    }
+
+    /**
+     * {@link #selectAndClaim}, then a network token refresh ({@link #ensureAccess}) OUTSIDE the
+     * store-update call so a slow refresh never blocks other writers (JS manager.ts: {@code
+     * acquire}).
+     */
+    public Acquired acquire(String lane) {
+        Acquired claimed = selectAndClaim(lane);
+        if (claimed == null) return null;
+
+        String id = claimed.account.id;
+        String access = ensureAccess(id);
+        Account account = findAccount(id);
         return new Acquired(account, access);
     }
 

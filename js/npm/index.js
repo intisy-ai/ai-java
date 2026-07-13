@@ -12,6 +12,15 @@ import {
   rateLimitResetMsJson,
   resolveTiersJson,
   resolveModelMapJson,
+  resolveTiers as resolveTiersRaw,
+  resolveModelMap as resolveModelMapRaw,
+  acquireAccount as acquireAccountRaw,
+  reportRateLimit as reportRateLimitRaw,
+  reportError as reportErrorRaw,
+  reportSuccess as reportSuccessRaw,
+  nextAvailableAt as nextAvailableAtRaw,
+  accessTokenExpired as accessTokenExpiredRaw,
+  refreshToken as refreshTokenRaw,
 } from "./dist/aijava.js";
 
 /**
@@ -194,3 +203,142 @@ export { jsonRoundTrip };
 // (jvm/src/test/java/io/github/intisy/ai/jvm/ParityVectorsTest.java) runs, through the actually-
 // shipped npm package rather than a reimplementation.
 export { calculateBackoffMsJson, rateLimitResetMsJson, resolveTiersJson, resolveModelMapJson };
+
+// -- Phase 3 Task 1: production fine-grained core API (over the LIVE store) ------------------
+// Clean, ergonomic (object-in/object-out, not raw JSON strings) wrappers over the SAME AiJavaJs
+// exports the parity vectors above use internally, at the granularity a TS provider
+// driver/loader actually calls them at: resolve the model map/tiers, select+claim an account,
+// report an outcome, ask when the pool next frees up, and (kept separate, so a driver can
+// interleave it with its own proxy-aware fetch) refresh an OAuth access token. Every one of
+// these — except `refreshToken`, the only one that talks to the network — takes the same `opts`
+// shape as `routeJson`: `{store?: LiveStoreLike}`, resolved via `toLiveStore` so state persists
+// across calls exactly like `routeJson`'s.
+
+/**
+ * `ModelMap.resolveTiers` over the LIVE store's `models.json` (the tier-source provider's
+ * catalog). Returns the resolved tier list as a plain string array.
+ *
+ * @param {object} profile {tierSourceProvider, tierOrder, tierFallback, tierRegex, envPrefix}
+ * @param {{store?: object}} [opts]
+ * @returns {string[]}
+ */
+export function resolveTiers(profile, opts = {}) {
+  const store = toLiveStore(opts.store);
+  return JSON.parse(String(resolveTiersRaw(JSON.stringify(profile), store)));
+}
+
+/**
+ * `ModelMap.resolveModelMap` (heal/derive) over the LIVE store: reads `profile.configFile`'s
+ * `modelMap` plus `models.json`'s live catalog. Returns `{tier: [{provider,model,name,derived},
+ * ...]}`.
+ *
+ * @param {object} profile {configFile, tierSourceProvider, tierOrder, tierFallback, tierRegex, envPrefix}
+ * @param {{store?: object}} [opts]
+ * @returns {Record<string, Array<{provider: string, model: string, name: string, derived: boolean}>>}
+ */
+export function resolveModelMap(profile, opts = {}) {
+  const store = toLiveStore(opts.store);
+  return JSON.parse(String(resolveModelMapRaw(JSON.stringify(profile), store)));
+}
+
+/**
+ * `AccountManager.selectAndClaim` — selection + the `lastUsed` claim ONLY (the store write
+ * persists via the live store); NO network refresh (see `refreshToken` below). Returns
+ * `{accountId, access?}` (the claimed account's CURRENT stored access token, possibly
+ * stale/expired — check via `accessTokenExpired`), or `{none: true}` when nobody in the pool is
+ * available.
+ *
+ * @param {string} providerId
+ * @param {string | null} [lane]
+ * @param {{store?: object}} [opts]
+ * @returns {{accountId: string, access?: string} | {none: true}}
+ */
+export function acquireAccount(providerId, lane = null, opts = {}) {
+  const store = toLiveStore(opts.store);
+  return JSON.parse(String(acquireAccountRaw(providerId, lane, store)));
+}
+
+/**
+ * `AccountManager.reportRateLimit` — persists `account.rateLimitResetTimes[lane] = resetMs`.
+ *
+ * @param {string} providerId
+ * @param {string} id
+ * @param {string | null} lane
+ * @param {number} resetMs
+ * @param {{store?: object}} [opts]
+ */
+export function reportRateLimit(providerId, id, lane, resetMs, opts = {}) {
+  const store = toLiveStore(opts.store);
+  reportRateLimitRaw(providerId, id, lane, resetMs, store);
+}
+
+/**
+ * `AccountManager.reportError` — persists a deterministic-backoff `coolingDownUntil`/
+ * `cooldownReason`.
+ *
+ * @param {string} providerId
+ * @param {string} id
+ * @param {number} attempt
+ * @param {string | null} [reason]
+ * @param {{store?: object}} [opts]
+ */
+export function reportError(providerId, id, attempt, reason = null, opts = {}) {
+  const store = toLiveStore(opts.store);
+  reportErrorRaw(providerId, id, attempt, reason, store);
+}
+
+/**
+ * `AccountManager.reportSuccess` — clears cooldown, bumps `lastUsed`.
+ *
+ * @param {string} providerId
+ * @param {string} id
+ * @param {{store?: object}} [opts]
+ */
+export function reportSuccess(providerId, id, opts = {}) {
+  const store = toLiveStore(opts.store);
+  reportSuccessRaw(providerId, id, store);
+}
+
+/**
+ * `AccountManager.nextAvailableAt` — the soonest epoch-ms any account in the pool becomes
+ * available for `lane`, or `null` if none ever will.
+ *
+ * @param {string} providerId
+ * @param {string | null} [lane]
+ * @param {{store?: object}} [opts]
+ * @returns {number | null}
+ */
+export function nextAvailableAt(providerId, lane = null, opts = {}) {
+  const store = toLiveStore(opts.store);
+  return JSON.parse(String(nextAvailableAtRaw(providerId, lane, store)));
+}
+
+/**
+ * `TokenRefresh.accessTokenExpired` — pure predicate, no store/network involved.
+ *
+ * @param {{access?: string | null, expires?: number | null}} account
+ * @param {number} now epoch ms
+ * @returns {boolean}
+ */
+export function accessTokenExpired(account, now) {
+  return accessTokenExpiredRaw(JSON.stringify(account ?? {}), now);
+}
+
+/**
+ * `TokenRefresh.refresh` — the network OAuth refresh call, via a `fetch`-backed transport (same
+ * bridge `routeJson` uses). Deliberately does NOT persist the result to any store — the caller
+ * decides when/whether to write it back. Resolves to `{access, expires, refresh}` on success, or
+ * `{revoked: true}` when the token endpoint reported `error=invalid_grant`. Any OTHER failure
+ * (network error, non-2xx/non-invalid_grant, unparseable body) rejects.
+ *
+ * @param {string} refreshTokenValue
+ * @param {{tokenUrl: string, clientId: string, clientSecret?: string, extraParams?: Record<string,string>}} oauthConfig
+ * @param {{fetch?: typeof fetch}} [opts]
+ * @returns {Promise<{access: string, expires: number, refresh: string} | {revoked: true}>}
+ */
+export async function refreshToken(refreshTokenValue, oauthConfig, opts = {}) {
+  const fetchImpl = opts.fetch || defaultFetch();
+  const httpSend = makeHttpSend(fetchImpl);
+  const result = await refreshTokenRaw(refreshTokenValue, JSON.stringify(oauthConfig), httpSend);
+  return JSON.parse(String(result));
+}

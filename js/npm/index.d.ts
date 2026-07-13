@@ -136,3 +136,158 @@ export function resolveTiersJson(profileJson: string, storeJson: string): string
  * Returns `{tier: [{provider, model, name, derived}, ...]}` (`ModelMap.resolveModelMap`) as JSON.
  */
 export function resolveModelMapJson(profileJson: string, storeJson: string): string;
+
+// -- Phase 3 Task 1: production fine-grained core API (over the LIVE store) ------------------
+// Clean (object-in/object-out) wrappers over shared's ModelMap/AccountManager/TokenRefresh, at
+// the granularity a TS provider driver/loader actually calls them at — resolve the model
+// map/tiers, select+claim an account, report an outcome, ask when the pool next frees up, and
+// (kept separate so a driver can interleave it with its own proxy-aware fetch) refresh an OAuth
+// access token. See js/src/main/java/io/github/intisy/ai/js/AiJavaJs.java for the Java side.
+
+/** Shape accepted by `resolveTiers`/`resolveModelMap` — same fields as the parity exports'
+ *  `profileJson`, but as a plain object (not pre-stringified). */
+export interface RoutingProfileInput {
+  /** Required by `resolveModelMap` (the stored `modelMap`'s key); ignored by `resolveTiers`. */
+  configFile?: string;
+  tierSourceProvider: string;
+  tierOrder: string[];
+  tierFallback: string[];
+  /** A JS-regex-compatible pattern string, e.g. `"^model-([a-z]+)-\\d"`. */
+  tierRegex: string;
+  envPrefix: string;
+}
+
+/** One resolved {provider, model} slot in a tier's chain (`ModelMap.resolveModelMap`'s output shape). */
+export interface ModelAssignment {
+  provider: string;
+  model: string;
+  name: string;
+  /** `true` when this slot was auto-derived from the catalog rather than the user's stored choice. */
+  derived: boolean;
+}
+
+/** Options shared by every fine-grained export below except `refreshToken` (which uses `fetch` instead). */
+export interface LiveStoreOptions {
+  /** LIVE store (see `LiveStore`/`LiveStoreLike`); defaults to the package-scoped default store
+   *  shared with `routeJson` when omitted. */
+  store?: LiveStoreLike;
+}
+
+/**
+ * `ModelMap.resolveTiers` over the LIVE store's `models.json` (the tier-source provider's
+ * catalog) — the PRODUCTION counterpart of `resolveTiersJson`, reading through a live store
+ * rather than a one-shot snapshot. Returns the resolved tier list.
+ */
+export function resolveTiers(profile: RoutingProfileInput, opts?: LiveStoreOptions): string[];
+
+/**
+ * `ModelMap.resolveModelMap` (heal/derive) over the LIVE store — the PRODUCTION counterpart of
+ * `resolveModelMapJson`. Reads `profile.configFile`'s stored `modelMap` plus `models.json`'s
+ * live catalog. Returns `{tier: [{provider, model, name, derived}, ...]}`.
+ */
+export function resolveModelMap(
+  profile: RoutingProfileInput,
+  opts?: LiveStoreOptions
+): Record<string, ModelAssignment[]>;
+
+/** `acquireAccount`'s result when an account was claimed. */
+export interface AcquiredAccount {
+  accountId: string;
+  /** The claimed account's CURRENT stored access token, possibly stale/expired — check via
+   *  `accessTokenExpired` and refresh via `refreshToken` if needed. Absent when the account has
+   *  no stored access token at all. */
+  access?: string;
+}
+
+/** `acquireAccount`'s result when nobody in the pool is available. */
+export interface NoAccountAvailable {
+  none: true;
+}
+
+/**
+ * `AccountManager.selectAndClaim` — selection + the `lastUsed` claim ONLY (the store write
+ * persists via the live store); deliberately does NOT perform a network token refresh — see
+ * `refreshToken` below, which a caller runs separately (e.g. interleaved with its own
+ * proxy-aware fetch) and persists back itself.
+ */
+export function acquireAccount(
+  providerId: string,
+  lane?: string | null,
+  opts?: LiveStoreOptions
+): AcquiredAccount | NoAccountAvailable;
+
+/** `AccountManager.reportRateLimit` — persists `account.rateLimitResetTimes[lane] = resetMs`. */
+export function reportRateLimit(
+  providerId: string,
+  id: string,
+  lane: string | null,
+  resetMs: number,
+  opts?: LiveStoreOptions
+): void;
+
+/** `AccountManager.reportError` — persists a deterministic-backoff `coolingDownUntil`/`cooldownReason`. */
+export function reportError(
+  providerId: string,
+  id: string,
+  attempt: number,
+  reason?: string | null,
+  opts?: LiveStoreOptions
+): void;
+
+/** `AccountManager.reportSuccess` — clears cooldown, bumps `lastUsed`. */
+export function reportSuccess(providerId: string, id: string, opts?: LiveStoreOptions): void;
+
+/**
+ * `AccountManager.nextAvailableAt` — the soonest epoch-ms any account in the pool becomes
+ * available for `lane`, or `null` if none ever will.
+ */
+export function nextAvailableAt(
+  providerId: string,
+  lane?: string | null,
+  opts?: LiveStoreOptions
+): number | null;
+
+/** Minimal account shape `accessTokenExpired` reads. */
+export interface AccessTokenExpiryInput {
+  access?: string | null;
+  expires?: number | null;
+}
+
+/**
+ * `TokenRefresh.accessTokenExpired` — pure predicate (no store/network involved): expired or
+ * missing, with a 60s clock-skew buffer.
+ */
+export function accessTokenExpired(account: AccessTokenExpiryInput, now: number): boolean;
+
+/** The driver-supplied OAuth endpoint config `refreshToken` needs (mirrors shared's `OAuthConfig`). */
+export interface OAuthConfigInput {
+  tokenUrl: string;
+  clientId: string;
+  clientSecret?: string;
+  extraParams?: Record<string, string>;
+}
+
+/** `refreshToken`'s result on a successful refresh. */
+export interface RefreshedToken {
+  access: string;
+  expires: number;
+  refresh: string;
+}
+
+/** `refreshToken`'s result when the token endpoint reported `error=invalid_grant` — the refresh
+ *  token itself was revoked; the account needs re-auth rather than a retry. */
+export interface RefreshTokenRevoked {
+  revoked: true;
+}
+
+/**
+ * `TokenRefresh.refresh` — the network OAuth refresh call, via a `fetch`-backed transport (same
+ * bridge `routeJson` uses; defaults to the global `fetch`). Deliberately does NOT persist the
+ * result to any store — the caller decides when/whether to write it back. Any failure OTHER than
+ * `invalid_grant` (network error, non-2xx, unparseable body) rejects the returned promise.
+ */
+export function refreshToken(
+  refreshTokenValue: string,
+  oauthConfig: OAuthConfigInput,
+  opts?: { fetch?: typeof fetch }
+): Promise<RefreshedToken | RefreshTokenRevoked>;
