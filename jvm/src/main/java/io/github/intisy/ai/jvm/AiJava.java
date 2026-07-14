@@ -18,6 +18,8 @@ import io.github.intisy.ai.shared.spi.http.HttpRequest;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
 import io.github.intisy.ai.shared.store.AccountStore;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
@@ -33,8 +35,16 @@ import java.util.function.Supplier;
  *
  * <p>Once built, {@link #router} and {@link #accountManager} hand back fully-wired
  * {@code shared} objects so a server never has to thread the individual SPIs through by hand.
+ *
+ * <p>{@link AiJava} owns the {@link #providerRegistry()} it builds (and the
+ * {@link java.net.URLClassLoader} that registry keeps open for its provider jars — see
+ * {@link ProviderRegistry}), so it implements {@link Closeable}: call {@link #close()} once this
+ * {@link AiJava} instance is discarded (e.g. before rebuilding a fresh one to pick up swapped
+ * provider jars) so that loader's resources are released. Never call {@link #close()} while a
+ * {@link WiredRouter} obtained from this instance might still be routing a request to a
+ * jar-provided {@link io.github.intisy.ai.shared.routing.Provider}.
  */
-public class AiJava {
+public class AiJava implements Closeable {
 
     private final Store store;
     private final HttpClient httpClient;
@@ -103,6 +113,17 @@ public class AiJava {
     /** The {@link ProviderRegistry} discovered from {@link Builder#providersDir}, or an empty one. */
     public ProviderRegistry providerRegistry() {
         return providerRegistry;
+    }
+
+    /**
+     * Releases the {@link ProviderRegistry}'s provider-jar {@link java.net.URLClassLoader} (a
+     * no-op when {@link Builder#providersDir} was never set, since {@link ProviderRegistry#close}
+     * itself is a no-op for {@link ProviderRegistry#empty()}). See the class javadoc for when
+     * it's safe to call this.
+     */
+    @Override
+    public void close() throws IOException {
+        providerRegistry.close();
     }
 
     // -- wired construction -----------------------------------------------
