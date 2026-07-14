@@ -59,5 +59,16 @@ class AccountManagerIntegrationTest {
         // The injected HttpClient (not the default) is what performed both refresh POSTs.
         assertEquals(2, result.httpSendCount,
                 "the injected HttpClient should have sent both refresh requests (expiring + revoked)");
+
+        // managerOptions(STICKY) proven against a real 2-account pool: held, switched, then (the
+        // behavior that actually distinguishes STICKY from the default HYBRID) refused to return an
+        // account once the whole pool was rate-limited.
+        assertEquals("sticky-a@example.com", result.stickyFirstAcquire);
+        assertEquals(result.stickyFirstAcquire, result.stickySecondAcquire,
+                "STICKY should hold the same account across acquires while it is available");
+        assertEquals("sticky-b@example.com", result.stickyAfterPrimaryRateLimited,
+                "STICKY should switch to the other account once the held one is rate-limited");
+        assertTrue(result.stickyBlockedWhenAllRateLimited,
+                "STICKY must return null when the whole pool is unavailable (HYBRID would not)");
     }
 }

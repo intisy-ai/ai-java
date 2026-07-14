@@ -34,6 +34,8 @@ public final class AccountManagerDemo {
 
     private static final String PROVIDER = "example-provider";
     private static final String LANE = "chat";
+    private static final String STICKY_PROVIDER = "sticky-provider";
+    private static final String STICKY_LANE = "sticky";
     public static final long CLOCK_START_MS = 1_700_000_000_000L;
     public static final long RATE_LIMIT_MS = 60_000L;
     private static final long ONE_DAY_MS = 86_400_000L;
@@ -56,6 +58,11 @@ public final class AccountManagerDemo {
         public String revokedDisabledReason;
         public String accountsJson;
         public int httpSendCount;
+        // STICKY selection, proven against a real 2-account pool.
+        public String stickyFirstAcquire;
+        public String stickySecondAcquire;
+        public String stickyAfterPrimaryRateLimited;
+        public boolean stickyBlockedWhenAllRateLimited;
     }
 
     public static void run() throws IOException {
@@ -74,6 +81,10 @@ public final class AccountManagerDemo {
         Section.detail("revoked (invalid_grant) refresh disabled the account: enabled=" + result.revokedAccountEnabled
                 + ", disabledReason='" + result.revokedDisabledReason + "'");
         Section.detail("injected HttpClient performed " + result.httpSendCount + " refresh POST(s)");
+        Section.detail("STICKY selection (2-account pool): acquired " + result.stickyFirstAcquire
+                + ", held it again = " + result.stickySecondAcquire
+                + ", switched to " + result.stickyAfterPrimaryRateLimited + " once rate-limited, "
+                + "then returned null when both were rate-limited = " + result.stickyBlockedWhenAllRateLimited);
     }
 
     public static Result execute() throws IOException {
@@ -84,7 +95,10 @@ public final class AccountManagerDemo {
 
             AdjustableClock clock = new AdjustableClock(CLOCK_START_MS);
             ManagerOptions managerOptions = new ManagerOptions();
-            managerOptions.strategy = Strategy.STICKY; // makes "cooldown blocks acquire" observable
+            // STICKY: hold the chosen account across acquires while it's available, switch when it
+            // isn't, and (unlike HYBRID) refuse to hand back an unavailable account when the whole
+            // pool is exhausted. The sticky block below proves each of these against a 2-account pool.
+            managerOptions.strategy = Strategy.STICKY;
             RecordingHttpClient httpClient = new RecordingHttpClient(new UrlConnectionHttpClient());
 
             AiJava app = AiJava.builder()
@@ -124,6 +138,21 @@ public final class AccountManagerDemo {
             manager.reportSuccess("user@example.com");
             result.nextAvailableAfterSuccess = manager.nextAvailableAt(LANE);
 
+            // -- STICKY selection over a real 2-account pool (proves the managerOptions strategy) --
+            AccountManager sticky = app.accountManager(STICKY_PROVIDER, oauth);
+            accountStore.add(STICKY_PROVIDER, account("sticky-a@example.com", "sticky-a-refresh",
+                    "sticky-a-access", CLOCK_START_MS + ONE_DAY_MS));
+            accountStore.add(STICKY_PROVIDER, account("sticky-b@example.com", "sticky-b-refresh",
+                    "sticky-b-access", CLOCK_START_MS + ONE_DAY_MS));
+
+            result.stickyFirstAcquire = emailOf(sticky.acquire(STICKY_LANE));
+            result.stickySecondAcquire = emailOf(sticky.acquire(STICKY_LANE)); // held: same account again
+            sticky.reportRateLimit("sticky-a@example.com", STICKY_LANE, clock.now() + RATE_LIMIT_MS);
+            result.stickyAfterPrimaryRateLimited = emailOf(sticky.acquire(STICKY_LANE)); // switched to b
+            sticky.reportRateLimit("sticky-b@example.com", STICKY_LANE, clock.now() + RATE_LIMIT_MS);
+            // Whole pool now unavailable: STICKY returns nothing (HYBRID would hand back the soonest-free).
+            result.stickyBlockedWhenAllRateLimited = sticky.acquire(STICKY_LANE) == null;
+
             // -- refresh round trip: an expired access token forces a real POST to the token endpoint --
             accountStore.add(PROVIDER, account("expiring@example.com", "expiring-refresh", "old-access",
                     CLOCK_START_MS - 1000L));
@@ -161,6 +190,10 @@ public final class AccountManagerDemo {
         account.enabled = Boolean.TRUE;
         account.addedAt = CLOCK_START_MS;
         return account;
+    }
+
+    private static String emailOf(Acquired acquired) {
+        return acquired != null && acquired.account != null ? acquired.account.email : null;
     }
 
     private static Account find(AccountStore accountStore, String id) {

@@ -1,8 +1,10 @@
 package io.github.intisy.ai.examples;
 
 import io.github.intisy.ai.examples.support.H2Support;
+import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.spi.Store;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -10,6 +12,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Runs {@link StorageDemo#roundTrip} — the one backend-agnostic put/update/get + routed-request
@@ -38,6 +42,17 @@ class StoreParityIntegrationTest {
         assertEquals(200, result.routedStatus);
         assertEquals("served m-ok", result.routedBody,
                 "the routed request should fall back rl(429) -> ok and serve the assigned model, on every backend");
+    }
+
+    @Test
+    void buildWithoutStorageThrowsStorageRequired() {
+        // StorageDemo demonstrates this (prints the caught exception); this asserts it: storage is a
+        // required, never-defaulted choice, so building without it must fail on the storage path.
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> AiJava.builder().build(),
+                "building an AiJava without a storage backend must throw");
+        assertTrue(thrown.getMessage() != null && thrown.getMessage().contains("storage"),
+                "the failure must be the storage-required path, not some unrelated exception: " + thrown.getMessage());
     }
 
     private Store storeFor(Backend backend) {
