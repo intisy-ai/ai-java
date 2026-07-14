@@ -5,10 +5,9 @@ plugins {
 }
 
 // online-gradle's `online {}` preset block is intended for single-module repos (see
-// docker-java's root build.gradle). Applying it project-wide here caused subproject
-// configuration issues in this multi-module layout, so for now it stays declared
-// (apply false) but unapplied; revisit once :proxy/:providers exist and it's clearer
-// whether it should live at the root or per-module.
+// docker-java's root build.gradle). Applying it project-wide breaks subproject
+// configuration in this multi-module layout, so it stays declared (apply false) but
+// unapplied. If it is ever needed, apply it per-module rather than at the root.
 
 subprojects {
     apply plugin: "java-library"

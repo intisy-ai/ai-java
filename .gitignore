@@ -3,4 +3,5 @@ build/
 .idea/
 docs/superpowers/
 .superpowers/
+graphify-out/
 *.iml
