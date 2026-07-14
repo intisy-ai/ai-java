@@ -1,0 +1,6 @@
+[submodule "core-proxy"]
+	path = core-proxy
+	url = https://github.com/intisy-ai/core-proxy.git
+[submodule "core-auth"]
+	path = core-auth
+	url = https://github.com/intisy-ai/core-auth.git

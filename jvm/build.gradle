@@ -1,24 +1,18 @@
 dependencies {
-    api project(":shared")
+    // core-proxy's routing engine (SPIs, Router/ModelMap/RateLimit, Provider SPI,
+    // HandlerResolver/HandlerResolvers) and core-auth's account engine (AccountManager,
+    // OAuthConfig, AccountStore) -- both vendored as git submodules, composed into this single
+    // build by the root settings.gradle (:routing/:accounts, not ai-java's own :shared anymore).
+    // api (not implementation): AiJava's own public API exposes these types directly
+    // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
+    api project(":routing")
+    api project(":accounts")
     api "com.google.code.gson:gson:2.10.1"
     githubApi "intisy:simple-logger:1.12.7"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL are all supported at runtime).
     testImplementation "com.h2database:h2:2.2.224"
-}
-
-// Phase 2 Task 7 (JVM<->JS parity vectors): expose shared's test-resource vector files
-// (shared/src/test/resources/parity/*.json) on THIS module's test classpath too, so
-// ParityVectorsTest can load them via getResourceAsStream("/parity/...") without a copy --
-// shared/src/test/resources/parity/ stays the single source of truth the JS consumer test
-// (js/npm/test/parity.test.ts) also reads directly off disk.
-sourceSets {
-    test {
-        resources {
-            srcDir "../shared/src/test/resources"
-        }
-    }
 }
 
 // Match docker-java's "standalone" naming for the shaded jar (Shadow's own

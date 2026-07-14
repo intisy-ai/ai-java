@@ -9,7 +9,6 @@ import io.github.intisy.ai.shared.oauth.OAuthConfig;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.Clock;
-import io.github.intisy.ai.shared.spi.Env;
 import io.github.intisy.ai.shared.spi.HttpClient;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Logger;
@@ -19,6 +18,7 @@ import io.github.intisy.ai.shared.spi.http.HttpRequest;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
 import io.github.intisy.ai.shared.store.AccountStore;
 
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
@@ -45,6 +45,7 @@ public class AiJava {
     private final Env env;
     private final Notifier notifier;
     private final ManagerOptions managerOptions;
+    private final ProviderRegistry providerRegistry;
 
     private AiJava(Builder b) {
         this.store = b.store;
@@ -56,6 +57,9 @@ public class AiJava {
         this.env = b.env;
         this.notifier = b.notifier != null ? b.notifier : defaultNotifierFor(b.store);
         this.managerOptions = b.managerOptions;
+        this.providerRegistry = b.providersDir != null
+                ? ProviderRegistry.fromDirectory(b.providersDir)
+                : ProviderRegistry.empty();
     }
 
     public static Builder builder() {
@@ -96,7 +100,24 @@ public class AiJava {
         return notifier;
     }
 
+    /** The {@link ProviderRegistry} discovered from {@link Builder#providersDir}, or an empty one. */
+    public ProviderRegistry providerRegistry() {
+        return providerRegistry;
+    }
+
     // -- wired construction -----------------------------------------------
+
+    /**
+     * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier,
+     * whose handlers come from this {@link AiJava}'s {@link #providerRegistry()} — the
+     * {@link ProviderRegistry} discovered from {@link Builder#providersDir(Path)}, replacing the
+     * hand-wired test resolvers callers previously had to assemble themselves. Use the
+     * three-argument {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead
+     * when a caller needs to supply its own {@link HandlerResolver} (e.g. a test double).
+     */
+    public WiredRouter router(RoutingProfile profile) {
+        return router(profile, providerRegistry.asHandlerResolver(), providerRegistry::listProviderIds);
+    }
 
     /**
      * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier.
@@ -194,6 +215,7 @@ public class AiJava {
         private Env env = new SystemEnv();
         private Notifier notifier; // resolved lazily in build() — depends on the chosen store
         private ManagerOptions managerOptions;
+        private Path providersDir; // unset -> ProviderRegistry.empty(), never forced/guessed
 
         private Builder() {
         }
@@ -241,6 +263,16 @@ public class AiJava {
 
         public Builder managerOptions(ManagerOptions managerOptions) {
             this.managerOptions = managerOptions;
+            return this;
+        }
+
+        /**
+         * Directory {@link ProviderRegistry#fromDirectory} scans for provider {@code *.jar}s at
+         * {@link #build()} time, backing the zero-arg {@link AiJava#router(RoutingProfile)}.
+         * Unset (default) yields an empty registry — no directory is guessed or forced.
+         */
+        public Builder providersDir(Path providersDir) {
+            this.providersDir = providersDir;
             return this;
         }
 

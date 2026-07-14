@@ -1,8 +1,33 @@
 rootProject.name = artifact_name
-include ":shared"
+
+// ai-java composes a single Gradle build across two vendored git submodules (core-proxy,
+// core-auth) plus its own jvm module. Gradle settings don't nest — a submodule's own
+// settings.gradle/build.gradle is never read when it's folded in like this — so THIS file is
+// authoritative and every project below is re-declared here, aliased to its real location via
+// projectDir. This mirrors exactly how core-auth/java/settings.gradle itself folds core-proxy's
+// :routing/:teavm into ITS OWN build (see core-auth/java/settings.gradle) — same technique, one
+// level up.
+//
+// :routing/:teavm are included from core-proxy/java/ (the top-level core-proxy submodule) and
+// NOT from core-auth/java/core-proxy/ (core-auth's OWN nested copy of the same submodule, left
+// uninitialized here — ai-java's root build never touches it). This keeps exactly ONE :routing
+// project in this build: core-auth's :accounts declares `api project(":routing")` and
+// core-proxy's :teavm/core-auth's :auth-teavm both declare `project(":routing")`/
+// `project(":teavm")` — if both core-proxy/java/routing AND core-auth/java/core-proxy/routing
+// were included under the same ":routing" path, Gradle would fail with a duplicate-project/path
+// collision (two different projectDirs claiming the same project path). Including it once, from
+// core-proxy/ only, is what makes :accounts' project(":routing") dependency resolve to that
+// single copy.
+include ":routing"
+project(":routing").projectDir = file("core-proxy/java/routing")
+
+include ":teavm"
+project(":teavm").projectDir = file("core-proxy/java/teavm")
+
+include ":accounts"
+project(":accounts").projectDir = file("core-auth/java/accounts")
+
+include ":auth-teavm"
+project(":auth-teavm").projectDir = file("core-auth/java/auth-teavm")
+
 include ":jvm"
-include ":js"
-// :providers is scaffolded in a later plan (its dir doesn't exist yet).
-// Add it here once its module dir exists, e.g.:
-// include ":providers"
-// project(":providers").projectDir = file("providers")

@@ -2,7 +2,7 @@ package io.github.intisy.ai.jvm;
 
 import io.github.intisy.ai.shared.logic.ModelMap;
 import io.github.intisy.ai.shared.logic.RateLimit;
-import io.github.intisy.ai.shared.logic.RateLimitMath;
+import io.github.intisy.ai.shared.select.RateLimitMath;
 import io.github.intisy.ai.shared.routing.Assignment;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import org.junit.jupiter.api.Test;
@@ -21,11 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Phase 2 Task 7: JVM half of the JVM&lt;-&gt;JS parity harness. Loads the SAME vector files
- * the JS parity test ({@code js/npm/test/parity.test.ts}) reads straight off disk from
- * {@code shared/src/test/resources/parity/} (exposed on this module's test classpath via
- * {@code jvm/build.gradle}'s extra {@code sourceSets.test.resources.srcDir}), and runs each
- * vector through shared's {@code RateLimitMath}/{@code RateLimit}/{@code ModelMap} directly,
+ * Phase 2 Task 7: JVM half of the JVM&lt;-&gt;JS parity harness. Loads vector files from this
+ * module's own {@code src/test/resources/parity/} (originally {@code shared/src/test/resources/
+ * parity/}, restored here in Phase 4 Task 3 now that {@code shared}/{@code js} relocated out of
+ * ai-java into the core-proxy/core-auth submodules and their JS-side parity tests moved with
+ * them), and runs each vector through the routing/select engine's {@code RateLimitMath}/
+ * {@code RateLimit}/{@code ModelMap} (now sourced from the {@code :routing}/{@code :accounts}
+ * submodule projects) directly,
  * using the PRODUCTION {@link GsonJsonCodec} and this module's {@link InMemoryStore} -- the
  * exact combination the {@code jvm} artifact ships. A passing run here plus a passing run of
  * the JS test on the identical vectors is the correctness guarantee: the same shared logic
