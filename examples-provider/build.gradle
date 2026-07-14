@@ -1,0 +1,15 @@
+// A thin, standalone Provider jar for the :examples showcase. Mirrors stub-auth's
+// stub-provider: the Provider SPI is supplied by the HOST at runtime (:jvm's ProviderRegistry
+// loads this jar on a URLClassLoader parented to its own, which already has :routing's
+// Provider/ProxyHandler/HandlerCtx/HttpRequest/HttpResponse loaded), so :routing is compileOnly.
+// `./gradlew :examples-provider:jar` must therefore NOT bundle any io/github/intisy/ai/shared/**
+// class inside the jar -- it stays a pure two-Provider + META-INF/services artifact discovered
+// purely via ServiceLoader.
+dependencies {
+    compileOnly project(":routing")
+}
+
+// Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}

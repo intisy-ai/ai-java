@@ -1,0 +1,50 @@
+// Runnable, never-published showcase of the full :jvm API. Unlike :jvm it declares NO
+// publishGithub block -- this module is documentation/demo code, not a release artifact.
+apply plugin: "application"
+
+dependencies {
+    // The whole point of the example: consume :jvm's public facade (which re-exports :routing +
+    // :accounts via `api`, so RoutingProfile/AccountManager/etc. are visible here transitively).
+    implementation project(":jvm")
+    // H2 is used by StorageDemo/StoreParityIntegrationTest to show Storage.jdbc(...) against a
+    // real in-memory SQL database. It is a demo/runtime concern of THIS module only -- :jvm's
+    // JdbcStore takes any javax.sql.DataSource, so the library itself never depends on H2.
+    implementation "com.h2database:h2:2.2.224"
+
+    // NOTE: :examples deliberately does NOT depend on project(":examples-provider"). The provider
+    // must be discovered from its JAR on disk via ServiceLoader (see ProviderRegistryDemo), so its
+    // classes must NOT be on this module's own classpath -- that would mask whether jar loading
+    // actually works. The Copy task below is the only link to that project.
+}
+
+application {
+    mainClass = "io.github.intisy.ai.examples.Main"
+}
+
+// Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}
+
+// Stage :examples-provider's built jar into a providers/ directory, exactly as a server operator
+// would drop a provider jar into a plugins folder. ProviderRegistryDemo/RoutingDemo (and the
+// integration tests) point AiJava.providersDir(...) at this directory; discovery is 100%
+// jar-on-disk + META-INF/services, with zero example code referencing the provider's classes.
+def providersDir = layout.buildDirectory.dir("providers")
+def stageProviders = tasks.register("stageProviders", Copy) {
+    from(project(":examples-provider").tasks.named("jar"))
+    into(providersDir)
+}
+
+// Both `run` and `test` need the staged jar present and need to know where it is; the demos/tests
+// read the "examples.providersDir" system property (falling back to a conventional path when run
+// outside Gradle, e.g. from an IDE).
+tasks.named("run") {
+    dependsOn(stageProviders)
+    systemProperty("examples.providersDir", providersDir.get().asFile.absolutePath)
+}
+
+tasks.named("test") {
+    dependsOn(stageProviders)
+    systemProperty("examples.providersDir", providersDir.get().asFile.absolutePath)
+}

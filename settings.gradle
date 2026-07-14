@@ -31,3 +31,15 @@ include ":auth-teavm"
 project(":auth-teavm").projectDir = file("core-auth/java/auth-teavm")
 
 include ":jvm"
+
+// The example projects live in ai-java's OWN tree (not a submodule), so — unlike :routing/
+// :teavm/:accounts above — they need no projectDir remap; Gradle finds them at the matching
+// ./examples-provider and ./examples directories by default.
+//
+// :examples-provider is a thin Provider jar (two Provider implementations + META-INF/services),
+// depending compileOnly on :routing exactly like stub-auth's stub-provider — its jar carries NO
+// :routing classes and is discovered by :jvm's ProviderRegistry purely via ServiceLoader.
+// :examples is the runnable, never-published showcase (application plugin) that stages that jar
+// into a providers/ dir and drives the full :jvm API. Neither is a dependency of :jvm.
+include ":examples-provider"
+include ":examples"
