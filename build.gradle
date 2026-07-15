@@ -15,6 +15,10 @@ subprojects {
     apply plugin: "io.github.intisy.github-gradle"
 
     group = artifact_group
+    // publishGithub (used by the publish-dependency workflow) requires a concrete version.
+    // Derive it from -Partifact_version=<tag> passed by CI (stripping a leading "v"), falling back
+    // to a local dev version. build.yml doesn't need this (it uses the gh CLI directly).
+    version = (project.findProperty("artifact_version") ?: "0.0.0-dev").toString().replaceFirst(/^v/, "")
 
     repositories {
         mavenLocal()
