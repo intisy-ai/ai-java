@@ -23,16 +23,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ai-java is multi-module: the consumable library artifact is the :jvm
-      # module (it re-exports :routing + :accounts via api), not the root
-      # project, so jars are built/uploaded scoped to :jvm, not the reusable
-      # workflows/build.yml's root `build/libs/*` convention.
-      - name: Build :jvm jars
-        run: ./gradlew :jvm:build :jvm:shadowJar -Partifact_version=${{ github.ref_name }}
-
-      - name: Create Release and Upload Jars
-        run: |
-          gh release create "${{ github.ref_name }}" -t "Release ${{ github.ref_name }}" || true
-          gh release upload "${{ github.ref_name }}" jvm/build/libs/*.jar --clobber
+      # ai-java is multi-module: the consumable library artifact is the :jvm module (it re-exports
+      # :routing + :accounts via api and shades them into its standalone jar). Build its jars, then
+      # publish them as a github-gradle PACKAGE via publishGithub — this creates the release and
+      # uploads ai-java.jar / ai-java-standalone.jar (named from jvm/build.gradle's owner/repo), which
+      # is what `githubApi "intisy-ai:ai-java:<version>"` consumers resolve. publishGithub is scoped
+      # to :jvm by the root build's onlyIf guard. GITHUB_TOKEN is what the github{} extension reads.
+      - name: Build and publish :jvm as a github-gradle package
+        run: ./gradlew :jvm:build :jvm:shadowJar publishGithub -Partifact_version=${{ github.ref_name }}
         env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
           GH_TOKEN: ${{ secrets.PAT }}
