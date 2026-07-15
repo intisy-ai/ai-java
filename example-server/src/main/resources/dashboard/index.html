@@ -407,12 +407,14 @@
   // and available-list identity ("name") are different id spaces (a repo/asset name vs. the
   // provider's registered id), so rows are NOT cross-matched by name; each source contributes
   // its own rows and the "installed" flag on each is trusted as authoritative for that row.
+  // Entries from available with installed=true are skipped to avoid duplicating already-installed rows.
   function mergeProviderRows(installed, available) {
     var rows = [];
     (installed || []).forEach(function (p) {
       rows.push({ kind: "installed", id: p.id, accounts: p.accounts, assetName: null, installed: true });
     });
     (available || []).forEach(function (item) {
+      if (item.installed === true) return; // Skip; already in installed list
       rows.push({ kind: "available", id: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
     });
     return rows;
