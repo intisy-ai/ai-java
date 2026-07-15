@@ -18,6 +18,7 @@ OAuth-refresh logic — no second copy to drift.
 | `:routing` | `core-proxy/java/routing` (submodule) | The generic routing engine: SPI interfaces, `Router` (tier fallback, model rewrite, native-429 synthesis, `/v1/models`), `ModelMap`, `RateLimit`, the `Provider` SPI, and `HandlerResolvers`. |
 | `:accounts` | `core-auth/java/accounts` (submodule) | The account engine: `AccountManager` (acquire / report / backoff / refresh), `OAuthConfig`, `AccountStore`, `Selection`, `RateLimitMath`. |
 | `:examples` / `:examples-provider` | `examples/`, `examples-provider/` | A runnable tour of the whole `:jvm` API with end-to-end integration tests. See [examples/README.md](examples/README.md). |
+| `:example-server` | `example-server/` | A runnable, never-published HTTP server (`com.sun.net.httpserver`) that drives `WiredRouter` over `POST /v1/messages` + `GET /v1/models` + `/healthz`. See [example-server/README.md](example-server/README.md). |
 
 `core-proxy` and `core-auth` are vendored as git submodules and composed into one
 Gradle build by the authoritative root [`settings.gradle`](settings.gradle) — the
@@ -64,6 +65,20 @@ try (AiJava ai = AiJava.builder()
 See [`examples/`](examples/) for worked demos of storage backends, custom SPIs,
 provider-jar discovery, routing (rewrite / fallback / exhaustion / `/v1/models`),
 account management (cooldown / refresh / revoke), and the notifier.
+
+The whole platform is a swappable unit: instead of overriding SPIs one at a time, compose a
+`Backend` and hand it over —
+
+```java
+Backend backend = Backend.builder()
+        .store(Storage.memory())
+        .logger(myLogger)          // any unset SPI falls back to its JVM default
+        .build();
+try (AiJava ai = AiJava.builder().backend(backend).build()) { ... }
+```
+
+`Backends.defaults(store)` gives the all-defaults bundle; per-SPI setters on `AiJava.builder()`
+still override whatever the backend supplies.
 
 ## License
 

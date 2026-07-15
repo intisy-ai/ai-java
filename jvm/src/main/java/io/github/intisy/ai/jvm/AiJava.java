@@ -117,7 +117,10 @@ public class AiJava implements Closeable {
         return notifier;
     }
 
-    /** The {@link ProviderRegistry} discovered from {@link Builder#providersDir}, or an empty one. */
+    /**
+     * The {@link ProviderRegistry} discovered from {@link Builder#providersDir}, injected directly
+     * via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one.
+     */
     public ProviderRegistry providerRegistry() {
         return providerRegistry;
     }
@@ -138,8 +141,9 @@ public class AiJava implements Closeable {
     /**
      * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier,
      * whose handlers come from this {@link AiJava}'s {@link #providerRegistry()} — the
-     * {@link ProviderRegistry} discovered from {@link Builder#providersDir(Path)}, replacing the
-     * hand-wired test resolvers callers previously had to assemble themselves. Use the
+     * {@link ProviderRegistry} discovered from {@link Builder#providersDir(Path)}, injected
+     * directly via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one, replacing
+     * the hand-wired test resolvers callers previously had to assemble themselves. Use the
      * three-argument {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead
      * when a caller needs to supply its own {@link HandlerResolver} (e.g. a test double).
      */
