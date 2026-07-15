@@ -11,25 +11,58 @@ gradlew :example-server:run
 ```
 
 This stages `:examples-provider`'s jar into `build/providers/`, boots on `http://127.0.0.1:8787`,
-and seeds the echo catalog so requests return a real body. Override with
-`-Dexampleserver.port=...`, `-Dexampleserver.store=memory|file`, `-Dexampleserver.providersDir=...`.
+and seeds the echo catalog plus two demo accounts (`demo-1@example`, `demo-2@example`) so requests
+and the dashboard both return real content out of the box.
 
 ## Endpoints
 
 | Method + path | Behavior |
 | --- | --- |
+| `GET /` | The dashboard: an HTML page listing discovered providers and their accounts (see below). |
+| `GET /api/providers` | Management API: `[{"id":..,"accounts":<int>}]` for every discovered provider. |
+| `GET /api/providers/{id}/accounts` | Management API: UI-safe account views (`id`, `email`, `enabled`, computed `status`) for one provider. |
+| `POST /api/providers/{id}/accounts/{accId}/enable` | Management API: enable an account (`204`). |
+| `POST /api/providers/{id}/accounts/{accId}/disable` | Management API: disable an account (`204`). |
+| `DELETE /api/providers/{id}/accounts/{accId}` | Management API: remove an account (`204`). |
 | `POST /v1/messages` | Anthropic-messages request → routed through the tier chain to a provider jar; returns the buffered response body (the engine is fully buffered — no SSE streaming). |
 | `GET /v1/models` | The router's model catalog (handled inside `Router`). |
 | `GET /healthz` | Server-level liveness (`200 ok`), answered without touching the router. |
+
+## Dashboard
+
+`GET /` serves a self-contained HTML page (no JS framework, no external assets) that lists every
+provider the registry discovered and, for each, its accounts with their computed status (`ready`,
+`cooling`, `rate-limited`, `disabled`). It reads through the same `AccountAdmin` the `/api/*`
+management endpoints use, so the two surfaces always agree. It never shows secrets (refresh/access
+tokens) or transient reasons (cooldown/disabled reason text) — only the UI-safe view.
+
+## Discovery
+
+Provider jars are resolved by `ProviderDiscovery.resolve(providersDir, fetchFromOrg)`:
+
+- `-Dexampleserver.providersDir=...` — directory scanned for provider `*.jar`s (default `providers`,
+  overridden to `build/providers` by the Gradle `run`/`test` tasks after staging `:examples-provider`).
+- `-Dexampleserver.fetchProviders=true` — before scanning, also fetch provider jars published under
+  the `intisy-ai` GitHub org into that directory. Defaults to `false` so a plain `run` stays
+  offline-clean; fetch failures are logged and non-fatal — the server still starts with whatever is
+  already on disk.
+
+Other flags:
+
+- `-Dexampleserver.store=memory|file` — the backing `Store` (default `memory`); `file` persists
+  under `-Dexampleserver.configDir=...` (default `config`).
+- `-Dexampleserver.port=...` — the HTTP port (default `8787`; `0` picks an ephemeral port).
 
 ## What it demonstrates
 
 - **Completely customizable backend:** `ServerMain` composes a `Backend` from a single store
   choice; every other SPI defaults, and any could be overridden in the same place.
-- **Provider-jar discovery:** providers are found on disk via `ServiceLoader`, never on the
-  server's classpath.
+- **Provider-jar discovery:** providers are found on disk via `ServiceLoader` (optionally seeded
+  from the intisy-ai org first), never on the server's classpath.
 - **The buffered router boundary:** the server is a pure `HttpExchange` ↔ `HttpRequest`/
   `HttpResponse` adapter; all routing decisions live in `:routing`.
+- **Account administration:** `AccountAdmin` + `ManagementApi` expose enable/disable/remove over
+  HTTP, and the dashboard renders the same data for humans.
 
 ## Extract-to-own-repo note
 
