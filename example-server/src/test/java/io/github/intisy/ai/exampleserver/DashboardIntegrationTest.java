@@ -53,6 +53,9 @@ class DashboardIntegrationTest {
         assertTrue(r.contentType != null && r.contentType.contains("text/html"), r.contentType);
         assertTrue(r.body.contains("<title>ai-java example server</title>"), r.body);
         assertTrue(r.body.contains("Providers"), r.body);
+        assertTrue(r.body.contains("Install"), r.body);
+        assertTrue(r.body.contains("Accounts"), r.body);
+        assertTrue(r.body.contains("Chat"), r.body);
         assertFalse(r.body.contains("src=\"http"), "must not reference external scripts/images: " + r.body);
         assertFalse(r.body.contains("href=\"http"), "must not reference external stylesheets/links: " + r.body);
     }
