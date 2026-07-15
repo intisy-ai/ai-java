@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.http;
 
 import io.github.intisy.ai.shared.spi.HttpClient;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;

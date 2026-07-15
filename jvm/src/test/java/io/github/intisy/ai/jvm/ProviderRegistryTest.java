@@ -1,5 +1,7 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
+import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.routing.RoutingProfile;

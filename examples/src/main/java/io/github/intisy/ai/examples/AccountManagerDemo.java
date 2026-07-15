@@ -8,7 +8,7 @@ import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.examples.support.Workspace;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.jvm.UrlConnectionHttpClient;
+import io.github.intisy.ai.jvm.backend.http.UrlConnectionHttpClient;
 import io.github.intisy.ai.shared.manager.AccountManager;
 import io.github.intisy.ai.shared.manager.Acquired;
 import io.github.intisy.ai.shared.manager.ManagerOptions;

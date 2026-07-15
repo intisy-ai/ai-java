@@ -1,5 +1,6 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

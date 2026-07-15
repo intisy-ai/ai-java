@@ -1,5 +1,6 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;

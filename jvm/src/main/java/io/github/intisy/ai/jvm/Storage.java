@@ -1,5 +1,8 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
+import io.github.intisy.ai.jvm.backend.store.JdbcStore;
 import io.github.intisy.ai.shared.spi.Store;
 
 import javax.sql.DataSource;

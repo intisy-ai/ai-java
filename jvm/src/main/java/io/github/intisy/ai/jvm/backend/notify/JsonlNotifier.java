@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.notify;
 
 import com.google.gson.Gson;
 import io.github.intisy.ai.shared.logic.Notifier;

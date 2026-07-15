@@ -12,7 +12,7 @@ import io.github.intisy.ai.examples.support.RecordingJsonCodec;
 import io.github.intisy.ai.examples.support.Requests;
 import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.jvm.AiJava;
-import io.github.intisy.ai.jvm.GsonJsonCodec;
+import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.manager.AccountManager;
 import io.github.intisy.ai.shared.model.Account;

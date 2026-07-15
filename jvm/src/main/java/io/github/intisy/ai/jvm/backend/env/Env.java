@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.env;
 
 /**
  * Environment-variable lookup SPI. Lives in {@code jvm} rather than the shared/routing/accounts

@@ -7,7 +7,7 @@ import io.github.intisy.ai.examples.support.Requests;
 import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.examples.support.Workspace;
 import io.github.intisy.ai.jvm.AiJava;
-import io.github.intisy.ai.jvm.JsonlNotifier;
+import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.Store;

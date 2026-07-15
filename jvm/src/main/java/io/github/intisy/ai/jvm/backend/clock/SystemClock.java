@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.clock;
 
 import io.github.intisy.ai.shared.spi.Clock;
 

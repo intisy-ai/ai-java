@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.log;
 
 import com.github.WildePizza.SimpleLogger;
 import io.github.intisy.ai.shared.spi.Logger;

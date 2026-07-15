@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.jvm.Env;
+import io.github.intisy.ai.jvm.backend.env.Env;
 
 import java.util.HashMap;
 import java.util.Map;

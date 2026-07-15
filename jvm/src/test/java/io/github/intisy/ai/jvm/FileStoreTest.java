@@ -1,5 +1,6 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.jvm.backend.store.FileStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

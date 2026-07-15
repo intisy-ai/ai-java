@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.backend.json;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

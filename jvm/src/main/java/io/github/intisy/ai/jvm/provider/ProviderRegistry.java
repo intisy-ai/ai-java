@@ -1,4 +1,4 @@
-package io.github.intisy.ai.jvm;
+package io.github.intisy.ai.jvm.provider;
 
 import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
