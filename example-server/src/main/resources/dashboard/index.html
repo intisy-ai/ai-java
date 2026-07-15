@@ -224,18 +224,12 @@
   button.small { padding: 0.28rem 0.55rem; font-size: 0.76rem; }
   button + button { margin-left: 0.35rem; }
 
-  .install-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.6rem 0.15rem;
-    border-bottom: 1px solid var(--border-soft);
-  }
-  .install-item:last-child { border-bottom: none; }
-  .install-item .meta { min-width: 0; }
-  .install-item .meta .name { font-weight: 600; font-size: 0.88rem; }
-  .install-item .meta .asset { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .card-head-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .prov-name { font-weight: 600; font-size: 0.88rem; }
+  .prov-asset { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; margin-top: 0.1rem; }
+  .prov-count { color: var(--muted); font-size: 0.76rem; margin-top: 0.2rem; }
+  .badge-installed { color: var(--ok); background: var(--ok-bg); }
+  .badge-available { color: var(--info); background: var(--info-bg); }
 
   select, input[type="text"], textarea {
     width: 100%;
@@ -314,24 +308,17 @@
   <section class="card" id="providers-card">
     <div class="card-head">
       <h2>Providers</h2>
-      <span class="hint">click to view accounts</span>
+      <div class="card-head-actions">
+        <span class="hint">installed &amp; available from the org</span>
+        <button class="small" id="refresh-providers-button" type="button">Refresh</button>
+      </div>
     </div>
+    <div id="providers-toast" class="toast hidden"></div>
     <div class="card-body">
       <table id="providers-table">
-        <thead><tr><th>Id</th><th>Accounts</th></tr></thead>
-        <tbody><tr><td colspan="2" class="loading-row"><span class="spinner"></span>loading&hellip;</td></tr></tbody>
+        <thead><tr><th>Provider</th><th>Status</th><th></th></tr></thead>
+        <tbody><tr><td colspan="3" class="loading-row"><span class="spinner"></span>loading&hellip;</td></tr></tbody>
       </table>
-    </div>
-  </section>
-
-  <section class="card" id="install-card">
-    <div class="card-head">
-      <h2>Install</h2>
-      <span class="hint">available provider jars</span>
-    </div>
-    <div id="install-toast" class="toast hidden"></div>
-    <div class="card-body" id="install-body">
-      <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
     </div>
   </section>
 
@@ -411,94 +398,133 @@
     return span;
   }
 
-  // -- providers --
+  // -- providers (unified installed + available list) --
 
-  function renderProviders(providers) {
+  var installedProviders = [];
+  var availableProviders = [];
+
+  // Merges the two provider sources into one flat row list. Installed-list identity ("id")
+  // and available-list identity ("name") are different id spaces (a repo/asset name vs. the
+  // provider's registered id), so rows are NOT cross-matched by name; each source contributes
+  // its own rows and the "installed" flag on each is trusted as authoritative for that row.
+  // Entries from available with installed=true are skipped to avoid duplicating already-installed rows.
+  function mergeProviderRows(installed, available) {
+    var rows = [];
+    (installed || []).forEach(function (p) {
+      rows.push({ kind: "installed", id: p.id, accounts: p.accounts, assetName: null, installed: true });
+    });
+    (available || []).forEach(function (item) {
+      if (item.installed === true) return; // Skip; already in installed list
+      rows.push({ kind: "available", id: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
+    });
+    return rows;
+  }
+
+  function renderProviderRows(rows) {
     var tbody = document.querySelector("#providers-table tbody");
     tbody.innerHTML = "";
-    if (!providers || !providers.length) {
+    if (!rows || !rows.length) {
       var tr0 = el("tr");
       var td0 = el("td", "loading-row", "No providers discovered yet.");
-      td0.colSpan = 2;
+      td0.colSpan = 3;
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
       return;
     }
-    providers.forEach(function (p) {
-      var tr = el("tr", "selectable");
-      if (p.id === selectedProviderId) tr.classList.add("active");
-      var tdId = el("td", null, p.id);
-      var tdAccounts = el("td", null, String(p.accounts));
-      tr.appendChild(tdId);
-      tr.appendChild(tdAccounts);
-      tr.addEventListener("click", function () { selectProvider(p.id); });
+    rows.forEach(function (row) {
+      var tr = el("tr");
+      if (row.kind === "installed") {
+        tr.className = "selectable";
+        if (row.id === selectedProviderId) tr.classList.add("active");
+        tr.addEventListener("click", function () { selectProvider(row.id); });
+      }
+
+      var tdName = el("td");
+      tdName.appendChild(el("div", "prov-name", row.id));
+      if (row.assetName) tdName.appendChild(el("div", "prov-asset", row.assetName));
+      tr.appendChild(tdName);
+
+      var tdStatus = el("td");
+      tdStatus.appendChild(badge(row.installed ? "installed" : "available"));
+      if (row.kind === "installed" && row.accounts !== null && row.accounts !== undefined) {
+        tdStatus.appendChild(el("div", "prov-count", row.accounts + (row.accounts === 1 ? " account" : " accounts")));
+      }
+      tr.appendChild(tdStatus);
+
+      var tdAction = el("td", "actions");
+      if (row.kind === "available" && !row.installed) {
+        var installBtn = el("button", "primary small", "Install");
+        installBtn.type = "button";
+        installBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          installProvider(row.id, installBtn);
+        });
+        tdAction.appendChild(installBtn);
+      }
+      tr.appendChild(tdAction);
+
       tbody.appendChild(tr);
     });
   }
 
-  function loadProviders() {
-    return jsonFetch("/api/providers").then(renderProviders).catch(function (err) {
+  function renderMergedProviders() {
+    renderProviderRows(mergeProviderRows(installedProviders, availableProviders));
+  }
+
+  // Fetches BOTH provider sources (the available fetch re-scans the GitHub org and can take
+  // a few seconds) and re-renders the unified list. Used by the initial load, the Refresh
+  // button, and after a successful install.
+  function fetchAndRenderProviders() {
+    return Promise.all([
+      jsonFetch("/api/providers"),
+      jsonFetch("/api/providers/available")
+    ]).then(function (results) {
+      installedProviders = results[0] || [];
+      availableProviders = results[1] || [];
+      renderMergedProviders();
+    });
+  }
+
+  function loadProvidersInitial() {
+    return fetchAndRenderProviders().catch(function (err) {
       var tbody = document.querySelector("#providers-table tbody");
       tbody.innerHTML = "";
       var tr = el("tr");
       var td = el("td", "loading-row", "Failed to load providers: " + err.message);
-      td.colSpan = 2;
+      td.colSpan = 3;
       tr.appendChild(td);
       tbody.appendChild(tr);
     });
   }
 
-  // -- install panel --
-
-  function showInstallToast(message, ok) {
-    var toast = document.getElementById("install-toast");
+  function showProvidersToast(message, ok) {
+    var toast = document.getElementById("providers-toast");
     toast.textContent = message;
     toast.className = "toast " + (ok ? "ok" : "err");
   }
 
-  function hideInstallToast() {
-    document.getElementById("install-toast").className = "toast hidden";
+  function hideProvidersToast() {
+    document.getElementById("providers-toast").className = "toast hidden";
   }
 
-  function renderAvailable(items) {
-    var body = document.getElementById("install-body");
-    body.innerHTML = "";
-    if (!items || !items.length) {
-      body.appendChild(el("div", "empty-state", "No installable providers found."));
-      return;
-    }
-    items.forEach(function (item) {
-      var row = el("div", "install-item");
-      var meta = el("div", "meta");
-      meta.appendChild(el("div", "name", item.name));
-      meta.appendChild(el("div", "asset", item.assetName));
-      row.appendChild(meta);
-
-      if (item.installed) {
-        var installedBtn = el("button", "small", "Installed");
-        installedBtn.type = "button";
-        installedBtn.disabled = true;
-        row.appendChild(installedBtn);
-      } else {
-        var installBtn = el("button", "primary small", "Install");
-        installBtn.type = "button";
-        installBtn.addEventListener("click", function () { installProvider(item.name, installBtn); });
-        row.appendChild(installBtn);
-      }
-      body.appendChild(row);
-    });
-  }
-
-  function loadAvailable() {
-    var body = document.getElementById("install-body");
-    return jsonFetch("/api/providers/available").then(renderAvailable).catch(function (err) {
-      body.innerHTML = "";
-      body.appendChild(el("div", "empty-state", "Could not reach the install service: " + err.message));
+  function refreshProviders() {
+    var btn = document.getElementById("refresh-providers-button");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "";
+    btn.appendChild(el("span", "spinner"));
+    btn.appendChild(document.createTextNode("Refreshing…"));
+    hideProvidersToast();
+    fetchAndRenderProviders().catch(function (err) {
+      showProvidersToast("Refresh failed: " + err.message, false);
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = "Refresh";
     });
   }
 
   function installProvider(name, button) {
-    hideInstallToast();
+    hideProvidersToast();
     button.disabled = true;
     var originalText = button.textContent;
     button.textContent = "Installing…";
@@ -507,12 +533,12 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name: name })
     }).then(function () {
-      showInstallToast("Installed \"" + name + "\". Refreshing providers and models…", true);
-      return Promise.all([loadProviders(), loadAvailable(), loadModels()]);
+      showProvidersToast("Installed \"" + name + "\". Refreshing providers and models…", true);
+      return Promise.all([fetchAndRenderProviders(), loadModels()]);
     }).catch(function (err) {
       button.disabled = false;
       button.textContent = originalText;
-      showInstallToast("Install failed: " + err.message, false);
+      showProvidersToast("Install failed: " + err.message, false);
     });
   }
 
@@ -523,7 +549,7 @@
     document.getElementById("accounts-hint").textContent = id;
     document.getElementById("accounts-empty").style.display = "none";
     document.getElementById("accounts-table").style.display = "";
-    loadProviders();
+    renderMergedProviders();
     loadAccounts();
   }
 
@@ -600,7 +626,7 @@
       { method: "POST" }
     ).then(function () {
       loadAccounts();
-      loadProviders();
+      fetchAndRenderProviders();
     }).catch(accountActionFailed);
   }
 
@@ -611,7 +637,7 @@
       { method: "DELETE" }
     ).then(function () {
       loadAccounts();
-      loadProviders();
+      fetchAndRenderProviders();
     }).catch(accountActionFailed);
   }
 
@@ -704,9 +730,9 @@
   document.getElementById("prompt-input").addEventListener("keydown", function (event) {
     if (event.key === "Enter") sendChat();
   });
+  document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
 
-  loadProviders();
-  loadAvailable();
+  loadProvidersInitial();
   loadModels();
 })();
 </script>

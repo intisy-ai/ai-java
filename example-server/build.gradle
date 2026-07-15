@@ -20,16 +20,19 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // Stage :examples-provider's built jar into a providers/ directory, as a server operator would
-// drop a provider jar into a plugins folder.
+// drop a provider jar into a plugins folder. Only the `test` task depends on this — the
+// integration tests route through the echo provider and need it staged. A real `run` must start
+// with NO fake providers (see ServerMain), so it points at a clean, never-staged directory instead.
 def providersDir = layout.buildDirectory.dir("providers")
 def stageProviders = tasks.register("stageProviders", Copy) {
     from(project(":examples-provider").tasks.named("jar"))
     into(providersDir)
 }
 
+def runProvidersDir = layout.buildDirectory.dir("run-providers")
+
 tasks.named("run") {
-    dependsOn(stageProviders)
-    systemProperty("exampleserver.providersDir", providersDir.get().asFile.absolutePath)
+    systemProperty("exampleserver.providersDir", runProvidersDir.get().asFile.absolutePath)
 }
 
 tasks.named("test") {

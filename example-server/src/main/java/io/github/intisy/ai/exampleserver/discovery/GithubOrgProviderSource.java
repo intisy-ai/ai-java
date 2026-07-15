@@ -56,8 +56,6 @@ public final class GithubOrgProviderSource implements ProviderSource {
                     Object nameObj = repo.get("name");
                     if (!(nameObj instanceof String)) continue;
                     String name = (String) nameObj;
-                    if (!looksLikeProviderRepo(repo, name)) continue;
-
                     entries.addAll(listReleaseAssets(name));
                 } catch (RuntimeException e) {
                     System.err.println(LOG_PREFIX + "skipping repo (unexpected error): " + e.getMessage());
@@ -79,20 +77,6 @@ public final class GithubOrgProviderSource implements ProviderSource {
         Path target = dir.resolve(java.nio.file.Paths.get(entry.assetName).getFileName().toString());
         downloadTo(entry.downloadUrl, target);
         return target;
-    }
-
-    /** A repo counts as a provider source if its name or declared topics mention "provider". */
-    private boolean looksLikeProviderRepo(Map<?, ?> repo, String name) {
-        if (name.toLowerCase().contains("provider")) return true;
-        Object topicsObj = repo.get("topics");
-        if (topicsObj instanceof List) {
-            for (Object topic : (List<?>) topicsObj) {
-                if (topic instanceof String && ((String) topic).toLowerCase().contains("provider")) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     private List<Entry> listReleaseAssets(String repoName) {
@@ -122,7 +106,7 @@ public final class GithubOrgProviderSource implements ProviderSource {
     }
 
     private static boolean isProviderJarAsset(String name) {
-        return name.matches(".*-provider.*\\.jar") || name.endsWith("-standalone.jar");
+        return name.matches(".*-provider.*\\.jar");
     }
 
     private String httpGet(String url) throws IOException {

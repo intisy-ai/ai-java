@@ -9,7 +9,6 @@ import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
-import io.github.intisy.ai.shared.model.Account;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -27,8 +26,11 @@ import java.nio.file.Paths;
  * (a later task's job) without restarting the process: the router is wired with lambdas that
  * read through the holder, so every request sees the current registry. The port comes from
  * {@code -Dexampleserver.port} (default 8787). On top of routing, this wires the {@code /api}
- * management endpoints and the {@code /} dashboard, seeding a couple of demo accounts so both have
- * something to show out of the box.
+ * management endpoints and the {@code /} dashboard. The running server starts with NO fake/demo
+ * providers or accounts seeded — {@code -Dexampleserver.providersDir} points at an empty directory
+ * by default (see {@code build.gradle}'s {@code run} task), and every real provider/account comes
+ * only from an on-demand install via the API/dashboard (backed by {@link GithubOrgProviderSource}).
+ * Tests that need the echo fixture seed it themselves via {@code ServerSeeds.seedEcho}.
  */
 public final class ServerMain {
 
@@ -50,8 +52,6 @@ public final class ServerMain {
                 .backend(backend)
                 .build()) {
 
-            ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-            seedDemoAccounts(ai);
             RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
 
             AiJava.WiredRouter router = ai.router(profile,
@@ -74,21 +74,6 @@ public final class ServerMain {
             Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
             Thread.currentThread().join(); // block forever until the process is killed
         }
-    }
-
-    /** Seeds 1-2 demo accounts for the echo provider so the dashboard's account panel has content. */
-    private static void seedDemoAccounts(AiJava ai) {
-        AccountStore accounts = new AccountStore(ai.store(), ai.jsonCodec());
-        accounts.add("echo", demoAccount("demo-1@example"));
-        accounts.add("echo", demoAccount("demo-2@example"));
-    }
-
-    private static Account demoAccount(String id) {
-        Account account = new Account();
-        account.id = id;
-        account.email = id;
-        account.enabled = true;
-        return account;
     }
 
     private static Store chooseStore() {
