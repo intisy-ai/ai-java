@@ -18,7 +18,7 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
   <dependency>
       <groupId>io.github.intisy</groupId>
       <artifactId>ai-java</artifactId>
-      <version></version>
+      <version>1.0.6</version>
   </dependency>
 ```
 
@@ -45,7 +45,7 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
       }
   }
   dependencies {
-      implementation 'io.github.intisy:ai-java:'
+      implementation 'io.github.intisy:ai-java:1.0.6'
   }
 ```
 
@@ -57,7 +57,7 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
       id "io.github.intisy.github-gradle" version "1.3.7"
   }
   dependencies {
-      githubImplementation "intisy:ai-java:"
+      githubImplementation "intisy:ai-java:1.0.6"
   }
 ```
 
