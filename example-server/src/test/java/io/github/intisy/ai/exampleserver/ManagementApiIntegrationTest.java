@@ -117,6 +117,27 @@ class ManagementApiIntegrationTest {
     }
 
     @Test
+    void postAccountsSeedsAccountAndAppearsInSubsequentList() throws IOException {
+        String requestBody = "{\"refresh\":\"REFRESH123\",\"email\":\"seeded@example.com\","
+                + "\"projectId\":\"proj-1\",\"managedProjectId\":\"managed-9\"}";
+        Response created = post("/api/providers/echo/accounts", requestBody);
+        assertEquals(200, created.status);
+        assertTrue(created.body.contains("seeded@example.com"), created.body);
+        assertTrue(!created.body.contains("REFRESH123"), created.body); // secret never in the view
+
+        Response listed = get("/api/providers/echo/accounts");
+        assertEquals(200, listed.status);
+        assertTrue(listed.body.contains("seeded@example.com"), listed.body);
+    }
+
+    @Test
+    void postAccountsMissingRefreshIs400() throws IOException {
+        Response r = post("/api/providers/echo/accounts", "{\"email\":\"noref@example.com\"}");
+        assertEquals(400, r.status);
+        assertTrue(r.body.contains("error"), r.body);
+    }
+
+    @Test
     void unknownApiPathIs404Json() throws IOException {
         Response r = get("/api/nope");
         assertEquals(404, r.status);
@@ -138,10 +159,15 @@ class ManagementApiIntegrationTest {
     }
 
     private Response post(String path) throws IOException {
+        return post(path, null);
+    }
+
+    private Response post(String path, String body) throws IOException {
         HttpURLConnection c = open(path, "POST");
         c.setDoOutput(true);
+        if (body != null) c.setRequestProperty("content-type", "application/json");
         try (OutputStream os = c.getOutputStream()) {
-            os.write(new byte[0]);
+            os.write(body != null ? body.getBytes(StandardCharsets.UTF_8) : new byte[0]);
         }
         return read(c);
     }

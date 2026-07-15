@@ -231,7 +231,13 @@
   .badge-installed { color: var(--ok); background: var(--ok-bg); }
   .badge-available { color: var(--info); background: var(--info-bg); }
 
-  select, input[type="text"], textarea {
+  .add-account-form { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.9rem; padding: 0.85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .add-account-form .field label { display: block; font-size: 0.76rem; color: var(--muted); margin-bottom: 0.2rem; }
+  .add-account-form .row { display: flex; gap: 0.5rem; }
+  .add-account-form .row .field { flex: 1; }
+  .add-account-form .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
+
+  select, input[type="text"], input[type="password"], textarea {
     width: 100%;
     font: inherit;
     padding: 0.5rem 0.6rem;
@@ -325,8 +331,27 @@
   <section class="card" id="accounts-card">
     <div class="card-head">
       <h2>Accounts</h2>
-      <span class="hint" id="accounts-hint">select a provider</span>
+      <div class="card-head-actions">
+        <span class="hint" id="accounts-hint">select a provider</span>
+        <button class="small" id="toggle-add-account-button" type="button" style="display:none">Add account</button>
+      </div>
     </div>
+    <div id="add-account-toast" class="toast hidden"></div>
+    <form class="add-account-form" id="add-account-form" style="display:none">
+      <div class="row">
+        <div class="field"><label for="add-account-email">Email</label><input type="text" id="add-account-email" autocomplete="off"></div>
+        <div class="field"><label for="add-account-id">Id (defaults to email)</label><input type="text" id="add-account-id" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="add-account-refresh">Refresh token (raw, pasted)</label><input type="password" id="add-account-refresh" autocomplete="off"></div>
+      <div class="row">
+        <div class="field"><label for="add-account-project">Project id (optional)</label><input type="text" id="add-account-project" autocomplete="off"></div>
+        <div class="field"><label for="add-account-managed-project">Managed project id (optional)</label><input type="text" id="add-account-managed-project" autocomplete="off"></div>
+      </div>
+      <div class="actions">
+        <button class="subtle small" id="cancel-add-account-button" type="button">Cancel</button>
+        <button class="primary small" id="submit-add-account-button" type="submit">Add</button>
+      </div>
+    </form>
     <div class="card-body">
       <div class="empty-state" id="accounts-empty">Select a provider to view its accounts.</div>
       <table id="accounts-table" style="display:none">
@@ -549,6 +574,8 @@
     document.getElementById("accounts-hint").textContent = id;
     document.getElementById("accounts-empty").style.display = "none";
     document.getElementById("accounts-table").style.display = "";
+    document.getElementById("toggle-add-account-button").style.display = "";
+    hideAddAccountForm();
     renderMergedProviders();
     loadAccounts();
   }
@@ -610,6 +637,60 @@
 
       tr.appendChild(actionsTd);
       tbody.appendChild(tr);
+    });
+  }
+
+  // -- add account (paste-token seed) --
+
+  function showAddAccountForm() {
+    document.getElementById("add-account-form").style.display = "";
+  }
+
+  function hideAddAccountForm() {
+    document.getElementById("add-account-form").style.display = "none";
+    document.getElementById("add-account-form").reset();
+    hideAddAccountToast();
+  }
+
+  function showAddAccountToast(message, ok) {
+    var toast = document.getElementById("add-account-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  function hideAddAccountToast() {
+    document.getElementById("add-account-toast").className = "toast hidden";
+  }
+
+  function submitAddAccount(evt) {
+    evt.preventDefault();
+    if (!selectedProviderId) return;
+
+    var refresh = document.getElementById("add-account-refresh").value.trim();
+    var email = document.getElementById("add-account-email").value.trim();
+    var id = document.getElementById("add-account-id").value.trim();
+    var projectId = document.getElementById("add-account-project").value.trim();
+    var managedProjectId = document.getElementById("add-account-managed-project").value.trim();
+
+    var submitBtn = document.getElementById("submit-add-account-button");
+    submitBtn.disabled = true;
+    hideAddAccountToast();
+
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        refresh: refresh, email: email || null, id: id || null,
+        projectId: projectId || null, managedProjectId: managedProjectId || null
+      })
+    }).then(function () {
+      hideAddAccountForm();
+      loadAccounts();
+      fetchAndRenderProviders();
+    }).catch(function (err) {
+      showAddAccountToast("Add account failed: " + err.message, false);
+    }).then(function () {
+      submitBtn.disabled = false;
     });
   }
 
@@ -731,6 +812,9 @@
     if (event.key === "Enter") sendChat();
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
+  document.getElementById("toggle-add-account-button").addEventListener("click", showAddAccountForm);
+  document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
+  document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
 
   loadProvidersInitial();
   loadModels();
