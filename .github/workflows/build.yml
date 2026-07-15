@@ -35,4 +35,6 @@ jobs:
           gh release create "${{ github.ref_name }}" -t "Release ${{ github.ref_name }}" || true
           gh release upload "${{ github.ref_name }}" jvm/build/libs/*.jar --clobber
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # The built-in token suffices: the release is created + uploaded in THIS repo,
+          # covered by the `contents: write` permission above. No org PAT secret needed.
+          GH_TOKEN: ${{ github.token }}
