@@ -1,7 +1,9 @@
 package io.github.intisy.ai.exampleserver;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
@@ -40,6 +42,16 @@ public final class ExampleServer {
      * All requests route through {@code ai.router(profile)}, except {@code GET /healthz}.
      */
     public static ExampleServer start(AiJava ai, RoutingProfile profile, int port) {
+        return start(ai, profile, port, null);
+    }
+
+    /**
+     * Same as {@link #start(AiJava, RoutingProfile, int)}, additionally registering {@code api}
+     * (typically a {@link ManagementApi}) at the {@code /api} context, alongside {@code /healthz}
+     * and the router-handled paths. Pass {@code null} for {@code api} to skip the management
+     * context entirely (that's what the two-arg overload does).
+     */
+    public static ExampleServer start(AiJava ai, RoutingProfile profile, int port, HttpHandler api) {
         AiJava.WiredRouter router = ai.router(profile);
         HttpServer http;
         try {
@@ -54,6 +66,9 @@ public final class ExampleServer {
                 handleRouted(exchange, router);
             }
         });
+        if (api != null) {
+            http.createContext("/api", api);
+        }
         http.createContext("/", exchange -> handleRouted(exchange, router));
         http.setExecutor(null); // default executor: a single background thread
         http.start();
