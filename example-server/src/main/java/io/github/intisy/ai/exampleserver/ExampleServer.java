@@ -47,7 +47,13 @@ public final class ExampleServer {
         } catch (IOException e) {
             throw new RuntimeException("failed to bind example server", e);
         }
-        http.createContext("/healthz", exchange -> respond(exchange, 200, "ok", "text/plain"));
+        http.createContext("/healthz", exchange -> {
+            if ("/healthz".equals(exchange.getRequestURI().getPath())) {
+                respond(exchange, 200, "ok", "text/plain");
+            } else {
+                handleRouted(exchange, router);
+            }
+        });
         http.createContext("/", exchange -> handleRouted(exchange, router));
         http.setExecutor(null); // default executor: a single background thread
         http.start();

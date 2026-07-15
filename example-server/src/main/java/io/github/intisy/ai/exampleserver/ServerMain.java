@@ -3,7 +3,6 @@ package io.github.intisy.ai.exampleserver;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
-import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.Store;
 
@@ -52,7 +51,7 @@ public final class ServerMain {
         if ("file".equals(kind)) {
             return Storage.file(Paths.get(System.getProperty("exampleserver.configDir", "config")));
         }
-        return new InMemoryStore();
+        return Storage.memory();
     }
 
     private static Path providersDir() {
