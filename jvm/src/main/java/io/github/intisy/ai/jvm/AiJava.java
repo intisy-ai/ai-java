@@ -74,9 +74,9 @@ public class AiJava implements Closeable {
         this.notifier = b.notifier != null ? b.notifier
                 : (base.notifier() != null ? base.notifier() : defaultNotifierFor(resolvedStore));
         this.managerOptions = b.managerOptions;
-        this.providerRegistry = b.providersDir != null
-                ? ProviderRegistry.fromDirectory(b.providersDir)
-                : ProviderRegistry.empty();
+        this.providerRegistry = b.providerRegistry != null
+                ? b.providerRegistry
+                : (b.providersDir != null ? ProviderRegistry.fromDirectory(b.providersDir) : ProviderRegistry.empty());
     }
 
     public static Builder builder() {
@@ -230,8 +230,9 @@ public class AiJava implements Closeable {
     }
 
     /**
-     * Builder for {@link AiJava}. {@link #storage(Store)} is the only required call; everything
-     * else has a JVM-sane default so callers only override what they care about.
+     * Builder for {@link AiJava}. A store must come from either {@link #storage(Store)} or a
+     * {@link #backend(Backend)} that carries one; everything else has a JVM-sane default so
+     * callers only override what they care about.
      */
     public static final class Builder {
         private Store store;
@@ -312,11 +313,25 @@ public class AiJava implements Closeable {
             return this;
         }
 
+        /**
+         * Inject a pre-built {@link ProviderRegistry} instead of discovering one from a directory. Use
+         * this for in-process providers or a custom discovery strategy. Mutually exclusive with
+         * {@link #providersDir(Path)}.
+         */
+        public Builder providerRegistry(ProviderRegistry providerRegistry) {
+            this.providerRegistry = providerRegistry;
+            return this;
+        }
+
         public AiJava build() {
             Store resolvedStore = store != null ? store : (backend != null ? backend.store() : null);
             if (resolvedStore == null) {
                 throw new IllegalStateException(
                         "storage backend is required; use Storage.file/memory/jdbc or your own Store");
+            }
+            if (providerRegistry != null && providersDir != null) {
+                throw new IllegalStateException(
+                        "set either providerRegistry(...) or providersDir(...), not both");
             }
             Backend base = backend != null ? backend : Backends.defaults(resolvedStore);
             return new AiJava(this, resolvedStore, base);
