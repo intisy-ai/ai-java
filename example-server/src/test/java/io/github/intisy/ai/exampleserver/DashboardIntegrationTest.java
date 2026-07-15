@@ -54,6 +54,7 @@ class DashboardIntegrationTest {
         assertTrue(r.body.contains("<title>ai-java example server</title>"), r.body);
         assertTrue(r.body.contains("Providers"), r.body);
         assertTrue(r.body.contains("Install"), r.body);
+        assertTrue(r.body.contains("Refresh"), r.body);
         assertTrue(r.body.contains("Accounts"), r.body);
         assertTrue(r.body.contains("Chat"), r.body);
         assertFalse(r.body.contains("src=\"http"), "must not reference external scripts/images: " + r.body);
