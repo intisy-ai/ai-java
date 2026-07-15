@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
+import io.github.intisy.ai.exampleserver.web.Dashboard;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
@@ -22,10 +23,16 @@ import java.util.Map;
 /**
  * A thin transport adapter: converts each {@link HttpExchange} into the shared {@link HttpRequest},
  * hands it to a pre-wired {@link AiJava.WiredRouter}, and writes the buffered {@link HttpResponse}
- * back. The Router already dispatches {@code /v1/models} and its own {@code /health} internally, so
- * this server just forwards every non-liveness path to it; {@code /healthz} is answered here
- * without touching the router. The shared request/response bodies are plain strings — the engine is
- * fully buffered, so there is no SSE streaming to pass through.
+ * back. The Router already dispatches {@code /v1/models} and its own {@code /health} internally.
+ *
+ * <p>Four contexts are registered: {@code /healthz} (liveness, answered here without touching the
+ * router), {@code /api} (the optional {@link ManagementApi}), {@code /v1} (forwarded to the router
+ * — covers {@code /v1/messages} and {@code /v1/models}), and {@code /} (the self-contained
+ * {@link Dashboard} HTML page). {@code com.sun.net.httpserver} dispatches on the longest matching
+ * registered prefix, so a request under {@code /v1/...} or {@code /api/...} is routed to that
+ * context and never reaches the {@code /} handler — the dashboard and the API/router coexist
+ * without either shadowing the other. The shared request/response bodies are plain strings — the
+ * engine is fully buffered, so there is no SSE streaming to pass through.
  */
 public final class ExampleServer {
 
@@ -69,7 +76,8 @@ public final class ExampleServer {
         if (api != null) {
             http.createContext("/api", api);
         }
-        http.createContext("/", exchange -> handleRouted(exchange, router));
+        http.createContext("/v1", exchange -> handleRouted(exchange, router));
+        http.createContext("/", new Dashboard());
         http.setExecutor(null); // default executor: a single background thread
         http.start();
         return new ExampleServer(http, http.getAddress().getPort());

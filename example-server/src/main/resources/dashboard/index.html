@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-java example server</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6470;
+    --border: #d7dbe0;
+    --accent: #2f6fed;
+    --accent-text: #ffffff;
+    --danger: #c0392b;
+    --ok: #1e8e3e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1d2025;
+      --text: #e7e9ec;
+      --muted: #9aa2ad;
+      --border: #33373e;
+      --accent: #5b8def;
+      --accent-text: #0d1117;
+      --danger: #e06c5b;
+      --ok: #4fbf6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
+  main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; }
+  }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  section.chat { grid-column: 1 / -1; }
+  h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--border); }
+  tr.selectable { cursor: pointer; }
+  tr.selectable:hover { background: rgba(47, 111, 237, 0.08); }
+  button {
+    font: inherit;
+    padding: 0.3rem 0.7rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  button + button { margin-left: 0.35rem; }
+  .status-ready { color: var(--ok); }
+  .status-disabled { color: var(--danger); }
+  select, textarea {
+    width: 100%;
+    font: inherit;
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  textarea { min-height: 5rem; resize: vertical; margin-top: 0.5rem; }
+  .row { display: flex; gap: 0.75rem; align-items: flex-start; flex-wrap: wrap; }
+  .row > * { flex: 1 1 260px; }
+  .chat-reply {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    white-space: pre-wrap;
+    min-height: 2rem;
+  }
+  .muted { color: var(--muted); font-size: 0.85rem; }
+  .send-bar { margin-top: 0.5rem; display: flex; justify-content: flex-end; gap: 0.5rem; align-items: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ai-java example server</h1>
+  <p>Providers, accounts, and a chat console served entirely from this page.</p>
+</header>
+<main>
+  <section id="providers-section">
+    <h2>Providers</h2>
+    <table id="providers-table">
+      <thead><tr><th>id</th><th>accounts</th></tr></thead>
+      <tbody><tr><td colspan="2" class="muted">loading&hellip;</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="accounts-section">
+    <h2>Accounts</h2>
+    <p class="muted" id="accounts-hint">Select a provider to view its accounts.</p>
+    <table id="accounts-table" style="display:none">
+      <thead><tr><th>id</th><th>email</th><th>status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="chat">
+    <h2>Chat</h2>
+    <div class="row">
+      <select id="model-select"><option value="">loading models&hellip;</option></select>
+    </div>
+    <textarea id="prompt-input" placeholder="Ask something&hellip;"></textarea>
+    <div class="send-bar">
+      <span class="muted" id="chat-status"></span>
+      <button class="primary" id="send-button" type="button">Send</button>
+    </div>
+    <div class="chat-reply" id="chat-reply"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var selectedProviderId = null;
+
+  function jsonFetch(url, opts) {
+    return fetch(url, opts).then(function (res) {
+      if (!res.ok && res.status !== 204) {
+        return res.text().then(function (text) {
+          throw new Error("request to " + url + " failed: " + res.status + " " + text);
+        });
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // -- Providers --
+
+  function renderProviders(providers) {
+    var tbody = document.querySelector("#providers-table tbody");
+    tbody.innerHTML = "";
+    if (!providers.length) {
+      tbody.innerHTML = '<tr><td colspan="2" class="muted">no providers discovered</td></tr>';
+      return;
+    }
+    providers.forEach(function (p) {
+      var tr = document.createElement("tr");
+      tr.className = "selectable";
+      tr.innerHTML = "<td>" + escapeHtml(p.id) + "</td><td>" + escapeHtml(p.accounts) + "</td>";
+      tr.addEventListener("click", function () { selectProvider(p.id); });
+      tbody.appendChild(tr);
+    });
+  }
+
+  function loadProviders() {
+    jsonFetch("/api/providers").then(renderProviders).catch(function (err) {
+      document.querySelector("#providers-table tbody").innerHTML =
+        '<tr><td colspan="2" class="muted">' + escapeHtml(err.message) + "</td></tr>";
+    });
+  }
+
+  // -- Accounts --
+
+  function selectProvider(id) {
+    selectedProviderId = id;
+    document.getElementById("accounts-hint").textContent = "Accounts for \"" + id + "\":";
+    document.getElementById("accounts-table").style.display = "";
+    loadAccounts();
+  }
+
+  function loadAccounts() {
+    if (!selectedProviderId) return;
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/accounts")
+      .then(renderAccounts)
+      .catch(function (err) {
+        document.querySelector("#accounts-table tbody").innerHTML =
+          '<tr><td colspan="4" class="muted">' + escapeHtml(err.message) + "</td></tr>";
+      });
+  }
+
+  function renderAccounts(accounts) {
+    var tbody = document.querySelector("#accounts-table tbody");
+    tbody.innerHTML = "";
+    if (!accounts || !accounts.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted">no accounts</td></tr>';
+      return;
+    }
+    accounts.forEach(function (a) {
+      var enabled = a.status !== "disabled" && a.enabled !== false;
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + escapeHtml(a.id) + "</td>" +
+        "<td>" + escapeHtml(a.email || "") + "</td>" +
+        "<td class=\"" + (enabled ? "status-ready" : "status-disabled") + "\">" +
+        escapeHtml(enabled ? "ready" : "disabled") + "</td><td></td>";
+      var actionsTd = tr.lastElementChild;
+
+      var toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.textContent = enabled ? "Disable" : "Enable";
+      toggleBtn.addEventListener("click", function () {
+        setAccountEnabled(a.id, !enabled);
+      });
+      actionsTd.appendChild(toggleBtn);
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "danger";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () { removeAccount(a.id); });
+      actionsTd.appendChild(removeBtn);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function setAccountEnabled(accountId, enabled) {
+    var action = enabled ? "enable" : "disable";
+    jsonFetch(
+      "/api/providers/" + encodeURIComponent(selectedProviderId) +
+        "/accounts/" + encodeURIComponent(accountId) + "/" + action,
+      { method: "POST" }
+    ).then(function () {
+      loadAccounts();
+      loadProviders();
+    }).catch(function (err) { alert(err.message); });
+  }
+
+  function removeAccount(accountId) {
+    jsonFetch(
+      "/api/providers/" + encodeURIComponent(selectedProviderId) +
+        "/accounts/" + encodeURIComponent(accountId),
+      { method: "DELETE" }
+    ).then(function () {
+      loadAccounts();
+      loadProviders();
+    }).catch(function (err) { alert(err.message); });
+  }
+
+  // -- Chat --
+
+  function loadModels() {
+    var select = document.getElementById("model-select");
+    jsonFetch("/v1/models").then(function (payload) {
+      var models = (payload && payload.data) || [];
+      select.innerHTML = "";
+      if (!models.length) {
+        select.innerHTML = '<option value="">no models available</option>';
+        return;
+      }
+      models.forEach(function (m) {
+        var opt = document.createElement("option");
+        opt.value = m.id;
+        opt.textContent = m.id;
+        select.appendChild(opt);
+      });
+    }).catch(function (err) {
+      select.innerHTML = '<option value="">' + escapeHtml(err.message) + "</option>";
+    });
+  }
+
+  function sendChat() {
+    var model = document.getElementById("model-select").value;
+    var prompt = document.getElementById("prompt-input").value;
+    var status = document.getElementById("chat-status");
+    var reply = document.getElementById("chat-reply");
+    if (!model) { status.textContent = "select a model first"; return; }
+    if (!prompt.trim()) { status.textContent = "enter a prompt first"; return; }
+
+    status.textContent = "sending…";
+    reply.textContent = "";
+
+    jsonFetch("/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: "user", content: prompt }]
+      })
+    }).then(function (payload) {
+      status.textContent = "";
+      var content = (payload && payload.content) || [];
+      var text = content
+        .filter(function (block) { return block && typeof block.text === "string"; })
+        .map(function (block) { return block.text; })
+        .join("\n");
+      reply.textContent = text || JSON.stringify(payload);
+    }).catch(function (err) {
+      status.textContent = "";
+      reply.textContent = "error: " + err.message;
+    });
+  }
+
+  document.getElementById("send-button").addEventListener("click", sendChat);
+
+  loadProviders();
+  loadModels();
+})();
+</script>
+</body>
+</html>

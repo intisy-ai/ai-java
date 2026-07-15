@@ -1,0 +1,105 @@
+package io.github.intisy.ai.exampleserver;
+
+import io.github.intisy.ai.jvm.AiJava;
+import io.github.intisy.ai.jvm.Storage;
+import io.github.intisy.ai.shared.routing.RoutingProfile;
+import io.github.intisy.ai.shared.spi.Store;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.file.Paths;
+import java.util.Scanner;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Boots the full {@link ExampleServer} (no {@code /api} handler needed for this check) and drives
+ *  {@code GET /} over loopback: it must serve the self-contained dashboard HTML, not the router. */
+class DashboardIntegrationTest {
+
+    private static final String CONFIG_FILE = "dashboard-routing.json";
+
+    private AiJava ai;
+    private ExampleServer server;
+
+    @BeforeEach
+    void setUp() {
+        String providersDir = System.getProperty("exampleserver.providersDir");
+        assertTrue(providersDir != null && !providersDir.isEmpty(),
+                "exampleserver.providersDir must be set by the Gradle test task");
+        ai = AiJava.builder().storage(Storage.memory()).providersDir(Paths.get(providersDir)).build();
+        Store store = ai.store();
+        ServerSeeds.seedEcho(store, ai.jsonCodec(), CONFIG_FILE);
+        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
+        server = ExampleServer.start(ai, profile, 0); // ephemeral port
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (server != null) server.stop();
+        if (ai != null) ai.close();
+    }
+
+    @Test
+    void rootServesSelfContainedDashboardHtml() throws IOException {
+        Response r = get("/");
+        assertEquals(200, r.status);
+        assertTrue(r.contentType != null && r.contentType.contains("text/html"), r.contentType);
+        assertTrue(r.body.contains("<title>ai-java example server</title>"), r.body);
+        assertTrue(r.body.contains("Providers"), r.body);
+        assertFalse(r.body.contains("src=\"http"), "must not reference external scripts/images: " + r.body);
+        assertFalse(r.body.contains("href=\"http"), "must not reference external stylesheets/links: " + r.body);
+    }
+
+    @Test
+    void routedPathsStillWorkAlongsideDashboard() throws IOException {
+        Response models = get("/v1/models");
+        assertEquals(200, models.status);
+        assertTrue(models.body.contains("m-echo-haiku"), models.body);
+
+        Response health = get("/healthz");
+        assertEquals(200, health.status);
+        assertTrue(health.body.contains("ok"), health.body);
+    }
+
+    @Test
+    void unknownPathUnderRootIs404() throws IOException {
+        Response r = get("/not-a-real-page");
+        assertEquals(404, r.status);
+    }
+
+    // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
+
+    private Response get(String path) throws IOException {
+        URL url = new URL("http://127.0.0.1:" + server.port() + path);
+        HttpURLConnection c = (HttpURLConnection) url.openConnection();
+        c.setRequestMethod("GET");
+        int status = c.getResponseCode();
+        String contentType = c.getContentType();
+        InputStream is = status < 400 ? c.getInputStream() : c.getErrorStream();
+        String text = "";
+        if (is != null) {
+            try (Scanner s = new Scanner(is, "UTF-8").useDelimiter("\\A")) {
+                text = s.hasNext() ? s.next() : "";
+            }
+        }
+        return new Response(status, text, contentType);
+    }
+
+    private static final class Response {
+        final int status;
+        final String body;
+        final String contentType;
+        Response(int status, String body, String contentType) {
+            this.status = status;
+            this.body = body;
+            this.contentType = contentType;
+        }
+    }
+}
