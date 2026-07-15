@@ -43,3 +43,7 @@ include ":jvm"
 // into a providers/ dir and drives the full :jvm API. Neither is a dependency of :jvm.
 include ":examples-provider"
 include ":examples"
+
+// :example-server is a runnable, never-published HTTP server that drives :jvm's WiredRouter over
+// com.sun.net.httpserver. Like :examples it lives in ai-java's own tree, so no projectDir remap.
+include ":example-server"
