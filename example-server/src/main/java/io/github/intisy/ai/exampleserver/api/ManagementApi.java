@@ -3,13 +3,19 @@ package io.github.intisy.ai.exampleserver.api;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -23,6 +29,8 @@ import java.util.function.Supplier;
  *
  * <pre>
  * GET    /api/providers                                 -> [{"id":..,"accounts":&lt;int&gt;}]
+ * GET    /api/providers/available                        -> [{"name":..,"assetName":..,"installed":bool}]
+ * POST   /api/providers/install         {"name":..}       -> 200 {"installed":true,"providers":[...]}
  * GET    /api/providers/{id}/accounts                    -> [AccountView...]
  * POST   /api/providers/{id}/accounts/{accId}/enable     -> 204
  * POST   /api/providers/{id}/accounts/{accId}/disable    -> 204
@@ -33,17 +41,40 @@ import java.util.function.Supplier;
  * Path segments ({@code id}/{@code accId}) are URL-decoded exactly once. The whole handler body
  * is wrapped so an unexpected exception never leaks a stack trace to the client — it degrades to
  * a plain 500 JSON error instead.
+ *
+ * <p>{@code available}/{@code install} are reserved single-segment names under {@code /api/providers/},
+ * checked as exact 3-segment paths before the (4+ segment) {@code {id}/accounts...} routes, so
+ * there is no ambiguity between a provider id happening to be named "available" or "install" and
+ * these reserved routes -- the existing routes never match at 3 segments in the first place.
  */
 public final class ManagementApi implements HttpHandler {
 
     private final Supplier<List<String>> providerIds;
     private final AccountAdmin admin;
     private final JsonCodec json;
+    private final ProviderSource source;
+    private final Path providersDir;
+    private final ProviderRegistryHolder holder;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
+        this(providerIds, admin, json, null, null, null);
+    }
+
+    /**
+     * Adds the on-demand install surface ({@code GET /api/providers/available} and
+     * {@code POST /api/providers/install}) on top of the base account-admin routes.
+     * {@code source} lists/downloads installable provider jars, {@code providersDir} is where they
+     * land on disk, and {@code holder} is refreshed after a successful download so the newly
+     * installed provider becomes routable without a restart.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
+        this.source = source;
+        this.providersDir = providersDir;
+        this.holder = holder;
     }
 
     @Override
@@ -64,6 +95,16 @@ public final class ManagementApi implements HttpHandler {
         if ("GET".equals(method) && seg.length == 2
                 && "api".equals(seg[0]) && "providers".equals(seg[1])) {
             handleListProviders(exchange);
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "available".equals(seg[2])) {
+            handleAvailable(exchange);
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "install".equals(seg[2])) {
+            handleInstall(exchange);
             return;
         }
         if ("GET".equals(method) && seg.length == 4
@@ -99,6 +140,58 @@ public final class ManagementApi implements HttpHandler {
         respondJson(exchange, 200, body);
     }
 
+    private void handleAvailable(HttpExchange exchange) throws IOException {
+        List<Map<String, Object>> body = new ArrayList<>();
+        for (ProviderSource.Entry entry : source.list()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", entry.name);
+            item.put("assetName", entry.assetName);
+            item.put("installed", Files.exists(providersDir.resolve(entry.assetName)));
+            body.add(item);
+        }
+        respondJson(exchange, 200, body);
+    }
+
+    private void handleInstall(HttpExchange exchange) throws IOException {
+        Object parsed = json.parse(readBody(exchange.getRequestBody()));
+        String name = null;
+        if (parsed instanceof Map) {
+            Object nameObj = ((Map<?, ?>) parsed).get("name");
+            if (nameObj instanceof String) {
+                name = (String) nameObj;
+            }
+        }
+
+        ProviderSource.Entry match = null;
+        for (ProviderSource.Entry entry : source.list()) {
+            if (entry.name.equals(name)) {
+                match = entry;
+                break;
+            }
+        }
+        if (match == null) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "unknown provider");
+            respondJson(exchange, 404, body);
+            return;
+        }
+
+        try {
+            source.download(match, providersDir);
+        } catch (IOException e) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "download failed: " + e.getMessage());
+            respondJson(exchange, 502, body);
+            return;
+        }
+        holder.refresh(providersDir);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("installed", true);
+        body.put("providers", holder.listProviderIds());
+        respondJson(exchange, 200, body);
+    }
+
     private void handleListAccounts(HttpExchange exchange, String providerId) throws IOException {
         respondJson(exchange, 200, admin.list(providerId));
     }
@@ -127,6 +220,16 @@ public final class ManagementApi implements HttpHandler {
             return Arrays.copyOfRange(raw, 1, raw.length);
         }
         return raw;
+    }
+
+    private static String readBody(InputStream in) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[4096];
+        int read;
+        while ((read = in.read(chunk)) != -1) {
+            buffer.write(chunk, 0, read);
+        }
+        return buffer.toString("UTF-8");
     }
 
     private static String decode(String segment) {

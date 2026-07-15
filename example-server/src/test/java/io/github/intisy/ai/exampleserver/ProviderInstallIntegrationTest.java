@@ -1,0 +1,201 @@
+package io.github.intisy.ai.exampleserver;
+
+import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.api.ManagementApi;
+import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
+import io.github.intisy.ai.jvm.AiJava;
+import io.github.intisy.ai.jvm.Storage;
+import io.github.intisy.ai.shared.routing.RoutingProfile;
+import io.github.intisy.ai.shared.spi.JsonCodec;
+import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.shared.store.AccountStore;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Scanner;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Drives the on-demand install API end to end with a {@link FakeProviderSource} (no network):
+ * boot with an EMPTY providers dir (0 providers loaded), confirm {@code /api/providers/available}
+ * reports the fake entry as not installed, install it, then confirm the live registry refreshed
+ * without a restart -- {@code /api/providers} now lists it and {@code /v1/messages} routes to it.
+ */
+class ProviderInstallIntegrationTest {
+
+    private static final String CONFIG_FILE = "provider-install-routing.json";
+
+    private AiJava ai;
+    private ExampleServer server;
+    private ProviderRegistryHolder holder;
+
+    @BeforeEach
+    void setUp(@TempDir Path providersDir) {
+        ai = AiJava.builder().storage(Storage.memory()).build();
+        Store store = ai.store();
+        JsonCodec json = ai.jsonCodec();
+        ServerSeeds.seedEcho(store, json, CONFIG_FILE);
+
+        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        assertTrue(holder.listProviderIds().isEmpty(), "must start with zero providers loaded");
+
+        AccountStore accountStore = new AccountStore(store, json);
+        AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
+
+        String stagedDir = System.getProperty("exampleserver.providersDir");
+        ProviderSource fakeSource = new FakeProviderSource(Path.of(stagedDir));
+
+        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json,
+                fakeSource, providersDir, holder);
+
+        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
+        AiJava.WiredRouter router = ai.router(profile,
+                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
+
+        server = ExampleServer.start(router, 0, api); // ephemeral port
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        if (server != null) server.stop();
+        if (holder != null && holder.get() != null) holder.get().close();
+        if (ai != null) ai.close();
+    }
+
+    @Test
+    void availableListsFakeEntryAsNotInstalled() throws IOException {
+        Response r = get("/api/providers/available");
+        assertEquals(200, r.status);
+        assertTrue(r.body.contains("echo-demo"), r.body);
+        assertTrue(r.body.contains("\"installed\":false") || r.body.contains("\"installed\": false"), r.body);
+    }
+
+    @Test
+    void providersListLacksEchoBeforeInstall() throws IOException {
+        Response r = get("/api/providers");
+        assertEquals(200, r.status);
+        assertFalse(r.body.contains("\"echo\""), r.body);
+    }
+
+    @Test
+    void installUnknownNameIs404() throws IOException {
+        Response r = post("/api/providers/install", "{\"name\":\"does-not-exist\"}");
+        assertEquals(404, r.status);
+        assertTrue(r.body.contains("unknown provider"), r.body);
+    }
+
+    @Test
+    void installThenRefreshesLiveRegistryAndRoutes() throws IOException {
+        Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
+        assertEquals(200, install.status, install.body);
+        assertTrue(install.body.contains("\"installed\":true") || install.body.contains("\"installed\": true"),
+                install.body);
+        assertTrue(install.body.contains("echo"), install.body);
+
+        Response afterList = get("/api/providers");
+        assertEquals(200, afterList.status);
+        assertTrue(afterList.body.contains("\"echo\""), afterList.body);
+
+        Response afterAvailable = get("/api/providers/available");
+        assertEquals(200, afterAvailable.status);
+        assertTrue(afterAvailable.body.contains("\"installed\":true") || afterAvailable.body.contains("\"installed\": true"),
+                afterAvailable.body);
+
+        String body = "{\"model\":\"claude-haiku-4\",\"messages\":[]}";
+        Response messages = post("/v1/messages", body);
+        assertEquals(200, messages.status, messages.body);
+        assertTrue(messages.body.contains("Echo provider handled your request"), messages.body);
+    }
+
+    /** Simulates a real download with no network: copies the already-staged example-provider jar
+     *  ({@code exampleserver.providersDir}, populated by the Gradle test task) into the target dir. */
+    private static final class FakeProviderSource implements ProviderSource {
+        private final Path stagedJarDir;
+
+        FakeProviderSource(Path stagedJarDir) {
+            this.stagedJarDir = stagedJarDir;
+        }
+
+        @Override
+        public List<Entry> list() {
+            return Collections.singletonList(new Entry("echo-demo", "echo-provider.jar", ""));
+        }
+
+        @Override
+        public Path download(Entry entry, Path dir) throws IOException {
+            Path src = findStagedJar();
+            Path target = dir.resolve(entry.assetName);
+            Files.copy(src, target);
+            return target;
+        }
+
+        private Path findStagedJar() throws IOException {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagedJarDir, "*.jar")) {
+                for (Path p : stream) {
+                    return p;
+                }
+            }
+            throw new IOException("no staged provider jar found in " + stagedJarDir);
+        }
+    }
+
+    // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
+
+    private Response get(String path) throws IOException {
+        HttpURLConnection c = open(path, "GET");
+        return read(c);
+    }
+
+    private Response post(String path, String body) throws IOException {
+        HttpURLConnection c = open(path, "POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("content-type", "application/json");
+        try (OutputStream os = c.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+        return read(c);
+    }
+
+    private HttpURLConnection open(String path, String method) throws IOException {
+        URL url = new URL("http://127.0.0.1:" + server.port() + path);
+        HttpURLConnection c = (HttpURLConnection) url.openConnection();
+        c.setRequestMethod(method);
+        return c;
+    }
+
+    private Response read(HttpURLConnection c) throws IOException {
+        int status = c.getResponseCode();
+        InputStream is = status < 400 ? c.getInputStream() : c.getErrorStream();
+        String text = "";
+        if (is != null) {
+            try (Scanner s = new Scanner(is, "UTF-8").useDelimiter("\\A")) {
+                text = s.hasNext() ? s.next() : "";
+            }
+        }
+        return new Response(status, text);
+    }
+
+    private static final class Response {
+        final int status;
+        final String body;
+        Response(int status, String body) { this.status = status; this.body = body; }
+    }
+}

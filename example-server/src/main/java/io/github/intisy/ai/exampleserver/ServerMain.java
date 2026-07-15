@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
+import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
@@ -57,12 +58,15 @@ public final class ServerMain {
                     id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
 
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-            ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec());
+            ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
+                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder);
             ExampleServer server = ExampleServer.start(router, port, api);
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
             System.out.println("  GET  /              dashboard (providers + accounts)");
             System.out.println("  GET  /api/providers management API");
+            System.out.println("  GET  /api/providers/available   list installable providers");
+            System.out.println("  POST /api/providers/install      {\"name\":\"<entry name>\"}");
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
