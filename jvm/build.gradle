@@ -17,8 +17,17 @@ dependencies {
 
 // Match docker-java's "standalone" naming for the shaded jar (Shadow's own
 // default classifier is "all"); the plain jar keeps no classifier.
+// Keep the jar filenames version-LESS (jvm.jar / jvm-standalone.jar) even though project.version
+// is now set (for publishGithub's package version): publishGithub's artifacts block references
+// build/libs/jvm.jar by that exact name, and the uploaded asset is renamed to ai-java.jar from
+// `repo` anyway — so the local filename just has to be findable/stable.
+jar {
+    archiveVersion = ""
+}
+
 shadowJar {
     archiveClassifier = "standalone"
+    archiveVersion = ""
 }
 
 publishGithub {
