@@ -59,7 +59,20 @@ public final class ExampleServer {
      * context entirely (that's what the two-arg overload does).
      */
     public static ExampleServer start(AiJava ai, RoutingProfile profile, int port, HttpHandler api) {
-        AiJava.WiredRouter router = ai.router(profile);
+        return start(ai.router(profile), port, api);
+    }
+
+    /**
+     * Serves with a pre-built {@code router} instead of deriving one from {@code ai.router(profile)}
+     * — the seam a caller uses to wire a router backed by something other than {@code ai}'s own
+     * (fixed-at-build-time) {@link io.github.intisy.ai.jvm.provider.ProviderRegistry}, e.g. one
+     * whose {@link io.github.intisy.ai.shared.routing.HandlerResolver} reads through a swappable
+     * {@link io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder} so newly installed
+     * providers become routable without a restart. All other behavior (the four contexts) is
+     * identical to the other {@code start} overloads. Pass {@code null} for {@code api} to skip the
+     * management context.
+     */
+    public static ExampleServer start(AiJava.WiredRouter router, int port, HttpHandler api) {
         HttpServer http;
         try {
             http = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);

@@ -3,6 +3,7 @@ package io.github.intisy.ai.exampleserver;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
@@ -19,9 +20,11 @@ import java.nio.file.Paths;
  * Boots the example server. Demonstrates "completely customizable backend": the store is chosen
  * from one place ({@code -Dexampleserver.store=memory|file}) and composed into a {@link Backend}
  * the whole server runs on. Provider jars are discovered via {@link ProviderDiscovery} from
- * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task), optionally fetching
- * jars from the intisy-ai GitHub org first when {@code -Dexampleserver.fetchProviders=true} (default
- * {@code false}, so a plain run stays offline-clean). The port comes from
+ * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task) — startup only ever
+ * reads whatever's already on disk, never the network. That registry is held in a
+ * {@link ProviderRegistryHolder} so it can be refreshed after a provider is installed on demand
+ * (a later task's job) without restarting the process: the router is wired with lambdas that
+ * read through the holder, so every request sees the current registry. The port comes from
  * {@code -Dexampleserver.port} (default 8787). On top of routing, this wires the {@code /api}
  * management endpoints and the {@code /} dashboard, seeding a couple of demo accounts so both have
  * something to show out of the box.
@@ -38,21 +41,24 @@ public final class ServerMain {
         Store store = chooseStore();
         Backend backend = Backend.builder().store(store).build();
 
-        boolean fetchFromOrg = Boolean.getBoolean("exampleserver.fetchProviders");
-        ProviderRegistry registry = ProviderDiscovery.resolve(providersDir(), fetchFromOrg);
+        Path providersDir = providersDir();
+        ProviderRegistry registry = ProviderDiscovery.resolve(providersDir);
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(registry);
 
         try (AiJava ai = AiJava.builder()
                 .backend(backend)
-                .providerRegistry(registry)
                 .build()) {
 
             ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
             seedDemoAccounts(ai);
             RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
 
+            AiJava.WiredRouter router = ai.router(profile,
+                    id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
+
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-            ManagementApi api = new ManagementApi(registry::listProviderIds, admin, ai.jsonCodec());
-            ExampleServer server = ExampleServer.start(ai, profile, port, api);
+            ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec());
+            ExampleServer server = ExampleServer.start(router, port, api);
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
             System.out.println("  GET  /              dashboard (providers + accounts)");
@@ -60,7 +66,6 @@ public final class ServerMain {
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
-            System.out.println("  (set -Dexampleserver.fetchProviders=true to pull provider jars from intisy-ai)");
 
             Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
             Thread.currentThread().join(); // block forever until the process is killed

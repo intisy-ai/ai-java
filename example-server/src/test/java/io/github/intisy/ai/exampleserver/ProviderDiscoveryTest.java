@@ -26,7 +26,7 @@ class ProviderDiscoveryTest {
         assertNotNull(src, "a provider jar must be staged");
         Files.copy(src, dir.resolve(src.getFileName()));
 
-        try (ProviderRegistry reg = ProviderDiscovery.resolve(dir, false)) {
+        try (ProviderRegistry reg = ProviderDiscovery.resolve(dir)) {
             assertTrue(reg.listProviderIds().contains("echo"),
                     "discovery must find the echo provider: " + reg.listProviderIds());
         }
@@ -35,7 +35,7 @@ class ProviderDiscoveryTest {
     @Test
     void missingDirYieldsEmptyRegistryNotError(@TempDir Path parent) throws Exception {
         Path missing = parent.resolve("does-not-exist");
-        try (ProviderRegistry reg = ProviderDiscovery.resolve(missing, false)) {
+        try (ProviderRegistry reg = ProviderDiscovery.resolve(missing)) {
             assertTrue(reg.listProviderIds().isEmpty());
         }
     }

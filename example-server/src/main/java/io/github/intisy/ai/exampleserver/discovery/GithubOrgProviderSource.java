@@ -10,17 +10,17 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Downloads provider-jar release assets from every repo in the {@code intisy-ai} GitHub org into a
- * local directory, so the example server can auto-populate its {@code providers/} folder without a
- * manual jar drop. Entirely best-effort: every network/parse failure is caught and logged (never
- * thrown) so a rate-limited or unreachable GitHub never blocks the server from starting with
- * whatever provider jars are already on disk.
+ * Lists and downloads provider-jar release assets from every repo in the {@code intisy-ai} GitHub
+ * org, so the example server can offer them for on-demand install without a manual jar drop.
+ * {@link #list()} is entirely best-effort: every network/parse failure is caught and logged
+ * (never thrown), yielding an empty list rather than blocking whatever's calling it.
  */
-public final class GithubOrgProviderSource {
+public final class GithubOrgProviderSource implements ProviderSource {
 
     private static final String LOG_PREFIX = "[example-server] ";
     private static final String ORG = "intisy-ai";
@@ -35,18 +35,19 @@ public final class GithubOrgProviderSource {
     }
 
     /**
-     * Lists every repo in the org, fetches each one's latest release, and downloads any asset that
-     * looks like a provider jar into {@code dir} (skipping files that already exist there). Returns
-     * the number of jars actually downloaded. Never throws — any failure along the way is logged to
-     * {@code System.err} and simply yields fewer (possibly zero) downloads.
+     * Lists every repo in the org, fetches each one's latest release, and collects any asset that
+     * looks like a provider jar into an {@link Entry} — no downloading here. Never throws — any
+     * failure along the way is logged to {@code System.err} and simply yields fewer (possibly
+     * zero) entries.
      */
-    public int fetchInto(Path dir) {
-        int downloaded = 0;
+    @Override
+    public List<Entry> list() {
+        List<Entry> entries = new ArrayList<>();
         try {
             Object reposJson = json.parse(httpGet(REPOS_URL));
             if (!(reposJson instanceof List)) {
                 System.err.println(LOG_PREFIX + "org repo listing was not a JSON array; skipping org fetch");
-                return 0;
+                return entries;
             }
             for (Object repoObj : (List<?>) reposJson) {
                 try {
@@ -57,15 +58,23 @@ public final class GithubOrgProviderSource {
                     String name = (String) nameObj;
                     if (!looksLikeProviderRepo(repo, name)) continue;
 
-                    downloaded += fetchReleaseAssets(name, dir);
+                    entries.addAll(listReleaseAssets(name));
                 } catch (RuntimeException e) {
                     System.err.println(LOG_PREFIX + "skipping repo (unexpected error): " + e.getMessage());
                 }
             }
         } catch (RuntimeException | IOException e) {
-            System.err.println(LOG_PREFIX + "org provider fetch failed: " + e.getMessage());
+            System.err.println(LOG_PREFIX + "org provider listing failed: " + e.getMessage());
         }
-        return downloaded;
+        return entries;
+    }
+
+    /** Downloads {@code entry}'s jar into {@code dir}, replacing any existing file of the same name. */
+    @Override
+    public Path download(Entry entry, Path dir) throws IOException {
+        Path target = dir.resolve(entry.assetName);
+        downloadTo(entry.downloadUrl, target);
+        return target;
     }
 
     /** A repo counts as a provider source if its name or declared topics mention "provider". */
@@ -82,14 +91,14 @@ public final class GithubOrgProviderSource {
         return false;
     }
 
-    private int fetchReleaseAssets(String repoName, Path dir) {
-        int downloaded = 0;
+    private List<Entry> listReleaseAssets(String repoName) {
+        List<Entry> entries = new ArrayList<>();
         try {
             String releaseUrl = "https://api.github.com/repos/" + ORG + "/" + repoName + "/releases/latest";
             Object releaseJson = json.parse(httpGet(releaseUrl));
-            if (!(releaseJson instanceof Map)) return 0;
+            if (!(releaseJson instanceof Map)) return entries;
             Object assetsObj = ((Map<?, ?>) releaseJson).get("assets");
-            if (!(assetsObj instanceof List)) return 0;
+            if (!(assetsObj instanceof List)) return entries;
 
             for (Object assetObj : (List<?>) assetsObj) {
                 if (!(assetObj instanceof Map)) continue;
@@ -100,20 +109,12 @@ public final class GithubOrgProviderSource {
                 String assetName = (String) nameObj;
                 if (!isProviderJarAsset(assetName)) continue;
 
-                Path target = dir.resolve(assetName);
-                if (Files.exists(target)) continue; // already have it
-
-                try {
-                    downloadTo((String) urlObj, target);
-                    downloaded++;
-                } catch (IOException e) {
-                    System.err.println(LOG_PREFIX + "failed to download asset " + assetName + ": " + e.getMessage());
-                }
+                entries.add(new Entry(repoName, assetName, (String) urlObj));
             }
         } catch (RuntimeException | IOException e) {
-            System.err.println(LOG_PREFIX + "failed to fetch release for " + repoName + ": " + e.getMessage());
+            System.err.println(LOG_PREFIX + "failed to list release for " + repoName + ": " + e.getMessage());
         }
-        return downloaded;
+        return entries;
     }
 
     private static boolean isProviderJarAsset(String name) {
