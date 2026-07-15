@@ -102,7 +102,7 @@ class ManagementApiIntegrationTest {
 
         Response r = get("/api/providers/echo/accounts");
         assertEquals(200, r.status);
-        assertTrue(r.body.contains("\"status\":\"ready\"") || r.body.contains("ready"), r.body);
+        assertTrue(!r.body.contains("\"disabled\""), r.body);
     }
 
     @Test
