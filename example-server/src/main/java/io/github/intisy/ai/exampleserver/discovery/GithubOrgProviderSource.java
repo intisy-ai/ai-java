@@ -69,10 +69,14 @@ public final class GithubOrgProviderSource implements ProviderSource {
         return entries;
     }
 
-    /** Downloads {@code entry}'s jar into {@code dir}, replacing any existing file of the same name. */
+    /**
+     * Downloads {@code entry}'s jar into {@code dir}, replacing any existing file of the same
+     * name. Resolves using only the file-name component of {@code entry.assetName} so a
+     * maliciously-named asset (e.g. {@code ../evil.jar}) can't escape {@code dir}.
+     */
     @Override
     public Path download(Entry entry, Path dir) throws IOException {
-        Path target = dir.resolve(entry.assetName);
+        Path target = dir.resolve(java.nio.file.Paths.get(entry.assetName).getFileName().toString());
         downloadTo(entry.downloadUrl, target);
         return target;
     }

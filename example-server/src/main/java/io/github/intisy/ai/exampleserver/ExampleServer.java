@@ -19,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * A thin transport adapter: converts each {@link HttpExchange} into the shared {@link HttpRequest},
@@ -38,10 +40,12 @@ public final class ExampleServer {
 
     private final HttpServer http;
     private final int port;
+    private final ExecutorService executor;
 
-    private ExampleServer(HttpServer http, int port) {
+    private ExampleServer(HttpServer http, int port, ExecutorService executor) {
         this.http = http;
         this.port = port;
+        this.executor = executor;
     }
 
     /**
@@ -91,9 +95,10 @@ public final class ExampleServer {
         }
         http.createContext("/v1", exchange -> handleRouted(exchange, router));
         http.createContext("/", new Dashboard());
-        http.setExecutor(null); // default executor: a single background thread
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        http.setExecutor(executor); // small pool: a slow request (e.g. a provider install) can't block every other endpoint
         http.start();
-        return new ExampleServer(http, http.getAddress().getPort());
+        return new ExampleServer(http, http.getAddress().getPort(), executor);
     }
 
     public int port() {
@@ -102,6 +107,7 @@ public final class ExampleServer {
 
     public void stop() {
         http.stop(0);
+        executor.shutdownNow();
     }
 
     private static void handleRouted(HttpExchange exchange, AiJava.WiredRouter router) throws IOException {
