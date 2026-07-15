@@ -1,0 +1,38 @@
+name: Build And Upload
+on:
+  push:
+    tags:
+      - "*"
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project sources
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ai-java is multi-module: the consumable library artifact is the :jvm
+      # module (it re-exports :routing + :accounts via api), not the root
+      # project, so jars are built/uploaded scoped to :jvm, not the reusable
+      # workflows/build.yml's root `build/libs/*` convention.
+      - name: Build :jvm jars
+        run: ./gradlew :jvm:build :jvm:shadowJar -Partifact_version=${{ github.ref_name }}
+
+      - name: Create Release and Upload Jars
+        run: |
+          gh release create "${{ github.ref_name }}" -t "Release ${{ github.ref_name }}" || true
+          gh release upload "${{ github.ref_name }}" jvm/build/libs/*.jar --clobber
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
