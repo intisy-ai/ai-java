@@ -23,7 +23,7 @@ import java.util.Map;
 /**
  * A thin transport adapter: converts each {@link HttpExchange} into the shared {@link HttpRequest},
  * hands it to a pre-wired {@link AiJava.WiredRouter}, and writes the buffered {@link HttpResponse}
- * back. The Router already dispatches {@code /v1/models} and its own {@code /health} internally.
+ * back. The Router already dispatches {@code /v1/messages} and {@code /v1/models} internally.
  *
  * <p>Four contexts are registered: {@code /healthz} (liveness, answered here without touching the
  * router), {@code /api} (the optional {@link ManagementApi}), {@code /v1} (forwarded to the router
