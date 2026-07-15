@@ -101,6 +101,47 @@ class AccountAdminTest {
     }
 
     @Test
+    void addTokenReturnsPersistedStatusNotStaleLocalStatusOnUpsert() {
+        AccountStore store = new AccountStore(new InMemoryStore(), new GsonJsonCodec());
+        AccountAdmin admin = new AccountAdmin(store, () -> 1_000L);
+
+        // Seed the account, then independently drive it into a cooling state (as a real
+        // rate-limit/backoff handler would, via AccountStore, not via AccountAdmin).
+        admin.addToken("antigravity", "acc-1", "a@b.com", "REFRESH-OLD", null, null);
+        store.update("antigravity", pool -> {
+            for (Account a : pool.accounts) {
+                if ("acc-1".equals(a.id)) {
+                    a.coolingDownUntil = 10_000L; // still cooling relative to clock=1_000
+                }
+            }
+        });
+
+        // Re-seeding (e.g. pasting a fresh token) upserts by id: AccountStore.add merges into
+        // the existing record and PRESERVES coolingDownUntil, so the persisted account is still
+        // cooling even though the freshly-built local Account object looks fully "ready".
+        AccountAdmin.AccountView view = admin.addToken(
+                "antigravity", "acc-1", "a@b.com", "REFRESH-NEW", null, null);
+
+        assertEquals("cooling", view.status, "must reflect the PERSISTED (merged) record, not the local pre-merge object");
+
+        Account raw = store.list("antigravity").get(0);
+        assertEquals("REFRESH-NEW", raw.refresh);
+        assertEquals(10_000L, raw.coolingDownUntil);
+    }
+
+    @Test
+    void addTokenTrimsWhitespaceFromResolvedIdAndEmail() {
+        AccountStore store = new AccountStore(new InMemoryStore(), new GsonJsonCodec());
+        AccountAdmin admin = new AccountAdmin(store, () -> 1L);
+
+        admin.addToken("antigravity", " acc-1 ", " a@b.com ", "REFRESH", null, null);
+
+        Account raw = store.list("antigravity").get(0);
+        assertEquals("acc-1", raw.id);
+        assertEquals("a@b.com", raw.email);
+    }
+
+    @Test
     void addTokenRejectsBlankEmailAndId() {
         AccountStore store = new AccountStore(new InMemoryStore(), new GsonJsonCodec());
         AccountAdmin admin = new AccountAdmin(store, () -> 1L);

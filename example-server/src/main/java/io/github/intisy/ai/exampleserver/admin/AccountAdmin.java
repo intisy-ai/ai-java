@@ -80,19 +80,30 @@ public class AccountAdmin {
             throw new IllegalArgumentException("at least one of email/id is required");
         }
 
-        String resolvedId = !isBlank(id) ? id : email;
-        String resolvedEmail = !isBlank(email) ? email : id;
+        String resolvedId = (!isBlank(id) ? id : email).trim();
+        String resolvedEmail = (!isBlank(email) ? email : id).trim();
 
+        long now = clock.now();
         Account account = new Account();
         account.id = resolvedId;
         account.email = resolvedEmail;
         account.refresh = refresh;
         account.enabled = true;
-        account.addedAt = clock.now();
+        account.addedAt = now;
         account.meta = buildMeta(projectId, managedProjectId);
 
         store.add(providerId, account);
-        return toView(account, clock.now());
+
+        // store.add() upserts: if resolvedId/refresh matched an existing record, the persisted
+        // account keeps its prior coolingDownUntil/rateLimitResetTimes/etc. Re-derive the view
+        // from the PERSISTED record so callers don't get a bogus "ready" view for an account
+        // that is actually still cooling/rate-limited/disabled.
+        for (Account persisted : store.list(providerId)) {
+            if (resolvedId.equals(persisted.id)) {
+                return toView(persisted, now);
+            }
+        }
+        return toView(account, now);
     }
 
     private static Map<String, Object> buildMeta(String projectId, String managedProjectId) {
