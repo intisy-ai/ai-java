@@ -45,4 +45,14 @@ subprojects {
     github {
         accessToken = System.getenv("GITHUB_TOKEN") ?: ""
     }
+
+    // ai-java is multi-module but only :jvm is a published/consumable artifact (it re-exports
+    // :routing + :accounts via `api` and shades them into its standalone jar). The reusable
+    // `publish-dependency` workflow runs `./gradlew publish`, which fans `publishGithub` out to
+    // EVERY subproject; the non-library modules (:routing, :accounts, :examples, :example-server,
+    // teavm modules) have no publishGithub artifacts and would fail. Scope the task to :jvm so the
+    // aggregate publish succeeds by publishing only the library artifact.
+    tasks.matching { it.name == "publishGithub" }.configureEach {
+        onlyIf { project.path == ":jvm" }
+    }
 }
