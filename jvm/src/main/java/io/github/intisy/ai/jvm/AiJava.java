@@ -1,13 +1,9 @@
 package io.github.intisy.ai.jvm;
 
-import io.github.intisy.ai.jvm.backend.clock.SystemClock;
+import io.github.intisy.ai.jvm.backend.Backend;
+import io.github.intisy.ai.jvm.backend.Backends;
 import io.github.intisy.ai.jvm.backend.env.Env;
-import io.github.intisy.ai.jvm.backend.env.SystemEnv;
-import io.github.intisy.ai.jvm.backend.http.UrlConnectionHttpClient;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
-import io.github.intisy.ai.jvm.backend.log.SimpleLoggerAdapter;
 import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
-import io.github.intisy.ai.jvm.backend.random.SecureRandomAdapter;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.logic.Notifier;
@@ -67,15 +63,16 @@ public class AiJava implements Closeable {
     private final ManagerOptions managerOptions;
     private final ProviderRegistry providerRegistry;
 
-    private AiJava(Builder b) {
-        this.store = b.store;
-        this.httpClient = b.httpClient;
-        this.json = b.json;
-        this.clock = b.clock;
-        this.logger = b.logger;
-        this.random = b.random;
-        this.env = b.env;
-        this.notifier = b.notifier != null ? b.notifier : defaultNotifierFor(b.store);
+    private AiJava(Builder b, Store resolvedStore, Backend base) {
+        this.store = resolvedStore;
+        this.httpClient = b.httpClient != null ? b.httpClient : base.httpClient();
+        this.json = b.json != null ? b.json : base.jsonCodec();
+        this.clock = b.clock != null ? b.clock : base.clock();
+        this.logger = b.logger != null ? b.logger : base.logger();
+        this.random = b.random != null ? b.random : base.random();
+        this.env = b.env != null ? b.env : base.env();
+        this.notifier = b.notifier != null ? b.notifier
+                : (base.notifier() != null ? base.notifier() : defaultNotifierFor(resolvedStore));
         this.managerOptions = b.managerOptions;
         this.providerRegistry = b.providersDir != null
                 ? ProviderRegistry.fromDirectory(b.providersDir)
@@ -238,20 +235,28 @@ public class AiJava implements Closeable {
      */
     public static final class Builder {
         private Store store;
-        private HttpClient httpClient = new UrlConnectionHttpClient();
-        private JsonCodec json = new GsonJsonCodec();
-        private Clock clock = new SystemClock();
-        private Logger logger = new SimpleLoggerAdapter();
-        private Random random = new SecureRandomAdapter();
-        private Env env = new SystemEnv();
+        private Backend backend;
+        private HttpClient httpClient; // null = unset -> resolved from backend/defaults
+        private JsonCodec json;
+        private Clock clock;
+        private Logger logger;
+        private Random random;
+        private Env env;
         private Notifier notifier; // resolved lazily in build() — depends on the chosen store
         private ManagerOptions managerOptions;
         private Path providersDir; // unset -> ProviderRegistry.empty(), never forced/guessed
+        private ProviderRegistry providerRegistry; // Task 4
 
         private Builder() {
         }
 
-        /** REQUIRED. Use {@link Storage#file}/{@link Storage#memory}/{@link Storage#jdbc}, or your own {@link Store}. */
+        /** Hand ai-java one object that IS the entire platform; per-SPI setters still override it. */
+        public Builder backend(Backend backend) {
+            this.backend = backend;
+            return this;
+        }
+
+        /** REQUIRED unless a {@link #backend(Backend)} carrying a store is supplied. */
         public Builder storage(Store store) {
             this.store = store;
             return this;
@@ -308,11 +313,13 @@ public class AiJava implements Closeable {
         }
 
         public AiJava build() {
-            if (store == null) {
+            Store resolvedStore = store != null ? store : (backend != null ? backend.store() : null);
+            if (resolvedStore == null) {
                 throw new IllegalStateException(
                         "storage backend is required; use Storage.file/memory/jdbc or your own Store");
             }
-            return new AiJava(this);
+            Backend base = backend != null ? backend : Backends.defaults(resolvedStore);
+            return new AiJava(this, resolvedStore, base);
         }
     }
 }
