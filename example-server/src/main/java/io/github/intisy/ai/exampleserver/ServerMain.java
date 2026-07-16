@@ -1,6 +1,7 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
@@ -58,8 +59,9 @@ public final class ServerMain {
                     id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
 
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
+            RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), profile, holder, ai.logger());
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
-                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder);
+                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing);
             ExampleServer server = ExampleServer.start(router, port, api);
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
@@ -67,6 +69,10 @@ public final class ServerMain {
             System.out.println("  GET  /api/providers management API");
             System.out.println("  GET  /api/providers/available   list installable providers");
             System.out.println("  POST /api/providers/install      {\"name\":\"<entry name>\"}");
+            System.out.println("  POST /api/providers/{id}/models/discover");
+            System.out.println("  GET  /api/routing/catalog");
+            System.out.println("  GET  /api/routing/model-map");
+            System.out.println("  PUT  /api/routing/model-map      {\"map\":{...}}");
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
