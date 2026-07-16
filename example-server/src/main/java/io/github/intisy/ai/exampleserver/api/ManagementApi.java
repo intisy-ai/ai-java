@@ -3,6 +3,7 @@ package io.github.intisy.ai.exampleserver.api;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.shared.spi.JsonCodec;
@@ -36,6 +37,10 @@ import java.util.function.Supplier;
  * POST   /api/providers/{id}/accounts/{accId}/enable     -> 204
  * POST   /api/providers/{id}/accounts/{accId}/disable    -> 204
  * DELETE /api/providers/{id}/accounts/{accId}            -> 204
+ * POST   /api/providers/{id}/models/discover              -> 200 {"provider":..,"models":[...]}
+ * GET    /api/routing/catalog                            -> 200 <models.json>
+ * GET    /api/routing/model-map                          -> 200 {"tiers":[...],"map":{...}}
+ * PUT    /api/routing/model-map          {"map":{...}}    -> 200 {"ok":true,"warnings":[...]}
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -47,6 +52,10 @@ import java.util.function.Supplier;
  * checked as exact 3-segment paths before the (4+ segment) {@code {id}/accounts...} routes, so
  * there is no ambiguity between a provider id happening to be named "available" or "install" and
  * these reserved routes -- the existing routes never match at 3 segments in the first place.
+ *
+ * <p>The {@code /api/routing/*} + discover routes are only served once a {@link RoutingAdmin} is
+ * wired in (the 7-arg constructor); callers still on an older constructor get a plain 404 for
+ * these paths instead of an NPE.
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -56,9 +65,10 @@ public final class ManagementApi implements HttpHandler {
     private final ProviderSource source;
     private final Path providersDir;
     private final ProviderRegistryHolder holder;
+    private final RoutingAdmin routing;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
-        this(providerIds, admin, json, null, null, null);
+        this(providerIds, admin, json, null, null, null, null);
     }
 
     /**
@@ -66,16 +76,29 @@ public final class ManagementApi implements HttpHandler {
      * {@code POST /api/providers/install}) on top of the base account-admin routes.
      * {@code source} lists/downloads installable provider jars, {@code providersDir} is where they
      * land on disk, and {@code holder} is refreshed after a successful download so the newly
-     * installed provider becomes routable without a restart.
+     * installed provider becomes routable without a restart. No {@link RoutingAdmin} — the
+     * {@code /api/routing/*} + discover routes 404 (see {@link #ManagementApi(Supplier, AccountAdmin,
+     * JsonCodec, ProviderSource, Path, ProviderRegistryHolder, RoutingAdmin)} for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder) {
+        this(providerIds, admin, json, source, providersDir, holder, null);
+    }
+
+    /**
+     * Full constructor: adds the routing surface ({@code POST .../models/discover},
+     * {@code GET/PUT /api/routing/*}) backed by {@code routing}.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
         this.source = source;
         this.providersDir = providersDir;
         this.holder = holder;
+        this.routing = routing;
     }
 
     @Override
@@ -127,6 +150,27 @@ public final class ManagementApi implements HttpHandler {
         if ("DELETE".equals(method) && seg.length == 5
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "accounts".equals(seg[3])) {
             handleRemove(exchange, decode(seg[2]), decode(seg[4]));
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 5
+                && "api".equals(seg[0]) && "providers".equals(seg[1])
+                && "models".equals(seg[3]) && "discover".equals(seg[4])) {
+            handleDiscover(exchange, decode(seg[2]));
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "routing".equals(seg[1]) && "catalog".equals(seg[2])) {
+            handleCatalog(exchange);
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "routing".equals(seg[1]) && "model-map".equals(seg[2])) {
+            handleModelMapGet(exchange);
+            return;
+        }
+        if ("PUT".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "routing".equals(seg[1]) && "model-map".equals(seg[2])) {
+            handleModelMapPut(exchange);
             return;
         }
         handleNotFound(exchange);
@@ -247,6 +291,57 @@ public final class ManagementApi implements HttpHandler {
     private void handleRemove(HttpExchange exchange, String providerId, String accountId) throws IOException {
         admin.remove(providerId, accountId);
         respondNoBody(exchange, 204);
+    }
+
+    private void handleDiscover(HttpExchange exchange, String providerId) throws IOException {
+        if (routing == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            respondJson(exchange, 200, routing.discover(providerId));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handleCatalog(HttpExchange exchange) throws IOException {
+        if (routing == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        respondJson(exchange, 200, json.parse(routing.catalogJson()));
+    }
+
+    private void handleModelMapGet(HttpExchange exchange) throws IOException {
+        if (routing == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        respondJson(exchange, 200, routing.modelMapView());
+    }
+
+    private void handleModelMapPut(HttpExchange exchange) throws IOException {
+        if (routing == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+            Object mapObj = body != null ? body.get("map") : null;
+            if (!(mapObj instanceof Map)) {
+                throw new IllegalArgumentException("body.map must be an object");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) mapObj;
+            respondJson(exchange, 200, routing.putModelMap(map));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
     }
 
     private void handleNotFound(HttpExchange exchange) throws IOException {

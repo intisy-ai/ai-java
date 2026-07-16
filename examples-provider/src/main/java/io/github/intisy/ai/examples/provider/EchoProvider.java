@@ -11,7 +11,9 @@ import java.util.HashMap;
  * A healthy, realistic example {@link Provider}: it answers with a well-formed
  * Anthropic-messages-shaped JSON body that echoes back the model the router assigned to the
  * request (via {@link HandlerCtx#model}) plus a canned assistant message. This is the "it works"
- * half of the {@code :examples} showcase's fallback chain.
+ * half of the {@code :examples} showcase's fallback chain. It also answers {@code GET /v1/models}
+ * with a canned catalog, the same discovery branch a real provider (claude/antigravity) gains —
+ * this is what {@code RoutingAdmin.discover} exercises in tests, with no network involved.
  *
  * <p>Shape discipline mirrors stub-auth's {@code StubProvider}: no gson, no reflection, no
  * {@code java.net}/{@code java.nio} — just hand-rolled JSON string building — so the jar stays
@@ -33,6 +35,10 @@ public final class EchoProvider implements Provider {
 
     @Override
     public HttpResponse handle(HttpRequest request, HandlerCtx ctx) {
+        if (request != null && "GET".equals(request.method) && "/v1/models".equals(request.url)) {
+            return modelsResponse();
+        }
+
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
                 : "echo-default";
@@ -42,6 +48,23 @@ public final class EchoProvider implements Provider {
         response.headers = new HashMap<>();
         response.headers.put("content-type", "application/json");
         response.body = anthropicMessageBody(servedModel);
+        return response;
+    }
+
+    // Canned discovery catalog, matching the ids ServerSeeds already seeds for "echo" so the two
+    // stay in sync for anyone comparing seeded vs. discovered.
+    private static HttpResponse modelsResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"models\":{"
+                + "\"m-echo-opus\":{\"name\":\"Echo Opus\",\"limit\":{\"context\":200000,\"output\":64000}},"
+                + "\"m-echo-haiku\":{\"name\":\"Echo Haiku\",\"limit\":{\"context\":200000,\"output\":64000}}"
+                + "},"
+                + "\"ranking\":[\"m-echo-opus\",\"m-echo-haiku\"]"
+                + "}";
         return response;
     }
 
