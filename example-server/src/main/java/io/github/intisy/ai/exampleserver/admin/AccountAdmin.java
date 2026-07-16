@@ -5,6 +5,7 @@ import io.github.intisy.ai.shared.spi.Clock;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -56,6 +57,64 @@ public class AccountAdmin {
      */
     public void remove(String providerId, String accountId) {
         store.remove(providerId, accountId);
+    }
+
+    /**
+     * Seed an account from a pasted OAuth refresh token (the JVM login MVP). Writes the
+     * DECISION-FLAG-C account shape that {@code AccountManager} and installed providers read:
+     * the RAW refresh token in {@code account.refresh} (never packed as {@code "token|projectId"})
+     * and project ids in {@code account.meta}. Note this only becomes visible to an installed
+     * provider when the server runs with a {@code FileStore} backing the same {@code accounts.json}
+     * (i.e. {@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>}); under the default
+     * in-memory store the seeded account is admin-visible only.
+     *
+     * @throws IllegalArgumentException if {@code refresh} is blank, or both {@code email} and
+     *                                   {@code id} are blank
+     */
+    public AccountView addToken(String providerId, String id, String email, String refresh,
+                                 String projectId, String managedProjectId) {
+        if (isBlank(refresh)) {
+            throw new IllegalArgumentException("refresh is required");
+        }
+        if (isBlank(email) && isBlank(id)) {
+            throw new IllegalArgumentException("at least one of email/id is required");
+        }
+
+        String resolvedId = (!isBlank(id) ? id : email).trim();
+        String resolvedEmail = (!isBlank(email) ? email : id).trim();
+
+        long now = clock.now();
+        Account account = new Account();
+        account.id = resolvedId;
+        account.email = resolvedEmail;
+        account.refresh = refresh;
+        account.enabled = true;
+        account.addedAt = now;
+        account.meta = buildMeta(projectId, managedProjectId);
+
+        store.add(providerId, account);
+
+        // store.add() upserts: if resolvedId/refresh matched an existing record, the persisted
+        // account keeps its prior coolingDownUntil/rateLimitResetTimes/etc. Re-derive the view
+        // from the PERSISTED record so callers don't get a bogus "ready" view for an account
+        // that is actually still cooling/rate-limited/disabled.
+        for (Account persisted : store.list(providerId)) {
+            if (resolvedId.equals(persisted.id)) {
+                return toView(persisted, now);
+            }
+        }
+        return toView(account, now);
+    }
+
+    private static Map<String, Object> buildMeta(String projectId, String managedProjectId) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        if (!isBlank(projectId)) meta.put("projectId", projectId);
+        if (!isBlank(managedProjectId)) meta.put("managedProjectId", managedProjectId);
+        return meta.isEmpty() ? null : meta;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 
     /**

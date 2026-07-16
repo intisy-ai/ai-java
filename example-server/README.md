@@ -23,6 +23,7 @@ and the dashboard both return real content out of the box.
 | `GET /api/providers/available` | Management API: `[{"name":..,"assetName":..,"installed":bool}]` for every provider the configured `ProviderSource` can install. |
 | `POST /api/providers/install` | Management API: body `{"name":"<entry name>"}` — downloads that provider's jar and refreshes the live registry so it's immediately usable; `404` on an unknown name, `502` if the download fails. |
 | `GET /api/providers/{id}/accounts` | Management API: UI-safe account views (`id`, `email`, `enabled`, computed `status`) for one provider. |
+| `POST /api/providers/{id}/accounts` | Management API: seed an account from a pasted OAuth refresh token — body `{"refresh":..,"email":..,"id":..,"projectId":..,"managedProjectId":..}` (`refresh` plus one of `email`/`id` required); returns the created `200` UI-safe view, or `400 {"error":..}` on invalid input. See "Seeding an account" below. |
 | `POST /api/providers/{id}/accounts/{accId}/enable` | Management API: enable an account (`204`). |
 | `POST /api/providers/{id}/accounts/{accId}/disable` | Management API: disable an account (`204`). |
 | `DELETE /api/providers/{id}/accounts/{accId}` | Management API: remove an account (`204`). |
@@ -37,6 +38,21 @@ provider the registry discovered and, for each, its accounts with their computed
 `cooling`, `rate-limited`, `disabled`). It reads through the same `AccountAdmin` the `/api/*`
 management endpoints use, so the two surfaces always agree. It never shows secrets (refresh/access
 tokens) or transient reasons (cooldown/disabled reason text) — only the UI-safe view.
+
+## Seeding an account (paste-token login MVP)
+
+`AccountManager` only *refreshes* tokens — there is no JVM login flow yet — so `POST
+/api/providers/{id}/accounts` is how an operator seeds an account to demonstrate serving real
+requests end-to-end. It writes the same account shape `AccountManager`/an installed provider
+read: the RAW Google OAuth refresh token in `refresh` (never packed as `"token|projectId"`), and
+`projectId`/`managedProjectId` (when provided) under `meta`. The response is always the UI-safe
+view — the refresh token is never echoed back or logged.
+
+This endpoint only shares state with an installed provider when the server runs against a
+`FileStore` the provider also reads — i.e. started with `-Dexampleserver.store=file
+-Dexampleserver.configDir=<dir>`, so both sides read/write the same `<dir>/accounts.json`. Under
+the default in-memory store (no store flags), a seeded account is visible to the admin API/
+dashboard but not to a routed request, since the provider process never sees that memory.
 
 ## Discovery
 

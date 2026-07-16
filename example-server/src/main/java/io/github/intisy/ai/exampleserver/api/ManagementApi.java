@@ -32,6 +32,7 @@ import java.util.function.Supplier;
  * GET    /api/providers/available                        -> [{"name":..,"assetName":..,"installed":bool}]
  * POST   /api/providers/install         {"name":..}       -> 200 {"installed":true,"providers":[...]}
  * GET    /api/providers/{id}/accounts                    -> [AccountView...]
+ * POST   /api/providers/{id}/accounts    {refresh,...}    -> 200 AccountView (seed from a pasted token)
  * POST   /api/providers/{id}/accounts/{accId}/enable     -> 204
  * POST   /api/providers/{id}/accounts/{accId}/disable    -> 204
  * DELETE /api/providers/{id}/accounts/{accId}            -> 204
@@ -110,6 +111,11 @@ public final class ManagementApi implements HttpHandler {
         if ("GET".equals(method) && seg.length == 4
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "accounts".equals(seg[3])) {
             handleListAccounts(exchange, decode(seg[2]));
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "accounts".equals(seg[3])) {
+            handleAddAccount(exchange, decode(seg[2]));
             return;
         }
         if ("POST".equals(method) && seg.length == 6
@@ -194,6 +200,42 @@ public final class ManagementApi implements HttpHandler {
 
     private void handleListAccounts(HttpExchange exchange, String providerId) throws IOException {
         respondJson(exchange, 200, admin.list(providerId));
+    }
+
+    /**
+     * Seeds an account from a pasted OAuth refresh token (the JVM login MVP). Body:
+     * {@code {"refresh":..,"email":..,"id":..,"projectId":..,"managedProjectId":..}} — only
+     * {@code refresh} plus one of {@code email}/{@code id} are required. This only becomes
+     * visible to an installed provider when the server runs against a {@code FileStore} shared
+     * with that provider ({@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>});
+     * under the default in-memory store it is admin-visible only.
+     */
+    private void handleAddAccount(HttpExchange exchange, String providerId) throws IOException {
+        Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+        String refresh = stringField(body, "refresh");
+        String email = stringField(body, "email");
+        String id = stringField(body, "id");
+        String projectId = stringField(body, "projectId");
+        String managedProjectId = stringField(body, "managedProjectId");
+
+        try {
+            AccountAdmin.AccountView view = admin.addToken(providerId, id, email, refresh, projectId, managedProjectId);
+            respondJson(exchange, 200, view);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private static Map<?, ?> asMap(Object parsed) {
+        return parsed instanceof Map ? (Map<?, ?>) parsed : null;
+    }
+
+    private static String stringField(Map<?, ?> body, String key) {
+        if (body == null) return null;
+        Object value = body.get(key);
+        return value instanceof String ? (String) value : null;
     }
 
     private void handleSetEnabled(HttpExchange exchange, String providerId, String accountId, boolean enabled)
