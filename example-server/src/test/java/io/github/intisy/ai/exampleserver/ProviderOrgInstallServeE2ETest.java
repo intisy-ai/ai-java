@@ -134,9 +134,13 @@ class ProviderOrgInstallServeE2ETest {
         assertEquals(200, afterList.status);
         assertTrue(afterList.body.contains("\"claude\""), afterList.body);
 
+        // /api/providers/available lists every FakeOrgProviderSource entry regardless of install
+        // state, so a plain "contains claude" check is tautological -- assert the entry's OWN
+        // installed flag instead, which ManagementApi#handleAvailable only sets true once the
+        // jar is actually on disk (Files.exists(providersDir.resolve(entry.assetName))).
         Response available = get("/api/providers/available");
         assertEquals(200, available.status);
-        assertTrue(available.body.contains("claude"), available.body);
+        assertEquals(Boolean.TRUE, availableEntry(available.body, "claude").get("installed"), available.body);
 
         // No account seeded for claude -> zero enabled accounts -> the claude orchestrator's OWN
         // no-account synthetic (ClaudeHandleOrchestratorTest/ClaudeProviderTest:
@@ -166,6 +170,12 @@ class ProviderOrgInstallServeE2ETest {
         Response afterList = get("/api/providers");
         assertEquals(200, afterList.status);
         assertTrue(afterList.body.contains("\"antigravity\""), afterList.body);
+
+        // See installRoutesToClaudeProvider for why this checks the entry's OWN installed flag
+        // rather than a tautological body.contains("antigravity").
+        Response available = get("/api/providers/available");
+        assertEquals(200, available.status);
+        assertEquals(Boolean.TRUE, availableEntry(available.body, "antigravity").get("installed"), available.body);
 
         // No account seeded for antigravity -> AccountManager#acquire returns null ->
         // AntigravityHandleOrchestrator#attemptModel's own "no available account" branch
@@ -206,6 +216,20 @@ class ProviderOrgInstallServeE2ETest {
         Map<String, Object> account = accountFor(raw, "claude");
         assertEquals("raw-refresh-xyz", account.get("refresh"), "refresh must be stored RAW, not packed");
         assertEquals(Boolean.TRUE, account.get("enabled"));
+    }
+
+    /** Parses the {@code /api/providers/available} JSON array and returns the entry whose
+     *  {@code name} matches, so callers can assert its {@code installed} flag directly. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> availableEntry(String rawAvailableJson, String name) {
+        List<Object> entries = (List<Object>) json.parse(rawAvailableJson);
+        for (Object o : entries) {
+            Map<String, Object> entry = (Map<String, Object>) o;
+            if (name.equals(entry.get("name"))) {
+                return entry;
+            }
+        }
+        throw new AssertionError("no /api/providers/available entry named \"" + name + "\": " + rawAvailableJson);
     }
 
     @SuppressWarnings("unchecked")
