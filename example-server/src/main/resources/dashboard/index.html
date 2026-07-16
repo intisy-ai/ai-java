@@ -237,6 +237,14 @@
   .add-account-form .row .field { flex: 1; }
   .add-account-form .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
 
+  /* -- per-account quota bars (sub-row under an accounts-table entry) -- */
+  .qrow td { padding-top: 0.3rem; padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-soft); }
+  .qbars { display: flex; flex-direction: column; gap: 0.35rem; }
+  .qbar-label { font-size: 0.74rem; color: var(--muted); }
+  .qbar-track { height: 8px; border-radius: 4px; background: var(--grey-bg); overflow: hidden; }
+  .qbar-fill { height: 100%; background: var(--accent); }
+  .qbar-reset { font-size: 0.7rem; color: var(--muted); }
+
   .discover-inline { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: 0.35rem; }
   .discover-result { font-size: 0.76rem; color: var(--muted); }
   .discover-result.err { color: var(--danger); }
@@ -373,6 +381,7 @@
       <h2>Accounts</h2>
       <div class="card-head-actions">
         <span class="hint" id="accounts-hint">select a provider</span>
+        <button class="small" id="refresh-quota-button" type="button" style="display:none">Refresh quota</button>
         <button class="small" id="toggle-add-account-button" type="button" style="display:none">Add account</button>
       </div>
     </div>
@@ -455,6 +464,25 @@
   // endpoints, which 404 as a group when the server was built without a RoutingAdmin wired in.
   function fetchOrNull404(url) {
     return fetch(url).then(function (res) {
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        return res.text().then(function (text) {
+          var message = text;
+          try {
+            var parsed = JSON.parse(text);
+            if (parsed && parsed.error) message = parsed.error;
+          } catch (ignored) { /* not json, use raw text */ }
+          throw new Error(message || (res.status + " " + res.statusText));
+        });
+      }
+      return res.json();
+    });
+  }
+
+  // Like fetchOrNull404, but POSTs — used by the quota-refresh endpoint, which 404s as a whole
+  // when the server was built without a QuotaAdmin wired in (degrade to no quota UI, don't throw).
+  function postOrNull404(url) {
+    return fetch(url, { method: "POST" }).then(function (res) {
       if (res.status === 404) return null;
       if (!res.ok) {
         return res.text().then(function (text) {
@@ -890,6 +918,7 @@
     document.getElementById("accounts-empty").style.display = "none";
     document.getElementById("accounts-table").style.display = "";
     document.getElementById("toggle-add-account-button").style.display = "";
+    document.getElementById("refresh-quota-button").style.display = "";
     hideAddAccountForm();
     renderMergedProviders();
     loadAccounts();
@@ -907,7 +936,10 @@
     tbody.appendChild(loadingTr);
 
     jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/accounts")
-      .then(renderAccounts)
+      .then(function (accounts) {
+        renderAccounts(accounts);
+        loadQuota(selectedProviderId);
+      })
       .catch(function (err) {
         tbody.innerHTML = "";
         var tr = el("tr");
@@ -932,6 +964,7 @@
     accounts.forEach(function (a) {
       var enabled = a.status !== "disabled" && a.enabled !== false;
       var tr = el("tr");
+      tr.dataset.accountId = a.id;
       tr.appendChild(el("td", null, a.id));
       tr.appendChild(el("td", null, a.email || ""));
 
@@ -953,6 +986,95 @@
       tr.appendChild(actionsTd);
       tbody.appendChild(tr);
     });
+  }
+
+  // -- per-account quota bars --
+
+  var quotaByAccountId = {};   // account id -> {status, quota:[{label,remainingFraction,resetTime}]}
+  var quotaAvailable = false;  // false until a quota/refresh call for the current provider succeeds
+  var quotaRequestSeq = 0;     // monotonic id so a stale in-flight request can't clobber a newer one
+
+  function fmtReset(epochMs) {
+    return new Date(epochMs).toLocaleString();
+  }
+
+  // Fetches quota for every account of `providerId` and re-renders. 404 (no QuotaAdmin on this
+  // server) degrades silently to no quota UI at all, same for any other failure; never throws.
+  function loadQuota(providerId) {
+    if (!providerId) return;
+    var requestId = ++quotaRequestSeq;
+    var refreshBtn = document.getElementById("refresh-quota-button");
+    if (refreshBtn) refreshBtn.disabled = true;
+
+    postOrNull404("/api/providers/" + encodeURIComponent(providerId) + "/quota/refresh")
+      .then(function (resp) {
+        if (requestId !== quotaRequestSeq || providerId !== selectedProviderId) return; // stale
+        quotaByAccountId = {};
+        if (resp && resp.accounts) {
+          resp.accounts.forEach(function (a) { quotaByAccountId[a.id] = a; });
+          quotaAvailable = true;
+        } else {
+          quotaAvailable = false; // 404 -> feature not wired in on this server
+        }
+        renderQuota();
+      })
+      .catch(function () {
+        if (requestId !== quotaRequestSeq || providerId !== selectedProviderId) return; // stale
+        quotaByAccountId = {};
+        quotaAvailable = false;
+        renderQuota();
+      })
+      .then(function () {
+        if (requestId === quotaRequestSeq && refreshBtn) refreshBtn.disabled = false;
+      });
+  }
+
+  function buildQuotaRow(entry) {
+    var qrow = el("tr", "qrow");
+    var td = el("td");
+    td.colSpan = 4;
+    var qbars = el("div", "qbars");
+
+    if (entry && entry.status === "error") {
+      qbars.appendChild(el("div", "qbar-reset", "quota unavailable"));
+    } else if (!entry || !entry.quota || !entry.quota.length) {
+      qbars.appendChild(el("div", "qbar-reset", "no quota data"));
+    } else {
+      entry.quota.forEach(function (q) {
+        var usedPct = Math.round((1 - q.remainingFraction) * 100);
+        qbars.appendChild(el("div", "qbar-label", q.label + " — " + usedPct + "% used"));
+        var track = el("div", "qbar-track");
+        var fill = el("div", "qbar-fill");
+        fill.style.width = usedPct + "%";
+        track.appendChild(fill);
+        qbars.appendChild(track);
+        if (typeof q.resetTime === "number") {
+          qbars.appendChild(el("div", "qbar-reset", "Resets " + fmtReset(q.resetTime)));
+        }
+      });
+    }
+
+    td.appendChild(qbars);
+    qrow.appendChild(td);
+    return qrow;
+  }
+
+  // Idempotent: drops any prior .qrow sub-rows, then (if the last quota fetch succeeded) inserts
+  // one fresh .qrow after each account row, keyed by the data-account-id set in renderAccounts.
+  function renderQuota() {
+    var existingRows = document.querySelectorAll("#accounts-table tbody tr.qrow");
+    for (var i = 0; i < existingRows.length; i++) {
+      existingRows[i].parentNode.removeChild(existingRows[i]);
+    }
+    if (!quotaAvailable) return;
+
+    var accountRows = document.querySelectorAll("#accounts-table tbody tr[data-account-id]");
+    for (var j = 0; j < accountRows.length; j++) {
+      var tr = accountRows[j];
+      var accountId = tr.getAttribute("data-account-id");
+      var qrow = buildQuotaRow(quotaByAccountId[accountId]);
+      tr.parentNode.insertBefore(qrow, tr.nextSibling);
+    }
   }
 
   // -- add account (paste-token seed) --
@@ -1128,6 +1250,9 @@
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
   document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
+  document.getElementById("refresh-quota-button").addEventListener("click", function () {
+    loadQuota(selectedProviderId);
+  });
   document.getElementById("toggle-add-account-button").addEventListener("click", showAddAccountForm);
   document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
