@@ -237,6 +237,30 @@
   .add-account-form .row .field { flex: 1; }
   .add-account-form .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
 
+  .discover-inline { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: 0.35rem; }
+  .discover-result { font-size: 0.76rem; color: var(--muted); }
+  .discover-result.err { color: var(--danger); }
+
+  .tier-row { padding: 0.75rem 0; border-bottom: 1px solid var(--border-soft); }
+  .tier-row:last-child { border-bottom: none; }
+  .tier-name { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.4rem; text-transform: capitalize; }
+  .chain-list { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
+  .chain-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-2);
+    font-size: 0.82rem;
+  }
+  .chain-item .chain-label { flex: 1; overflow-wrap: anywhere; }
+  .chain-empty { font-size: 0.8rem; color: var(--muted); padding: 0.3rem 0; }
+  .add-chain-row { display: flex; gap: 0.4rem; align-items: center; }
+  .add-chain-row select { width: auto; flex: 1; }
+  .routing-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; margin-top: 0.85rem; }
+
   select, input[type="text"], input[type="password"], textarea {
     width: 100%;
     font: inherit;
@@ -328,6 +352,22 @@
     </div>
   </section>
 
+  <section class="card" id="routing-card">
+    <div class="card-head">
+      <h2>Routing</h2>
+      <div class="card-head-actions">
+        <span class="hint">tier &rarr; provider/model chains</span>
+        <button class="small" id="refresh-routing-button" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="routing-toast" class="toast hidden"></div>
+    <div class="card-body">
+      <div id="routing-body">
+        <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+      </div>
+    </div>
+  </section>
+
   <section class="card" id="accounts-card">
     <div class="card-head">
       <h2>Accounts</h2>
@@ -411,6 +451,25 @@
     });
   }
 
+  // Like jsonFetch, but a 404 resolves to null instead of throwing — used for the routing
+  // endpoints, which 404 as a group when the server was built without a RoutingAdmin wired in.
+  function fetchOrNull404(url) {
+    return fetch(url).then(function (res) {
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        return res.text().then(function (text) {
+          var message = text;
+          try {
+            var parsed = JSON.parse(text);
+            if (parsed && parsed.error) message = parsed.error;
+          } catch (ignored) { /* not json, use raw text */ }
+          throw new Error(message || (res.status + " " + res.statusText));
+        });
+      }
+      return res.json();
+    });
+  }
+
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -485,6 +544,19 @@
           installProvider(row.id, installBtn);
         });
         tdAction.appendChild(installBtn);
+      }
+      if (row.kind === "installed") {
+        var discoverWrap = el("span", "discover-inline");
+        var discoverBtn = el("button", "small", "Discover models");
+        discoverBtn.type = "button";
+        var discoverResult = el("span", "discover-result");
+        discoverBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          discoverModels(row.id, discoverBtn, discoverResult);
+        });
+        discoverWrap.appendChild(discoverBtn);
+        discoverWrap.appendChild(discoverResult);
+        tdAction.appendChild(discoverWrap);
       }
       tr.appendChild(tdAction);
 
@@ -564,6 +636,249 @@
       button.disabled = false;
       button.textContent = originalText;
       showProvidersToast("Install failed: " + err.message, false);
+    });
+  }
+
+  // Discovers an installed provider's live model catalog (POST .../models/discover), shows the
+  // result inline next to the button, then refreshes the routing catalog so its add-controls
+  // pick up the new models.
+  function discoverModels(providerId, button, resultEl) {
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "Discovering…";
+    resultEl.textContent = "";
+    resultEl.classList.remove("err");
+
+    jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/models/discover", { method: "POST" })
+      .then(function (payload) {
+        var count = (payload && payload.models && payload.models.length) || 0;
+        resultEl.textContent = count + (count === 1 ? " model" : " models");
+        return loadRouting();
+      })
+      .catch(function (err) {
+        resultEl.classList.add("err");
+        resultEl.textContent = err.message;
+      })
+      .then(function () {
+        button.disabled = false;
+        button.textContent = originalText;
+      });
+  }
+
+  // -- routing (tier -> ordered provider/model chains) --
+
+  var routingAvailable = false;
+  var routingCatalog = {}; // provider -> {models:{id:{name,..}}, ranking:[..]}
+  var routingTiers = [];
+  var routingMap = {};     // tier -> [{provider,model},..] -- the editable working copy
+
+  // A stored slot is either a single {provider,model} object (legacy) or an ordered chain
+  // (array of them); normalize both shapes to an array so the UI only ever deals with one.
+  function normalizeChain(raw) {
+    if (Array.isArray(raw)) return raw.slice();
+    if (raw && typeof raw === "object") return [raw];
+    return [];
+  }
+
+  function showRoutingToast(message, ok) {
+    var toast = document.getElementById("routing-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  function hideRoutingToast() {
+    document.getElementById("routing-toast").className = "toast hidden";
+  }
+
+  function loadRouting() {
+    hideRoutingToast();
+    return Promise.all([
+      fetchOrNull404("/api/routing/model-map"),
+      fetchOrNull404("/api/routing/catalog")
+    ]).then(function (results) {
+      var mapView = results[0];
+      var catalog = results[1];
+      if (mapView === null || catalog === null) {
+        routingAvailable = false;
+        renderRoutingUnavailable();
+        return;
+      }
+      routingAvailable = true;
+      routingTiers = mapView.tiers || [];
+      routingCatalog = catalog || {};
+      routingMap = {};
+      routingTiers.forEach(function (tier) {
+        routingMap[tier] = normalizeChain(mapView.map && mapView.map[tier]);
+      });
+      renderRouting();
+    }).catch(function (err) {
+      routingAvailable = false;
+      renderRoutingUnavailable("Failed to load routing: " + err.message);
+    });
+  }
+
+  function renderRoutingUnavailable(message) {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+    body.appendChild(el("div", "empty-state", message || "Routing management unavailable on this server."));
+  }
+
+  function renderRouting() {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+
+    if (!routingTiers.length) {
+      body.appendChild(el("div", "empty-state", "No tiers detected yet — discover a provider's models first."));
+      return;
+    }
+
+    routingTiers.forEach(function (tier) {
+      body.appendChild(buildTierRow(tier));
+    });
+
+    var actions = el("div", "routing-actions");
+    var saveBtn = el("button", "primary small", "Save");
+    saveBtn.type = "button";
+    saveBtn.id = "save-routing-button";
+    saveBtn.addEventListener("click", saveRoutingMap);
+    actions.appendChild(saveBtn);
+    body.appendChild(actions);
+  }
+
+  function buildTierRow(tier) {
+    var row = el("div", "tier-row");
+    row.appendChild(el("div", "tier-name", tier));
+
+    var list = el("div", "chain-list");
+    var chain = routingMap[tier] || [];
+    if (!chain.length) {
+      list.appendChild(el("div", "chain-empty", "No models assigned."));
+    }
+    chain.forEach(function (entry, index) {
+      list.appendChild(buildChainItem(tier, index, chain.length));
+    });
+    row.appendChild(list);
+
+    row.appendChild(buildAddChainRow(tier));
+    return row;
+  }
+
+  function buildChainItem(tier, index, length) {
+    var entry = routingMap[tier][index];
+    var item = el("div", "chain-item");
+    item.appendChild(el("span", "chain-label", entry.provider + " · " + entry.model));
+
+    var upBtn = el("button", "subtle small", "↑");
+    upBtn.type = "button";
+    upBtn.disabled = index === 0;
+    upBtn.addEventListener("click", function () { moveChainEntry(tier, index, -1); });
+    item.appendChild(upBtn);
+
+    var downBtn = el("button", "subtle small", "↓");
+    downBtn.type = "button";
+    downBtn.disabled = index === length - 1;
+    downBtn.addEventListener("click", function () { moveChainEntry(tier, index, 1); });
+    item.appendChild(downBtn);
+
+    var removeBtn = el("button", "danger small", "✕");
+    removeBtn.type = "button";
+    removeBtn.addEventListener("click", function () { removeChainEntry(tier, index); });
+    item.appendChild(removeBtn);
+
+    return item;
+  }
+
+  function moveChainEntry(tier, index, delta) {
+    var chain = routingMap[tier];
+    var target = index + delta;
+    if (target < 0 || target >= chain.length) return;
+    var tmp = chain[index];
+    chain[index] = chain[target];
+    chain[target] = tmp;
+    renderRouting();
+  }
+
+  function removeChainEntry(tier, index) {
+    routingMap[tier].splice(index, 1);
+    renderRouting();
+  }
+
+  function buildAddChainRow(tier) {
+    var row = el("div", "add-chain-row");
+    var providerIds = Object.keys(routingCatalog);
+
+    var providerSelect = el("select");
+    var modelSelect = el("select");
+
+    function refreshModelOptions() {
+      modelSelect.innerHTML = "";
+      var providerEntry = routingCatalog[providerSelect.value];
+      var models = (providerEntry && providerEntry.models) || {};
+      var modelIds = Object.keys(models);
+      if (!modelIds.length) {
+        var noneOpt = el("option", null, "no models discovered");
+        noneOpt.value = "";
+        modelSelect.appendChild(noneOpt);
+        return;
+      }
+      modelIds.forEach(function (modelId) {
+        var modelObj = models[modelId];
+        var label = (modelObj && modelObj.name) || modelId;
+        var opt = el("option", null, label);
+        opt.value = modelId;
+        modelSelect.appendChild(opt);
+      });
+    }
+
+    if (!providerIds.length) {
+      var noProvOpt = el("option", null, "no providers discovered");
+      noProvOpt.value = "";
+      providerSelect.appendChild(noProvOpt);
+    } else {
+      providerIds.forEach(function (pid) {
+        var opt = el("option", null, pid);
+        opt.value = pid;
+        providerSelect.appendChild(opt);
+      });
+    }
+    providerSelect.addEventListener("change", refreshModelOptions);
+    refreshModelOptions();
+
+    var addBtn = el("button", "small", "Add");
+    addBtn.type = "button";
+    addBtn.addEventListener("click", function () {
+      var provider = providerSelect.value;
+      var model = modelSelect.value;
+      if (!provider || !model) return;
+      routingMap[tier] = routingMap[tier] || [];
+      routingMap[tier].push({ provider: provider, model: model });
+      renderRouting();
+    });
+    if (!providerIds.length) addBtn.disabled = true;
+
+    row.appendChild(providerSelect);
+    row.appendChild(modelSelect);
+    row.appendChild(addBtn);
+    return row;
+  }
+
+  function saveRoutingMap() {
+    var saveBtn = document.getElementById("save-routing-button");
+    saveBtn.disabled = true;
+    hideRoutingToast();
+
+    jsonFetch("/api/routing/model-map", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ map: routingMap })
+    }).then(function (result) {
+      var warnings = (result && result.warnings) || [];
+      var message = warnings.length ? "Saved with warnings: " + warnings.join(", ") : "Saved.";
+      showRoutingToast(message, warnings.length === 0);
+    }).catch(function (err) {
+      showRoutingToast("Save failed: " + err.message, false);
+    }).then(function () {
+      saveBtn.disabled = false;
     });
   }
 
@@ -812,12 +1127,14 @@
     if (event.key === "Enter") sendChat();
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
+  document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
   document.getElementById("toggle-add-account-button").addEventListener("click", showAddAccountForm);
   document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
 
   loadProvidersInitial();
   loadModels();
+  loadRouting();
 })();
 </script>
 </body>
