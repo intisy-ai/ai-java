@@ -38,4 +38,10 @@ tasks.named("run") {
 tasks.named("test") {
     dependsOn(stageProviders)
     systemProperty("exampleserver.providersDir", providersDir.get().asFile.absolutePath)
+    // Phase 7: the two REAL provider jars (antigravity/claude) are pre-built out-of-band in
+    // their own repos (ai-java cannot includeBuild them -- see phase-7-e2e-interface-map.md §6)
+    // and staged here manually. Default to build/orgProviders (empty in CI); the e2e test skips
+    // via Assumptions when the jars aren't present. Override with -PorgProvidersDir=<dir>.
+    systemProperty("exampleserver.orgProvidersDir",
+        (project.findProperty("orgProvidersDir") ?: layout.buildDirectory.dir("orgProviders").get().asFile.absolutePath).toString())
 }
