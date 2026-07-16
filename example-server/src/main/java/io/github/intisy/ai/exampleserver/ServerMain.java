@@ -1,6 +1,7 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
@@ -60,8 +61,9 @@ public final class ServerMain {
 
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
             RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), profile, holder, ai.logger());
+            QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
-                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing);
+                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota);
             ExampleServer server = ExampleServer.start(router, port, api);
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
@@ -70,6 +72,7 @@ public final class ServerMain {
             System.out.println("  GET  /api/providers/available   list installable providers");
             System.out.println("  POST /api/providers/install      {\"name\":\"<entry name>\"}");
             System.out.println("  POST /api/providers/{id}/models/discover");
+            System.out.println("  POST /api/providers/{id}/quota/refresh");
             System.out.println("  GET  /api/routing/catalog");
             System.out.println("  GET  /api/routing/model-map");
             System.out.println("  PUT  /api/routing/model-map      {\"map\":{...}}");

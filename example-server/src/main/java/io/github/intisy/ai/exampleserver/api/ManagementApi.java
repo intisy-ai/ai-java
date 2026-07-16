@@ -3,6 +3,7 @@ package io.github.intisy.ai.exampleserver.api;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
@@ -38,6 +39,7 @@ import java.util.function.Supplier;
  * POST   /api/providers/{id}/accounts/{accId}/disable    -> 204
  * DELETE /api/providers/{id}/accounts/{accId}            -> 204
  * POST   /api/providers/{id}/models/discover              -> 200 {"provider":..,"models":[...]}
+ * POST   /api/providers/{id}/quota/refresh                -> 200 {"accounts":[...]}
  * GET    /api/routing/catalog                            -> 200 <models.json>
  * GET    /api/routing/model-map                          -> 200 {"tiers":[...],"map":{...}}
  * PUT    /api/routing/model-map          {"map":{...}}    -> 200 {"ok":true,"warnings":[...]}
@@ -55,7 +57,8 @@ import java.util.function.Supplier;
  *
  * <p>The {@code /api/routing/*} + discover routes are only served once a {@link RoutingAdmin} is
  * wired in (the 7-arg constructor); callers still on an older constructor get a plain 404 for
- * these paths instead of an NPE.
+ * these paths instead of an NPE. Same story for {@code /quota/refresh} and {@link QuotaAdmin}
+ * (the 8-arg constructor).
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -66,9 +69,10 @@ public final class ManagementApi implements HttpHandler {
     private final Path providersDir;
     private final ProviderRegistryHolder holder;
     private final RoutingAdmin routing;
+    private final QuotaAdmin quota;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
-        this(providerIds, admin, json, null, null, null, null);
+        this(providerIds, admin, json, null, null, null, null, null);
     }
 
     /**
@@ -76,22 +80,33 @@ public final class ManagementApi implements HttpHandler {
      * {@code POST /api/providers/install}) on top of the base account-admin routes.
      * {@code source} lists/downloads installable provider jars, {@code providersDir} is where they
      * land on disk, and {@code holder} is refreshed after a successful download so the newly
-     * installed provider becomes routable without a restart. No {@link RoutingAdmin} — the
-     * {@code /api/routing/*} + discover routes 404 (see {@link #ManagementApi(Supplier, AccountAdmin,
-     * JsonCodec, ProviderSource, Path, ProviderRegistryHolder, RoutingAdmin)} for the full wiring).
+     * installed provider becomes routable without a restart. No {@link RoutingAdmin}/{@link
+     * QuotaAdmin} — the {@code /api/routing/*}, discover, and quota/refresh routes 404 (see the
+     * full 8-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder) {
-        this(providerIds, admin, json, source, providersDir, holder, null);
+        this(providerIds, admin, json, source, providersDir, holder, null, null);
     }
 
     /**
-     * Full constructor: adds the routing surface ({@code POST .../models/discover},
-     * {@code GET/PUT /api/routing/*}) backed by {@code routing}.
+     * Adds the routing surface ({@code POST .../models/discover}, {@code GET/PUT
+     * /api/routing/*}) backed by {@code routing}. No {@link QuotaAdmin} — {@code quota/refresh}
+     * 404s (see the full 8-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, null);
+    }
+
+    /**
+     * Full constructor: adds the quota surface ({@code POST .../quota/refresh}) backed by
+     * {@code quota}.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -99,6 +114,7 @@ public final class ManagementApi implements HttpHandler {
         this.providersDir = providersDir;
         this.holder = holder;
         this.routing = routing;
+        this.quota = quota;
     }
 
     @Override
@@ -171,6 +187,12 @@ public final class ManagementApi implements HttpHandler {
         if ("PUT".equals(method) && seg.length == 3
                 && "api".equals(seg[0]) && "routing".equals(seg[1]) && "model-map".equals(seg[2])) {
             handleModelMapPut(exchange);
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 5
+                && "api".equals(seg[0]) && "providers".equals(seg[1])
+                && "quota".equals(seg[3]) && "refresh".equals(seg[4])) {
+            handleQuotaRefresh(exchange, decode(seg[2]));
             return;
         }
         handleNotFound(exchange);
@@ -337,6 +359,20 @@ public final class ManagementApi implements HttpHandler {
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) mapObj;
             respondJson(exchange, 200, routing.putModelMap(map));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handleQuotaRefresh(HttpExchange exchange, String providerId) throws IOException {
+        if (quota == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            respondJson(exchange, 200, quota.refresh(providerId));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());

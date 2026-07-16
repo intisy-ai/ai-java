@@ -13,7 +13,9 @@ import java.util.HashMap;
  * request (via {@link HandlerCtx#model}) plus a canned assistant message. This is the "it works"
  * half of the {@code :examples} showcase's fallback chain. It also answers {@code GET /v1/models}
  * with a canned catalog, the same discovery branch a real provider (claude/antigravity) gains —
- * this is what {@code RoutingAdmin.discover} exercises in tests, with no network involved.
+ * this is what {@code RoutingAdmin.discover} exercises in tests, with no network involved. It
+ * likewise answers {@code GET /v1/quota} with a canned accounts/quota catalog, the same branch a
+ * real provider gains — this is what {@code QuotaAdmin.refresh} exercises in tests.
  *
  * <p>Shape discipline mirrors stub-auth's {@code StubProvider}: no gson, no reflection, no
  * {@code java.net}/{@code java.nio} — just hand-rolled JSON string building — so the jar stays
@@ -38,6 +40,9 @@ public final class EchoProvider implements Provider {
         if (request != null && "GET".equals(request.method) && "/v1/models".equals(request.url)) {
             return modelsResponse();
         }
+        if (request != null && "GET".equals(request.method) && "/v1/quota".equals(request.url)) {
+            return quotaResponse();
+        }
 
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
@@ -48,6 +53,23 @@ public final class EchoProvider implements Provider {
         response.headers = new HashMap<>();
         response.headers.put("content-type", "application/json");
         response.body = anthropicMessageBody(servedModel);
+        return response;
+    }
+
+    // Canned quota catalog: one active account with a single "5-hour" quota bucket -- shape
+    // matches what QuotaAdmin.refresh expects back ({accounts:[{id,status,quota:[...]}]}).
+    private static HttpResponse quotaResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"accounts\":[{"
+                + "\"id\":\"a1\","
+                + "\"status\":\"active\","
+                + "\"quota\":[{\"label\":\"5-hour\",\"remainingFraction\":0.8,\"resetTime\":123}]"
+                + "}]"
+                + "}";
         return response;
     }
 
