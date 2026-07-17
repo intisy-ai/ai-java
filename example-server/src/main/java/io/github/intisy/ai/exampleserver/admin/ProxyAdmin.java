@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * UI-safe facade over {@link ProxyManager} (the admin-class convention), so {@code ManagementApi}
- * never touches the manager's internals directly. Unknown-app is surfaced as
+ * never touches the manager's internals directly. Unknown-id is surfaced as
  * {@link IllegalArgumentException} for the API's 400 path.
  */
 public final class ProxyAdmin {
@@ -20,15 +20,15 @@ public final class ProxyAdmin {
         return manager.list();
     }
 
-    public ProxyManager.ProxyStatus setPort(String app, int port) {
-        return manager.setPort(app, port);
+    public ProxyManager.ProxyStatus setPort(String id, int port) {
+        return manager.setPort(id, port);
     }
 
-    public ProxyManager.ProxyStatus start(String app) {
-        return manager.start(app);
+    public ProxyManager.ProxyStatus start(String id) {
+        return manager.start(id);
     }
 
-    public ProxyManager.ProxyStatus stop(String app) {
-        return manager.stop(app);
+    public ProxyManager.ProxyStatus stop(String id) {
+        return manager.stop(id);
     }
 }

@@ -7,8 +7,11 @@ import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProxyDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
+import io.github.intisy.ai.shared.routing.ProxyPlugin;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
@@ -28,6 +31,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Scanner;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -43,21 +48,26 @@ import static org.junit.jupiter.api.Assertions.fail;
  * harness style. A file-backed store is used (not memory) so {@code proxies.json} round-trips the
  * way it would in a real boot. The test actually starts a proxy on an ephemeral port (bound via
  * {@code {"port":0}}, never a fixed port, so the test is hermetic) and confirms it serves
- * {@code /healthz} for real before stopping it again.
+ * {@code /healthz} for real before stopping it again. The proxy under test is an INSTALLED
+ * {@link ProxyPlugin} fixture (not a hardcoded "claude-code" app) — {@link #stageProxyJar} packages
+ * it into a real jar the same way {@link ProxyManagerTest}'s fixtures are staged.
  */
 class ProxyApiIntegrationTest {
 
     private static final String CONFIG_FILE = "proxy-api-routing.json";
+    private static final String PROXY_ID = "routing-proxy";
     private static final Pattern PORT_PATTERN = Pattern.compile("\"port\"\\s*:\\s*(\\d+)");
 
     private AiJava ai;
     private ExampleServer server;
     private ProviderRegistryHolder holder;
+    private ProxyRegistryHolder proxyHolder;
     private ProxyManager proxyManager;
 
     @BeforeEach
-    void setUp(@TempDir Path providersDir, @TempDir Path configDir) throws IOException {
+    void setUp(@TempDir Path providersDir, @TempDir Path proxiesDir, @TempDir Path configDir) throws IOException {
         stageProviderJar(providersDir);
+        stageProxyJar(proxiesDir);
 
         ai = AiJava.builder().storage(Storage.file(configDir)).build();
         Store store = ai.store();
@@ -66,6 +76,8 @@ class ProxyApiIntegrationTest {
 
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+        proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
+        assertTrue(proxyHolder.listProxyIds().contains(PROXY_ID), proxyHolder.listProxyIds().toString());
 
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
@@ -73,7 +85,7 @@ class ProxyApiIntegrationTest {
         RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
         RoutingAdmin routing = new RoutingAdmin(store, json, profile, holder, ai.logger());
         QuotaAdmin quota = new QuotaAdmin(store, json, holder, ai.logger());
-        proxyManager = new ProxyManager(ai, holder, store, json, ai.logger());
+        proxyManager = new ProxyManager(ai, holder, proxyHolder, store, json, ai.logger());
         ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
                 routing, quota, null, null, proxyAdmin);
@@ -88,6 +100,7 @@ class ProxyApiIntegrationTest {
         if (proxyManager != null) proxyManager.stopAll(); // release any ephemeral proxy port
         if (server != null) server.stop();
         if (holder != null && holder.get() != null) holder.get().close();
+        if (proxyHolder != null && proxyHolder.get() != null) proxyHolder.get().close();
         if (ai != null) ai.close();
     }
 
@@ -103,27 +116,57 @@ class ProxyApiIntegrationTest {
         fail("no staged provider jar found in " + staged);
     }
 
+    /**
+     * Packages the already-compiled {@link RoutingFixtureProxyPlugin} {@code .class} plus a real
+     * {@code META-INF/services} registration into an actual jar in {@code proxiesDir} — mirrors
+     * {@code ProxyManagerTest#stageProxyJar}, kept local here since this test drives the proxy
+     * through the HTTP API rather than {@link ProxyManager} directly.
+     */
+    private static void stageProxyJar(Path proxiesDir) throws IOException {
+        Path jarPath = proxiesDir.resolve("fixture-proxy.jar");
+        String className = RoutingFixtureProxyPlugin.class.getName();
+        String classResourcePath = className.replace('.', '/') + ".class";
+        try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(jarPath))) {
+            try (InputStream in = ProxyApiIntegrationTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
+                if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
+                jar.putNextEntry(new JarEntry(classResourcePath));
+                jar.write(in.readAllBytes());
+                jar.closeEntry();
+            }
+            jar.putNextEntry(new JarEntry("META-INF/services/" + ProxyPlugin.class.getName()));
+            jar.write(className.getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
+        }
+    }
+
     @Test
-    void listReturnsClaudeCode() throws IOException {
+    void listReturnsInstalledProxy() throws IOException {
         Response r = get("/api/proxies");
         assertEquals(200, r.status, r.body);
-        assertTrue(r.body.contains("claude-code"), r.body);
+        assertTrue(r.body.contains(PROXY_ID), r.body);
     }
 
     @Test
     void putPortStartThenStop() throws IOException {
-        assertEquals(200, put("/api/proxies/claude-code", "{\"port\":0}").status); // 0 -> ephemeral
-        Response started = post("/api/proxies/claude-code/start");
+        assertEquals(200, put("/api/proxies/" + PROXY_ID, "{\"port\":0}").status); // 0 -> ephemeral
+        Response started = post("/api/proxies/" + PROXY_ID + "/start");
         assertEquals(200, started.status, started.body);
         assertTrue(started.body.contains("\"running\":true"), started.body);
         int port = extractPort(started.body);
         assertEquals(200, healthz(port));            // the started proxy actually serves
-        assertEquals(200, post("/api/proxies/claude-code/stop").status);
+        assertEquals(200, post("/api/proxies/" + PROXY_ID + "/stop").status);
     }
 
     @Test
-    void unknownAppIs400() throws IOException {
+    void unknownIdIs400() throws IOException {
         assertEquals(400, post("/api/proxies/nope/start").status);
+    }
+
+    /** Test-only proxy plugin whose profile matches this test's own echo-tiers routing profile. */
+    public static final class RoutingFixtureProxyPlugin implements ProxyPlugin {
+        @Override public String id() { return PROXY_ID; }
+        @Override public String displayName() { return "Routing Proxy"; }
+        @Override public RoutingProfile profile() { return ServerProfile.echoTiers(CONFIG_FILE); }
     }
 
     private static int extractPort(String body) {

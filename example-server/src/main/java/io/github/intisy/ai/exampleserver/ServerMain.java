@@ -10,6 +10,8 @@ import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProxyDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
@@ -53,6 +55,9 @@ public final class ServerMain {
         ProviderRegistry registry = ProviderDiscovery.resolve(providersDir);
         ProviderRegistryHolder holder = new ProviderRegistryHolder(registry);
 
+        Path proxiesDir = proxiesDir();
+        ProxyRegistryHolder proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
+
         try (AiJava ai = AiJava.builder()
                 .backend(backend)
                 .build()) {
@@ -67,7 +72,7 @@ public final class ServerMain {
             QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ConfigAdmin config = new ConfigAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin);
-            ProxyManager proxyManager = new ProxyManager(ai, holder, ai.store(), ai.jsonCodec(), ai.logger());
+            ProxyManager proxyManager = new ProxyManager(ai, holder, proxyHolder, ai.store(), ai.jsonCodec(), ai.logger());
             ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
                     new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config, oauth,
@@ -210,6 +215,11 @@ public final class ServerMain {
 
     private static Path providersDir() {
         String dir = System.getProperty("exampleserver.providersDir", "providers");
+        return Paths.get(dir);
+    }
+
+    private static Path proxiesDir() {
+        String dir = System.getProperty("exampleserver.proxiesDir", "proxies");
         return Paths.get(dir);
     }
 }
