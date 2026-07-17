@@ -1,13 +1,15 @@
 name: Sync Experimental to Main
 
-# Mirrors docker-java's sync-development-to-main: every push to the working branch (experimental)
-# is auto-merged into main, which is the release branch (tags are cut from main). README.md
-# conflicts are auto-resolved to main's copy because the readme-dependency workflow regenerates
-# the README on every release, so experimental's copy is never authoritative.
+# Merge the working branch (experimental) into main (the release branch) ONLY when a release tag is
+# pushed — the same trigger as build.yml (which publishes the jar). A plain push to experimental just
+# runs tests (test.yml); it does NOT touch main. So the flow is: push experimental freely to save
+# work + run CI, then push a tag to release (merge experimental->main + publish + regenerate README).
+# README.md conflicts are auto-resolved to main's copy because readme-dependency regenerates it on
+# every release, so experimental's copy is never authoritative.
 on:
   push:
-    branches:
-      - experimental
+    tags:
+      - "*"
 
 permissions:
   contents: write
