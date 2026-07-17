@@ -91,6 +91,18 @@ class DashboardIntegrationTest {
         assertTrue(r.body.contains("id=\"oauth-login-button\""), "login button missing");
     }
 
+    @Test
+    void dashboardIncludesProxiesCard() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("id=\"proxies-card\""), "proxies card missing");
+        assertTrue(html.contains("id=\"proxies-body\""), "proxies body missing");
+    }
+
+    @Test
+    void dashboardIncludesRoutingAppSelector() throws IOException {
+        assertTrue(get("/").body.contains("id=\"routing-app-select\""), "routing app selector missing");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

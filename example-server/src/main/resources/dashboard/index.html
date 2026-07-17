@@ -225,6 +225,7 @@
   button + button { margin-left: 0.35rem; }
 
   .card-head-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .card-head-actions select { width: auto; }
   .prov-name { font-weight: 600; font-size: 0.88rem; }
   .prov-asset { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; margin-top: 0.1rem; }
   .prov-count { color: var(--muted); font-size: 0.76rem; margin-top: 0.2rem; }
@@ -268,6 +269,12 @@
   .add-chain-row { display: flex; gap: 0.4rem; align-items: center; }
   .add-chain-row select { width: auto; flex: 1; }
   .routing-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; margin-top: 0.85rem; }
+
+  .proxy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-soft); }
+  .proxy-row:last-child { border-bottom: none; }
+  .proxy-app { flex: 1; font-weight: 600; font-size: 0.85rem; }
+  .proxy-port { width: 6.5rem; flex: none; }
+  .proxy-error { color: var(--danger); font-size: 0.76rem; overflow-wrap: anywhere; }
 
   select, input[type="text"], input[type="password"], textarea {
     width: 100%;
@@ -365,12 +372,33 @@
       <h2>Routing</h2>
       <div class="card-head-actions">
         <span class="hint">tier &rarr; provider/model chains</span>
+        <select class="small" id="routing-app-select">
+          <option value="">demo</option>
+          <option value="claude-code">claude-code</option>
+          <option value="opencode">opencode</option>
+        </select>
         <button class="small" id="refresh-routing-button" type="button">Refresh</button>
       </div>
     </div>
     <div id="routing-toast" class="toast hidden"></div>
     <div class="card-body">
       <div id="routing-body">
+        <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="proxies-card">
+    <div class="card-head">
+      <h2>Proxies</h2>
+      <div class="card-head-actions">
+        <span class="hint">per-app routing proxy</span>
+        <button class="small" id="refresh-proxies-button" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="proxies-toast" class="toast hidden"></div>
+    <div class="card-body">
+      <div id="proxies-body">
         <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
       </div>
     </div>
@@ -735,10 +763,18 @@
     document.getElementById("routing-toast").className = "toast hidden";
   }
 
+  // Reads the app selector and builds the "?app=..." query suffix for /api/routing/model-map
+  // calls; empty selection means the default (demo) profile, so no suffix is sent (back-compat).
+  function routingAppSuffix() {
+    var sel = document.getElementById("routing-app-select");
+    var app = sel ? sel.value : "";
+    return app ? ("?app=" + encodeURIComponent(app)) : "";
+  }
+
   function loadRouting() {
     hideRoutingToast();
     return Promise.all([
-      fetchOrNull404("/api/routing/model-map"),
+      fetchOrNull404("/api/routing/model-map" + routingAppSuffix()),
       fetchOrNull404("/api/routing/catalog")
     ]).then(function (results) {
       var mapView = results[0];
@@ -912,7 +948,7 @@
     saveBtn.disabled = true;
     hideRoutingToast();
 
-    jsonFetch("/api/routing/model-map", {
+    jsonFetch("/api/routing/model-map" + routingAppSuffix(), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ map: routingMap })
@@ -925,6 +961,82 @@
     }).then(function () {
       saveBtn.disabled = false;
     });
+  }
+
+  // -- proxies (per-app JVM routing proxy) --
+
+  function showProxiesToast(message, ok) {
+    var toast = document.getElementById("proxies-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  // Hides the whole card on 404 (older server built without a ProxyAdmin wired in).
+  function loadProxies() {
+    var body = document.getElementById("proxies-body");
+    fetchOrNull404("/api/proxies").then(function (rows) {
+      if (!rows) { document.getElementById("proxies-card").style.display = "none"; return; }
+      renderProxies(rows);
+    }).catch(function (err) {
+      body.innerHTML = "";
+      body.appendChild(el("div", "loading-row", "Failed to load proxies: " + err.message));
+    });
+  }
+
+  function renderProxies(rows) {
+    var body = document.getElementById("proxies-body");
+    body.innerHTML = "";
+    rows.forEach(function (row) {
+      var line = el("div", "proxy-row");
+      line.appendChild(el("span", "proxy-app", row.app + " (" + row.profile + ")"));
+
+      var port = el("input", "proxy-port");
+      port.type = "number";
+      port.value = row.port;
+      port.id = "proxy-port-" + row.app;
+      line.appendChild(port);
+
+      line.appendChild(badge(row.running ? "ready" : "disabled"));
+      if (row.error) line.appendChild(el("span", "proxy-error", row.error));
+
+      var save = el("button", "small", "Save port");
+      save.type = "button";
+      save.addEventListener("click", function () { saveProxyPort(row.app); });
+      line.appendChild(save);
+
+      var toggle = el("button", "small", row.running ? "Stop" : "Start");
+      toggle.type = "button";
+      toggle.addEventListener("click", function () { toggleProxy(row.app, !row.running); });
+      line.appendChild(toggle);
+
+      body.appendChild(line);
+    });
+  }
+
+  function saveProxyPort(app) {
+    var input = document.getElementById("proxy-port-" + app);
+    var port = Number(input.value);
+    jsonFetch("/api/proxies/" + encodeURIComponent(app), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ port: port })
+    }).then(function () { showProxiesToast("Saved port for " + app + ".", true); loadProxies(); })
+      .catch(function (err) { showProxiesToast("Save failed: " + err.message, false); });
+  }
+
+  // A start that comes back with running:false + an error (e.g. port already in use) must
+  // surface that error, not be reported as a success.
+  function toggleProxy(app, start) {
+    jsonFetch("/api/proxies/" + encodeURIComponent(app) + (start ? "/start" : "/stop"), { method: "POST" })
+      .then(function (status) {
+        if (start && status && status.running === false && status.error) {
+          showProxiesToast(app + " failed to start: " + status.error, false);
+        } else {
+          showProxiesToast(app + (start ? " started." : " stopped."), true);
+        }
+        loadProxies();
+      })
+      .catch(function (err) { showProxiesToast((start ? "Start" : "Stop") + " failed: " + err.message, false); });
   }
 
   // -- accounts --
@@ -1404,6 +1516,8 @@
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
   document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
+  document.getElementById("routing-app-select").addEventListener("change", loadRouting);
+  document.getElementById("refresh-proxies-button").addEventListener("click", loadProxies);
   document.getElementById("refresh-quota-button").addEventListener("click", function () {
     loadQuota(selectedProviderId);
   });
@@ -1416,6 +1530,7 @@
   loadProvidersInitial();
   loadModels();
   loadRouting();
+  loadProxies();
 })();
 </script>
 </body>
