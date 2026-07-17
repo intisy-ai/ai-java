@@ -187,9 +187,9 @@
   th, td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--border-soft); }
   th { color: var(--muted); font-weight: 550; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
   tbody tr:last-child td { border-bottom: none; }
-  tr.selectable { cursor: pointer; transition: background-color 120ms ease; }
-  tr.selectable:hover { background: var(--panel-2); }
-  tr.selectable.active { background: var(--info-bg); }
+  .selectable { cursor: pointer; transition: background-color 120ms ease; }
+  .selectable:hover { background: var(--panel-2); }
+  .selectable.active { background: var(--info-bg); }
   td.actions { text-align: right; white-space: nowrap; }
 
   .badge {
@@ -387,32 +387,11 @@
     </div>
   </section>
 
-  <section class="card" id="routing-card">
-    <div class="card-head">
-      <h2>Routing</h2>
-      <div class="card-head-actions">
-        <span class="hint">tier &rarr; provider/model chains</span>
-        <select class="small" id="routing-app-select">
-          <option value="">demo</option>
-          <option value="claude-code">claude-code</option>
-          <option value="opencode">opencode</option>
-        </select>
-        <button class="small" id="refresh-routing-button" type="button">Refresh</button>
-      </div>
-    </div>
-    <div id="routing-toast" class="toast hidden"></div>
-    <div class="card-body">
-      <div id="routing-body">
-        <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
-      </div>
-    </div>
-  </section>
-
   <section class="card" id="proxies-card">
     <div class="card-head">
       <h2>Proxies</h2>
       <div class="card-head-actions">
-        <span class="hint">per-app routing proxy</span>
+        <span class="hint">per-app routing proxy &mdash; click a row for its routing</span>
         <button class="small" id="refresh-proxies-button" type="button">Refresh</button>
       </div>
     </div>
@@ -420,6 +399,16 @@
     <div class="card-body">
       <div id="proxies-body">
         <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+      </div>
+      <div id="proxy-settings" style="display:none;margin-top:1rem;padding-top:0.85rem;border-top:1px solid var(--border-soft);">
+        <div class="card-head-actions">
+          <strong id="proxy-settings-title">Routing</strong>
+          <button class="small" id="refresh-routing-button" type="button">Refresh</button>
+        </div>
+        <div id="routing-toast" class="toast hidden"></div>
+        <div id="routing-body">
+          <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+        </div>
       </div>
     </div>
   </section>
@@ -795,6 +784,7 @@
   var routingCatalog = {}; // provider -> {models:{id:{name,..}}, ranking:[..]}
   var routingTiers = [];
   var routingMap = {};     // tier -> [{provider,model},..] -- the editable working copy
+  var selectedProxyApp = null; // null/"" = server's default profile; else the selected proxy's app id
 
   // A stored slot is either a single {provider,model} object (legacy) or an ordered chain
   // (array of them); normalize both shapes to an array so the UI only ever deals with one.
@@ -814,11 +804,11 @@
     document.getElementById("routing-toast").className = "toast hidden";
   }
 
-  // Reads the app selector and builds the "?app=..." query suffix for /api/routing/model-map
-  // calls; empty selection means the default (demo) profile, so no suffix is sent (back-compat).
+  // Builds the "?app=..." query suffix for /api/routing/model-map calls from the currently
+  // selected proxy row; null/"" (the Server row) means the default profile, so no suffix is
+  // sent (back-compat).
   function routingAppSuffix() {
-    var sel = document.getElementById("routing-app-select");
-    var app = sel ? sel.value : "";
+    var app = selectedProxyApp;
     return app ? ("?app=" + encodeURIComponent(app)) : "";
   }
 
@@ -1034,12 +1024,24 @@
     });
   }
 
+  // Renders the Server row first (carries the "" / default-profile routing scope, no port or
+  // start/stop controls since it's the running example server itself), then one selectable row
+  // per proxy. Clicking any row opens that target's routing settings via selectProxy(app).
   function renderProxies(rows) {
     var body = document.getElementById("proxies-body");
     body.innerHTML = "";
+
+    var serverLine = el("div", "proxy-row selectable");
+    serverLine.dataset.app = "";
+    serverLine.appendChild(el("span", "proxy-app", "Server (this example server)"));
+    serverLine.addEventListener("click", function () { selectProxy(""); });
+    body.appendChild(serverLine);
+
     rows.forEach(function (row) {
-      var line = el("div", "proxy-row");
+      var line = el("div", "proxy-row selectable");
+      line.dataset.app = row.app;
       line.appendChild(el("span", "proxy-app", row.app + " (" + row.profile + ")"));
+      line.addEventListener("click", function () { selectProxy(row.app); });
 
       var port = el("input", "proxy-port");
       port.type = "number";
@@ -1052,15 +1054,42 @@
 
       var save = el("button", "small", "Save port");
       save.type = "button";
-      save.addEventListener("click", function () { saveProxyPort(row.app); });
+      save.addEventListener("click", function (evt) { evt.stopPropagation(); saveProxyPort(row.app); });
       line.appendChild(save);
 
       var toggle = el("button", "small", row.running ? "Stop" : "Start");
       toggle.type = "button";
-      toggle.addEventListener("click", function () { toggleProxy(row.app, !row.running); });
+      toggle.addEventListener("click", function (evt) { evt.stopPropagation(); toggleProxy(row.app, !row.running); });
       line.appendChild(toggle);
 
       body.appendChild(line);
+    });
+
+    // If the previously selected proxy disappeared (e.g. uninstalled), close its settings panel
+    // rather than leaving it open on a target that no longer exists.
+    if (selectedProxyApp && !rows.some(function (row) { return row.app === selectedProxyApp; })) {
+      selectedProxyApp = null;
+      document.getElementById("proxy-settings").style.display = "none";
+    }
+    markSelectedProxyRow();
+  }
+
+  // Opens the routing settings panel for the given proxy app ("" = the Server/default profile).
+  function selectProxy(app) {
+    selectedProxyApp = app;
+    var label = app ? app : "Server (this example server)";
+    document.getElementById("proxy-settings-title").textContent = "Routing — " + label;
+    document.getElementById("proxy-settings").style.display = "";
+    markSelectedProxyRow();
+    loadRouting();
+  }
+
+  // Highlights whichever proxy row matches the current selectedProxyApp, if any.
+  function markSelectedProxyRow() {
+    if (selectedProxyApp === null) return;
+    var rows = document.querySelectorAll("#proxies-body .proxy-row");
+    rows.forEach(function (row) {
+      row.classList.toggle("active", row.dataset.app === selectedProxyApp);
     });
   }
 
@@ -1680,7 +1709,6 @@
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
   document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
-  document.getElementById("routing-app-select").addEventListener("change", loadRouting);
   document.getElementById("refresh-proxies-button").addEventListener("click", loadProxies);
   document.getElementById("refresh-quota-button").addEventListener("click", function () {
     loadQuota(selectedProviderId);
@@ -1696,7 +1724,6 @@
 
   loadProvidersInitial();
   loadModels();
-  loadRouting();
   loadProxies();
 })();
 </script>

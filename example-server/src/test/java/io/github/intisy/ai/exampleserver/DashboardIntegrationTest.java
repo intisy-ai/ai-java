@@ -106,8 +106,17 @@ class DashboardIntegrationTest {
     }
 
     @Test
-    void dashboardIncludesRoutingAppSelector() throws IOException {
-        assertTrue(get("/").body.contains("id=\"routing-app-select\""), "routing app selector missing");
+    void routingIsNestedUnderProxies() throws IOException {
+        String html = get("/").body;
+        assertFalse(html.contains("id=\"routing-card\""), "standalone routing card should be removed");
+        assertTrue(html.contains("id=\"proxy-settings\""), "proxy settings panel missing");
+    }
+
+    @Test
+    void routingAppSelectorMovedIntoProxySettings() throws IOException {
+        String html = get("/").body;
+        assertFalse(html.contains("id=\"routing-app-select\""), "standalone routing app selector should be removed");
+        assertTrue(html.contains("selectProxy"), "proxy row selection handler missing");
     }
 
     @Test
