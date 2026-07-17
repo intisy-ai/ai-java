@@ -34,4 +34,36 @@ class ProviderRegistryHolderTest {
         // in use), exactly like ProviderRegistryTest's fromDirectory tests already document.
         holder.get().close();
     }
+
+    @Test
+    void uninstallClosesRegistryBeforeDeletingJar_thenRebuildsWithoutIt(@TempDir Path dir) throws Exception {
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+
+        String staged = System.getProperty("exampleserver.providersDir");
+        Path srcJar = null;
+        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+            if (p.getFileName().toString().endsWith(".jar")) { srcJar = p; break; }
+        }
+        Path jar = dir.resolve(srcJar.getFileName());
+        Files.copy(srcJar, jar);
+
+        holder.refresh(dir);
+        assertTrue(holder.listProviderIds().contains("echo"));
+
+        boolean ok = holder.uninstall("echo", dir);
+
+        assertTrue(ok);
+        // On Windows, this would fail if the URLClassLoader hadn't been close()'d before the
+        // delete -- a still-open jar handle blocks Files.deleteIfExists with a sharing violation.
+        assertFalse(Files.exists(jar), "jar should be deleted from disk");
+        assertFalse(holder.listProviderIds().contains("echo"));
+
+        holder.get().close();
+    }
+
+    @Test
+    void uninstallUnknownProviderIdIsANoOp(@TempDir Path dir) {
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        assertFalse(holder.uninstall("does-not-exist", dir));
+    }
 }

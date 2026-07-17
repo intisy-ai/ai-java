@@ -40,6 +40,7 @@ import java.util.function.Supplier;
  * GET    /api/providers                                 -> [{"id":..,"accounts":&lt;int&gt;}]
  * GET    /api/providers/available                        -> [{"name":..,"assetName":..,"installed":bool}]
  * POST   /api/providers/install         {"name":..}       -> 200 {"installed":true,"providers":[...]}
+ * DELETE /api/providers/{id}                             -> 200 {"uninstalled":true,"providers":[...]} / 404
  * GET    /api/providers/{id}/accounts                    -> [AccountView...]
  * POST   /api/providers/{id}/accounts    {refresh,...}    -> 200 AccountView (seed from a pasted token)
  * POST   /api/providers/{id}/accounts/{accId}/enable     -> 204
@@ -207,6 +208,11 @@ public final class ManagementApi implements HttpHandler {
             handleInstall(exchange);
             return;
         }
+        if ("DELETE".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "providers".equals(seg[1])) {
+            handleUninstall(exchange, decode(seg[2]));
+            return;
+        }
         if ("GET".equals(method) && seg.length == 4
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "accounts".equals(seg[3])) {
             handleListAccounts(exchange, decode(seg[2]));
@@ -364,6 +370,20 @@ public final class ManagementApi implements HttpHandler {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("installed", true);
+        body.put("providers", holder.listProviderIds());
+        respondJson(exchange, 200, body);
+    }
+
+    /** Uninstalls a provider: deletes its jar (Windows-safe close-before-delete, see
+     *  {@link ProviderRegistryHolder#uninstall}) and rebuilds the live registry without it. */
+    private void handleUninstall(HttpExchange exchange, String providerId) throws IOException {
+        boolean ok = holder.uninstall(providerId, providersDir);
+        if (!ok) {
+            handleNotFound(exchange);
+            return;
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("uninstalled", true);
         body.put("providers", holder.listProviderIds());
         respondJson(exchange, 200, body);
     }

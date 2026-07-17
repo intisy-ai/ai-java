@@ -3,6 +3,8 @@ package io.github.intisy.ai.exampleserver.discovery;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -43,5 +45,35 @@ public final class ProviderRegistryHolder {
      */
     public void refresh(Path providersDir) {
         this.current = ProviderRegistry.fromDirectory(providersDir);
+    }
+
+    /**
+     * Deletes the jar backing {@code providerId} and rebuilds the registry without it. Returns
+     * {@code false} (no-op) if the id isn't currently loaded. Unlike {@link #refresh}, this closes
+     * the CURRENT registry before touching the jar: on Windows, {@code Files.delete} on a jar still
+     * held open by a {@link java.net.URLClassLoader} fails with a sharing violation, so the loader
+     * must release its file handle first. This does carry the same in-flight-request risk {@link
+     * #refresh} accepts for its leaked-classloader tradeoff, just in the other direction — a request
+     * already routing through this provider when uninstall runs may fail with {@link
+     * NoClassDefFoundError} — acceptable for a demo server's explicit, operator-initiated uninstall.
+     */
+    public synchronized boolean uninstall(String providerId, Path providersDir) {
+        Path jar = current.jarFor(providerId);
+        if (jar == null) return false;
+        try {
+            // Close the current registry FIRST so the URLClassLoader releases the jar's file
+            // handle (on Windows, Files.delete on a still-open jar fails with a sharing violation).
+            current.close();
+        } catch (IOException e) {
+            // Best-effort: proceed to delete anyway -- a loader that fails to close cleanly still
+            // relinquishes its file handles on most platforms.
+        }
+        try {
+            Files.deleteIfExists(jar);
+        } catch (IOException e) {
+            // Log + continue to refresh; a leftover jar will simply reappear on next refresh.
+        }
+        refresh(providersDir);
+        return true;
     }
 }

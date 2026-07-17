@@ -131,6 +131,36 @@ class ProviderInstallIntegrationTest {
     }
 
     @Test
+    void uninstallDeletesJarAndDropsProviderFromLiveRegistry() throws IOException {
+        Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
+        assertEquals(200, install.status, install.body);
+        assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+
+        Path jar = providersDir.resolve("echo-provider.jar");
+        assertTrue(Files.exists(jar), "echo-provider.jar should be staged after install");
+
+        Response uninstall = delete("/api/providers/echo");
+        assertEquals(200, uninstall.status, uninstall.body);
+        assertTrue(uninstall.body.contains("\"uninstalled\":true") || uninstall.body.contains("\"uninstalled\": true"),
+                uninstall.body);
+
+        // Windows-safe delete: the registry's URLClassLoader must have been closed BEFORE this
+        // delete, or the still-open jar handle would make Files.deleteIfExists fail silently here.
+        assertFalse(Files.exists(jar), "jar should be deleted from disk after uninstall");
+        assertFalse(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+
+        Response afterList = get("/api/providers");
+        assertEquals(200, afterList.status);
+        assertFalse(afterList.body.contains("\"echo\""), afterList.body);
+    }
+
+    @Test
+    void uninstallUnknownProviderIs404() throws IOException {
+        Response r = delete("/api/providers/does-not-exist");
+        assertEquals(404, r.status);
+    }
+
+    @Test
     void availableMarksEntryInstalledWhenNameMatchesInstalledIdEvenWithoutItsOwnAssetFile() throws IOException {
         Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
         assertEquals(200, install.status, install.body);
@@ -199,6 +229,11 @@ class ProviderInstallIntegrationTest {
 
     private Response get(String path) throws IOException {
         HttpURLConnection c = open(path, "GET");
+        return read(c);
+    }
+
+    private Response delete(String path) throws IOException {
+        HttpURLConnection c = open(path, "DELETE");
         return read(c);
     }
 

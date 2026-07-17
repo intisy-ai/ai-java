@@ -139,6 +139,12 @@ class DashboardIntegrationTest {
         assertTrue(html.contains("id=\"provider-quota\""), "combined quota summary missing");
     }
 
+    @Test
+    void installedProviderRowsHaveAnUninstallAffordance() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("uninstallProvider"), "uninstall affordance missing");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

@@ -670,6 +670,14 @@
         discoverWrap.appendChild(discoverBtn);
         discoverWrap.appendChild(discoverResult);
         tdAction.appendChild(discoverWrap);
+
+        var uninstallBtn = el("button", "danger small", "Uninstall");
+        uninstallBtn.type = "button";
+        uninstallBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          uninstallProvider(row.id);
+        });
+        tdAction.appendChild(uninstallBtn);
       }
       tr.appendChild(tdAction);
 
@@ -715,6 +723,19 @@
 
   function hideProvidersToast() {
     document.getElementById("providers-toast").className = "toast hidden";
+  }
+
+  // Deletes an installed provider's jar and rebuilds the live registry without it (DELETE
+  // /api/providers/{id}, no trailing slash -- the route matches on an exact 3-segment path).
+  function uninstallProvider(id) {
+    if (!window.confirm("Uninstall provider \"" + id + "\"? Its jar will be deleted.")) return;
+    hideProvidersToast();
+    jsonFetch("/api/providers/" + encodeURIComponent(id), { method: "DELETE" }).then(function () {
+      showProvidersToast("Uninstalled \"" + id + "\".", true);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showProvidersToast("Uninstall failed: " + err.message, false);
+    });
   }
 
   function refreshProviders() {
