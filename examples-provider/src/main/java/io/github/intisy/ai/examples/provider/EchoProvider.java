@@ -183,7 +183,9 @@ public final class EchoProvider implements Provider {
         return sb.toString();
     }
 
-    // Canned quota catalog: one active account with a single "5-hour" quota bucket -- shape
+    // Canned quota catalog: THREE accounts -- two active accounts sharing the "5-hour" pool
+    // (remainingFraction 0.8 and 0.4, so QuotaAdmin.combined's mean is 0.6) and one errored account
+    // with no quota (excluded from the mean but still counted in combined.accountCount). Shape
     // matches what QuotaAdmin.refresh expects back ({accounts:[{id,status,quota:[...]}]}).
     private static HttpResponse quotaResponse() {
         HttpResponse response = new HttpResponse();
@@ -195,6 +197,14 @@ public final class EchoProvider implements Provider {
                 + "\"id\":\"a1\","
                 + "\"status\":\"active\","
                 + "\"quota\":[{\"label\":\"5-hour\",\"remainingFraction\":0.8,\"resetTime\":123}]"
+                + "},{"
+                + "\"id\":\"a2\","
+                + "\"status\":\"active\","
+                + "\"quota\":[{\"label\":\"5-hour\",\"remainingFraction\":0.4,\"resetTime\":123}]"
+                + "},{"
+                + "\"id\":\"a3\","
+                + "\"status\":\"error\","
+                + "\"quota\":null"
                 + "}]"
                 + "}";
         return response;

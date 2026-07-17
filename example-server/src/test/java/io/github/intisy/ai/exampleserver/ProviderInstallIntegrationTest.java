@@ -25,8 +25,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,12 +48,15 @@ class ProviderInstallIntegrationTest {
     private AiJava ai;
     private ExampleServer server;
     private ProviderRegistryHolder holder;
+    private Path providersDir;
+    private JsonCodec json;
 
     @BeforeEach
     void setUp(@TempDir Path providersDir) {
+        this.providersDir = providersDir;
         ai = AiJava.builder().storage(Storage.memory()).build();
         Store store = ai.store();
-        JsonCodec json = ai.jsonCodec();
+        json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
@@ -125,6 +130,34 @@ class ProviderInstallIntegrationTest {
         assertTrue(messages.body.contains("Echo provider handled your request"), messages.body);
     }
 
+    @Test
+    void availableMarksEntryInstalledWhenNameMatchesInstalledIdEvenWithoutItsOwnAssetFile() throws IOException {
+        Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
+        assertEquals(200, install.status, install.body);
+
+        // The "echo" entry's own asset was deliberately never downloaded -- only "echo-provider.jar"
+        // (the "echo-demo" entry's asset) exists on disk. It matches an installed provider id anyway.
+        assertFalse(Files.exists(providersDir.resolve("echo-renamed-asset.jar")));
+
+        Response available = get("/api/providers/available");
+        assertEquals(200, available.status);
+        assertEquals(Boolean.TRUE, availableEntry(available.body, "echo").get("installed"), available.body);
+    }
+
+    /** Parses the {@code /api/providers/available} JSON array and returns the entry whose
+     *  {@code name} matches, so callers can assert its {@code installed} flag directly. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> availableEntry(String rawAvailableJson, String name) {
+        List<Object> entries = (List<Object>) json.parse(rawAvailableJson);
+        for (Object o : entries) {
+            Map<String, Object> entry = (Map<String, Object>) o;
+            if (name.equals(entry.get("name"))) {
+                return entry;
+            }
+        }
+        throw new AssertionError("no /api/providers/available entry named \"" + name + "\": " + rawAvailableJson);
+    }
+
     /** Simulates a real download with no network: copies the already-staged example-provider jar
      *  ({@code exampleserver.providersDir}, populated by the Gradle test task) into the target dir. */
     private static final class FakeProviderSource implements ProviderSource {
@@ -136,7 +169,12 @@ class ProviderInstallIntegrationTest {
 
         @Override
         public List<Entry> list() {
-            return Collections.singletonList(new Entry("echo-demo", "echo-provider.jar", ""));
+            // "echo" mirrors an org asset that was renamed to match its installed provider id
+            // (DECISION-FLAG dedupe fix): its own assetName is never downloaded/present on disk,
+            // so it only reports installed:true via the name-matches-an-installed-id branch.
+            return Arrays.asList(
+                    new Entry("echo-demo", "echo-provider.jar", ""),
+                    new Entry("echo", "echo-renamed-asset.jar", ""));
         }
 
         @Override

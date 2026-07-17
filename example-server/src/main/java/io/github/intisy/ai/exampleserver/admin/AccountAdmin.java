@@ -126,6 +126,7 @@ public class AccountAdmin {
         view.email = account.email;
         view.enabled = account.enabled != null ? account.enabled : true;
         view.status = deriveStatus(account, now, view.enabled);
+        view.expires = account.expires; // non-secret access-token expiry (epoch ms); null when absent
         return view;
     }
 
@@ -159,5 +160,6 @@ public class AccountAdmin {
         public String email;
         public String status;
         public boolean enabled;
+        public Long expires; // non-secret access-token expiry, epoch ms; null when the account carries none
     }
 }

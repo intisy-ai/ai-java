@@ -77,7 +77,7 @@ class QuotaAdminTest {
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
-        assertEquals(1, accounts.size());
+        assertEquals(3, accounts.size());
         assertEquals("a1", accounts.get(0).get("id"));
         assertNotNull(accounts.get(0).get("quota"));
     }
@@ -95,5 +95,29 @@ class QuotaAdminTest {
                 () -> quota.refresh("ratelimited"));
         assertTrue(e.getMessage().contains("provider returned 429"), e.getMessage());
         assertTrue(e.getMessage().contains("rate_limit_error"), e.getMessage());
+    }
+
+    @Test
+    void combinedAggregatesMeanRemainingFractionPerLabelAndCountsErrorAccounts() {
+        // Echo's canned /v1/quota (EchoProvider.quotaResponse): a1+a2 share "5-hour"
+        // (0.8, 0.4 -> mean 0.6), a3 is an errored account with no quota at all.
+        Map<String, Object> result = quota.combined("echo");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        assertEquals(3, accounts.size(), "raw accounts array must still be present, unchanged");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> combined = (Map<String, Object>) result.get("combined");
+        assertNotNull(combined);
+        assertEquals(3, combined.get("accountCount"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> pools = (List<Map<String, Object>>) combined.get("pools");
+        assertEquals(1, pools.size());
+        Map<String, Object> fiveHour = pools.get(0);
+        assertEquals("5-hour", fiveHour.get("label"));
+        assertEquals(0.6, (double) (Number) fiveHour.get("remainingFraction"), 1e-9);
+        assertEquals(2, fiveHour.get("accounts"));
     }
 }

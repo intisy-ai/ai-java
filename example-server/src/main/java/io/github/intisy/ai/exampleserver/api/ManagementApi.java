@@ -25,9 +25,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -310,11 +312,17 @@ public final class ManagementApi implements HttpHandler {
 
     private void handleAvailable(HttpExchange exchange) throws IOException {
         List<Map<String, Object>> body = new ArrayList<>();
+        // An org entry whose name matches an already-installed provider id counts as installed
+        // even when no jar sits under its (possibly renamed) assetName -- avoids a duplicate
+        // "not installed" listing for a provider that was renamed to match its org asset.
+        Set<String> installedIds = new HashSet<>(holder.listProviderIds());
         for (ProviderSource.Entry entry : source.list()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", entry.name);
             item.put("assetName", entry.assetName);
-            item.put("installed", Files.exists(providersDir.resolve(entry.assetName)));
+            boolean installed = Files.exists(providersDir.resolve(entry.assetName))
+                    || installedIds.contains(entry.name);
+            item.put("installed", installed);
             body.add(item);
         }
         respondJson(exchange, 200, body);
@@ -494,7 +502,7 @@ public final class ManagementApi implements HttpHandler {
             return;
         }
         try {
-            respondJson(exchange, 200, quota.refresh(providerId));
+            respondJson(exchange, 200, quota.combined(providerId));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
