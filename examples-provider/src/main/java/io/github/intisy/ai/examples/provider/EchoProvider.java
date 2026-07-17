@@ -49,6 +49,12 @@ public final class EchoProvider implements Provider {
         if (request != null && "PUT".equals(request.method) && "/v1/config".equals(request.url)) {
             return putConfigResponse(request.body);
         }
+        if (request != null && "GET".equals(request.method) && "/v1/oauth/params".equals(request.url)) {
+            return oauthParamsResponse();
+        }
+        if (request != null && "POST".equals(request.method) && "/v1/oauth/exchange".equals(request.url)) {
+            return oauthExchangeResponse(request.body);
+        }
 
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
@@ -122,6 +128,61 @@ public final class EchoProvider implements Provider {
             }
         }
         return null;
+    }
+
+    private static HttpResponse oauthParamsResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"authorizeUrl\":\"https://echo.example/authorize\","
+                + "\"clientId\":\"echo-client-id\","
+                + "\"scopes\":\"openid email\","
+                + "\"redirectPath\":\"/api/oauth/callback\","
+                + "\"usesPkce\":true"
+                + "}";
+        return response;
+    }
+
+    // Fixture exchange: no network. Echoes the code into the refresh token so a test can prove the
+    // code reached the provider. A real provider calls OAuthExchange.exchangeCode here.
+    private HttpResponse oauthExchangeResponse(String body) {
+        String code = extractStringField(body, "code");
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{\"account\":{"
+                + "\"id\":\"echo-oauth-user\","
+                + "\"email\":\"echo-oauth@example.com\","
+                + "\"refresh\":" + quote("echo-refresh-" + (code != null ? code : ""))
+                + "}}";
+        return response;
+    }
+
+    // Returns the string value of `key` in a flat JSON object (quote/escape-aware), or null.
+    private static String extractStringField(String body, String key) {
+        if (body == null) return null;
+        String needle = "\"" + key + "\"";
+        int k = body.indexOf(needle);
+        if (k < 0) return null;
+        int colon = body.indexOf(':', k + needle.length());
+        if (colon < 0) return null;
+        int i = colon + 1;
+        while (i < body.length() && body.charAt(i) != '"') i++;   // skip to opening quote
+        if (i >= body.length()) return null;
+        i++;
+        StringBuilder sb = new StringBuilder();
+        boolean escaped = false;
+        for (; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (escaped) { sb.append(c); escaped = false; }
+            else if (c == '\\') escaped = true;
+            else if (c == '"') break;
+            else sb.append(c);
+        }
+        return sb.toString();
     }
 
     // Canned quota catalog: one active account with a single "5-hour" quota bucket -- shape
