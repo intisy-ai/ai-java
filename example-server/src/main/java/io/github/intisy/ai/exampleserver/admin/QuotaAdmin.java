@@ -27,12 +27,14 @@ public final class QuotaAdmin {
     private final JsonCodec json;
     private final Logger log;
     private final String configDir;
+    private final Store store;
 
     public QuotaAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
         this.json = json;
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
+        this.store = store;
     }
 
     /**
@@ -56,7 +58,7 @@ public final class QuotaAdmin {
 
         HttpResponse response;
         try {
-            response = handler.handle(request, new HandlerCtx(configDir, log, null));
+            response = handler.handle(request, new HandlerCtx(configDir, store, log, null));
         } catch (Exception e) {
             throw new IllegalArgumentException("quota fetch failed: " + e.getMessage());
         }

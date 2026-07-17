@@ -26,12 +26,14 @@ public final class ConfigAdmin {
     private final JsonCodec json;
     private final Logger log;
     private final String configDir;
+    private final Store store;
 
     public ConfigAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
         this.json = json;
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
+        this.store = store;
     }
 
     /** {@code {groups,values}}, or {@code null} if the provider answers 404 (no config surface). */
@@ -65,7 +67,7 @@ public final class ConfigAdmin {
         request.headers = new LinkedHashMap<>();
         request.body = body;
         try {
-            return handler.handle(request, new HandlerCtx(configDir, log, null));
+            return handler.handle(request, new HandlerCtx(configDir, store, log, null));
         } catch (Exception e) {
             throw new IllegalArgumentException("config call failed: " + e.getMessage());
         }

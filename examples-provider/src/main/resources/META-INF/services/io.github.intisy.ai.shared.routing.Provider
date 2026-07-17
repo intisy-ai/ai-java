@@ -1,2 +1,3 @@
 io.github.intisy.ai.examples.provider.EchoProvider
 io.github.intisy.ai.examples.provider.AlwaysRateLimitedProvider
+io.github.intisy.ai.examples.provider.CtxCapturingProvider

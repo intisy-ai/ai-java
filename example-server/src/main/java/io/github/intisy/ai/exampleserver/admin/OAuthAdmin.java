@@ -27,6 +27,7 @@ public final class OAuthAdmin {
     private final Logger log;
     private final AccountAdmin accounts;
     private final String configDir;
+    private final Store store;
 
     public OAuthAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log,
                       AccountAdmin accounts) {
@@ -35,6 +36,7 @@ public final class OAuthAdmin {
         this.log = log;
         this.accounts = accounts;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
+        this.store = store;
     }
 
     /** The provider's {@code {authorizeUrl, completion, loopbackPort?, loopbackPath?}}. */
@@ -91,7 +93,7 @@ public final class OAuthAdmin {
         request.headers = new LinkedHashMap<>();
         request.body = body;
         try {
-            return handler.handle(request, new HandlerCtx(configDir, log, null));
+            return handler.handle(request, new HandlerCtx(configDir, store, log, null));
         } catch (Exception e) {
             throw new IllegalArgumentException("oauth call failed: " + e.getMessage());
         }

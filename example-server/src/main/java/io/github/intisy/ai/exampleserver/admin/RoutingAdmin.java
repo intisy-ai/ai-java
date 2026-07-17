@@ -63,7 +63,7 @@ public class RoutingAdmin {
         request.method = "GET";
         request.url = "/v1/models";
         request.headers = new LinkedHashMap<>();
-        HandlerCtx ctx = new HandlerCtx(configDir, log, null);
+        HandlerCtx ctx = new HandlerCtx(configDir, store, log, null);
 
         HttpResponse response;
         try {
