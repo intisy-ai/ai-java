@@ -58,13 +58,13 @@ import java.util.function.Supplier;
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
  * POST   /api/providers/{id}/oauth/authorize              -> 200 {"authorizeUrl":..,"completion":..}
  * POST   /api/providers/{id}/oauth/complete  {code,state} -> 200 {"account":..}
- * GET    /api/proxies                                    -> 200 [{app,profile,port,running,error}]
+ * GET    /api/proxies                                    -> 200 [{id,displayName,port,running,routing,error}]
  * GET    /api/proxies/available                          -> [{"name":..,"assetName":..,"installed":bool}]
  * POST   /api/proxies/install           {"name":..}       -> 200 {"installed":true,"proxies":[...]}
  * DELETE /api/proxies/{id}                               -> 200 {"uninstalled":true,"proxies":[...]} / 404
- * PUT    /api/proxies/{app}              {"port":N}       -> 200 {status}/400
- * POST   /api/proxies/{app}/start                         -> 200 {status}/400
- * POST   /api/proxies/{app}/stop                          -> 200 {status}/400
+ * PUT    /api/proxies/{id}               {"port":N}       -> 200 {status}/400
+ * POST   /api/proxies/{id}/start                          -> 200 {status}/400
+ * POST   /api/proxies/{id}/stop                           -> 200 {status}/400
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -392,11 +392,15 @@ public final class ManagementApi implements HttpHandler {
             }
         }
 
-        ProviderSource.Entry match = null;
-        for (ProviderSource.Entry entry : source.list()) {
-            if (entry.name.equals(name)) {
-                match = entry;
-                break;
+        // Targeted find() first (works even when a full list() scan is rate-limited/cached-empty);
+        // fall back to scanning list() only if find() comes up empty.
+        ProviderSource.Entry match = source.find(name);
+        if (match == null) {
+            for (ProviderSource.Entry entry : source.list()) {
+                if (entry.name.equals(name)) {
+                    match = entry;
+                    break;
+                }
             }
         }
         if (match == null) {
