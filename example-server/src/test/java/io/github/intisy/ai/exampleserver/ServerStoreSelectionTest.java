@@ -22,4 +22,24 @@ class ServerStoreSelectionTest {
         m.put("a.json", "1");
         assertEquals("1", m.get("a.json"));
     }
+
+    @Test
+    void unknownKindThrowsInsteadOfSilentlyFallingBackToMemory() {
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.storeFor("sqlit", "x"));
+    }
+
+    @Test
+    void jdbcWithoutUrlThrows() {
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.storeFor("jdbc", null));
+        assertThrows(IllegalArgumentException.class, () -> ServerMain.storeFor("jdbc", "  "));
+    }
+
+    @Test
+    void jdbcWithUrlRoundTrips(@TempDir Path dir) {
+        String url = "jdbc:sqlite:" + dir.resolve("g.db");
+        Store s1 = ServerMain.storeFor("jdbc", url);
+        s1.put("k.json", "{\"v\":2}");
+        Store s2 = ServerMain.storeFor("jdbc", url);
+        assertEquals("{\"v\":2}", s2.get("k.json"));
+    }
 }

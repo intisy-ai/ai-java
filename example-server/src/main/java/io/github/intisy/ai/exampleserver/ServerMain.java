@@ -23,7 +23,7 @@ import java.nio.file.Paths;
 
 /**
  * Boots the example server. Demonstrates "completely customizable backend": the store is chosen
- * from one place ({@code -Dexampleserver.store=sqlite|memory|file}) and composed into a {@link Backend}
+ * from one place ({@code -Dexampleserver.store=sqlite|memory|file|jdbc}) and composed into a {@link Backend}
  * the whole server runs on. Provider jars are discovered via {@link ProviderDiscovery} from
  * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task) — startup only ever
  * reads whatever's already on disk, never the network. That registry is held in a
@@ -113,8 +113,20 @@ public final class ServerMain {
                 ds.setUrl("jdbc:sqlite:" + location);
                 return Storage.jdbc(ds);
             }
+            case "jdbc": {
+                if (location == null || location.trim().isEmpty()) {
+                    throw new IllegalArgumentException("exampleserver.store=jdbc requires -Dexampleserver.jdbcUrl");
+                }
+                String user = System.getProperty("exampleserver.jdbcUser");
+                String password = System.getProperty("exampleserver.jdbcPassword");
+                return Storage.jdbc(new DriverManagerDataSource(location, user, password));
+            }
             default:
-                return Storage.memory();
+                // Unrecognized kind used to silently fall back to Storage.memory() (ephemeral),
+                // which would quietly discard every write for an operator who asked for a
+                // persistent store (or made a typo) - fail loud instead.
+                throw new IllegalArgumentException(
+                        "unknown exampleserver.store: " + kind + " (expected sqlite|memory|file|jdbc)");
         }
     }
 
@@ -122,10 +134,78 @@ public final class ServerMain {
         // DEFAULT is now "sqlite" (persistent) so caching (accounts/quota/models/proxies/routing)
         // survives restarts out of the box; memory/file/jdbc remain selectable.
         String kind = System.getProperty("exampleserver.store", "sqlite");
-        String location = "sqlite".equals(kind)
-                ? System.getProperty("exampleserver.dbPath", "ai-java.db")
-                : System.getProperty("exampleserver.configDir", "config");
+        String location;
+        if ("sqlite".equals(kind)) {
+            location = System.getProperty("exampleserver.dbPath", "ai-java.db");
+        } else if ("jdbc".equals(kind)) {
+            location = System.getProperty("exampleserver.jdbcUrl");
+        } else {
+            location = System.getProperty("exampleserver.configDir", "config");
+        }
         return storeFor(kind, location);
+    }
+
+    /**
+     * Minimal {@link javax.sql.DataSource} wrapping {@link java.sql.DriverManager} for a
+     * caller-supplied generic JDBC URL (e.g. {@code -Dexampleserver.store=jdbc}). Only
+     * {@link #getConnection()} is exercised by {@link io.github.intisy.ai.jvm.backend.store.JdbcStore};
+     * the rest of the interface is implemented minimally to satisfy the contract.
+     */
+    private static final class DriverManagerDataSource implements javax.sql.DataSource {
+        private final String url;
+        private final String user;
+        private final String password;
+
+        DriverManagerDataSource(String url, String user, String password) {
+            this.url = url;
+            this.user = user;
+            this.password = password;
+        }
+
+        @Override
+        public java.sql.Connection getConnection() throws java.sql.SQLException {
+            return (user == null || user.isEmpty())
+                    ? java.sql.DriverManager.getConnection(url)
+                    : java.sql.DriverManager.getConnection(url, user, password);
+        }
+
+        @Override
+        public java.sql.Connection getConnection(String username, String pass) throws java.sql.SQLException {
+            return java.sql.DriverManager.getConnection(url, username, pass);
+        }
+
+        @Override
+        public java.io.PrintWriter getLogWriter() {
+            return null;
+        }
+
+        @Override
+        public void setLogWriter(java.io.PrintWriter out) {
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) {
+        }
+
+        @Override
+        public int getLoginTimeout() {
+            return 0;
+        }
+
+        @Override
+        public java.util.logging.Logger getParentLogger() throws java.sql.SQLFeatureNotSupportedException {
+            throw new java.sql.SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> iface) throws java.sql.SQLException {
+            throw new java.sql.SQLException("not a wrapper");
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> iface) {
+            return false;
+        }
     }
 
     private static Path providersDir() {
