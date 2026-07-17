@@ -28,6 +28,7 @@ class ProxyManagerTest {
     private AiJava ai;
     private ProviderRegistryHolder holder;
     private ProxyManager mgr;
+    private ProxyManager mgr2;
 
     @BeforeEach
     void setUp(@TempDir Path providersDir, @TempDir Path configDir) throws IOException {
@@ -40,12 +41,14 @@ class ProxyManagerTest {
     @AfterEach
     void tearDown() throws IOException {
         if (mgr != null) mgr.stopAll();
+        if (mgr2 != null) mgr2.stopAll();
         if (holder != null && holder.get() != null) holder.get().close();
         if (ai != null) ai.close();
     }
 
     @Test
     void startOpensPortAndStopCloses() throws IOException {
+        mgr.setPort("claude-code", 0); // ephemeral - avoid clashing with a live proxy on the default port
         ProxyManager.ProxyStatus s = mgr.start("claude-code");
         assertTrue(s.running, s.error);
         assertEquals(200, healthz(s.port));
@@ -63,13 +66,16 @@ class ProxyManagerTest {
 
     @Test
     void startEnabledOnBootStartsOnlyEnabled() {
-        mgr.start("claude-code");            // persists enabled=true
-        mgr.stopAll();                       // closes listeners, leaves persisted enabled flag
-        ProxyManager mgr2 = new ProxyManager(ai, holder, ai.store(), ai.jsonCodec(), ai.logger());
+        mgr.setPort("claude-code", 0);        // ephemeral
+        ProxyManager.ProxyStatus started = mgr.start("claude-code"); // persists enabled=true + actual port
+        int persistedPort = started.port;
+        mgr.stopAll();                       // closes listeners, frees persistedPort, leaves persisted enabled flag
+        mgr2 = new ProxyManager(ai, holder, ai.store(), ai.jsonCodec(), ai.logger());
         mgr2.startEnabledOnBoot();
-        assertTrue(statusOf(mgr2, "claude-code").running);
+        ProxyManager.ProxyStatus claudeStatus = statusOf(mgr2, "claude-code");
+        assertTrue(claudeStatus.running, claudeStatus.error);
+        assertEquals(persistedPort, claudeStatus.port);
         assertFalse(statusOf(mgr2, "opencode").running);
-        mgr2.stopAll();
     }
 
     @Test
