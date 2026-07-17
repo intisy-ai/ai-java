@@ -3,6 +3,7 @@ package io.github.intisy.ai.exampleserver;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
+import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
@@ -66,9 +67,13 @@ public final class ServerMain {
             QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ConfigAdmin config = new ConfigAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin, ai.clock());
+            ProxyManager proxyManager = new ProxyManager(ai, holder, ai.store(), ai.jsonCodec(), ai.logger());
+            ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
-                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config, oauth);
+                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config, oauth,
+                    proxyAdmin);
             ExampleServer server = ExampleServer.start(router, port, api);
+            proxyManager.startEnabledOnBoot();
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
             System.out.println("  GET  /              dashboard (providers + accounts)");
@@ -84,11 +89,14 @@ public final class ServerMain {
             System.out.println("  PUT  /api/providers/{id}/config  {\"values\":{...}}");
             System.out.println("  POST /api/providers/{id}/oauth/start");
             System.out.println("  GET  /api/oauth/callback?code=&state=");
+            System.out.println("  GET  /api/proxies");
+            System.out.println("  PUT  /api/proxies/{app}          {\"port\":N}");
+            System.out.println("  POST /api/proxies/{app}/start | /stop");
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
 
-            Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> { proxyManager.stopAll(); server.stop(); }));
             Thread.currentThread().join(); // block forever until the process is killed
         }
     }

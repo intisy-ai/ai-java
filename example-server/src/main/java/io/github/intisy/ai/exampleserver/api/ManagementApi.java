@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
+import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -49,6 +50,10 @@ import java.util.function.Supplier;
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
  * POST   /api/providers/{id}/oauth/start                  -> 200 {"authorizeUrl":..,"state":..}
  * GET    /api/oauth/callback             ?code=&state=    -> 200/400 text/html (login result page)
+ * GET    /api/proxies                                    -> 200 [{app,profile,port,running,error}]
+ * PUT    /api/proxies/{app}              {"port":N}       -> 200 {status}/400
+ * POST   /api/proxies/{app}/start                         -> 200 {status}/400
+ * POST   /api/proxies/{app}/stop                          -> 200 {status}/400
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -66,7 +71,8 @@ import java.util.function.Supplier;
  * these paths instead of an NPE. Same story for {@code /quota/refresh} and {@link QuotaAdmin}
  * (the 8-arg constructor), and for {@code /api/providers/{id}/config} and {@link ConfigAdmin}
  * (the 9-arg constructor). Same for the {@code /oauth/*} routes and {@link OAuthAdmin} (the
- * 10-arg constructor).
+ * 10-arg constructor), and for the {@code /api/proxies*} routes and {@link ProxyAdmin} (the
+ * 11-arg constructor).
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -80,6 +86,7 @@ public final class ManagementApi implements HttpHandler {
     private final QuotaAdmin quota;
     private final ConfigAdmin config;
     private final OAuthAdmin oauth;
+    private final ProxyAdmin proxy;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -133,12 +140,24 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: adds the OAuth-login surface ({@code POST .../oauth/start}, {@code GET
-     * /api/oauth/callback}) backed by {@code oauth}.
+     * Adds the OAuth-login surface ({@code POST .../oauth/start}, {@code GET
+     * /api/oauth/callback}) backed by {@code oauth}. No {@link ProxyAdmin} — the
+     * {@code /api/proxies*} routes 404 (see the full 11-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, config, oauth, null);
+    }
+
+    /**
+     * Full constructor: adds the proxy-management surface ({@code /api/proxies*}) backed by
+     * {@code proxy}.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
+                          ProxyAdmin proxy) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -149,6 +168,7 @@ public final class ManagementApi implements HttpHandler {
         this.quota = quota;
         this.config = config;
         this.oauth = oauth;
+        this.proxy = proxy;
     }
 
     @Override
@@ -248,6 +268,22 @@ public final class ManagementApi implements HttpHandler {
         if ("GET".equals(method) && seg.length == 3
                 && "api".equals(seg[0]) && "oauth".equals(seg[1]) && "callback".equals(seg[2])) {
             handleOAuthCallback(exchange);
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 2
+                && "api".equals(seg[0]) && "proxies".equals(seg[1])) {
+            handleProxiesList(exchange);
+            return;
+        }
+        if ("PUT".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "proxies".equals(seg[1])) {
+            handleProxyPut(exchange, decode(seg[2]));
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "proxies".equals(seg[1])
+                && ("start".equals(seg[3]) || "stop".equals(seg[3]))) {
+            handleProxyLifecycle(exchange, decode(seg[2]), "start".equals(seg[3]));
             return;
         }
         handleNotFound(exchange);
@@ -542,6 +578,47 @@ public final class ManagementApi implements HttpHandler {
             out.put(decode(key), decode(value));
         }
         return out;
+    }
+
+    private void handleProxiesList(HttpExchange exchange) throws IOException {
+        if (proxy == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        respondJson(exchange, 200, proxy.list());
+    }
+
+    private void handleProxyPut(HttpExchange exchange, String app) throws IOException {
+        if (proxy == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+            Object portObj = body != null ? body.get("port") : null;
+            if (!(portObj instanceof Number)) {
+                throw new IllegalArgumentException("body.port must be a number");
+            }
+            respondJson(exchange, 200, proxy.setPort(app, ((Number) portObj).intValue()));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handleProxyLifecycle(HttpExchange exchange, String app, boolean start) throws IOException {
+        if (proxy == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            respondJson(exchange, 200, start ? proxy.start(app) : proxy.stop(app));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
     }
 
     private void handleNotFound(HttpExchange exchange) throws IOException {
