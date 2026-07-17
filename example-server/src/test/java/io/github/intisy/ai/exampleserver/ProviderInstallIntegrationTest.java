@@ -208,6 +208,14 @@ class ProviderInstallIntegrationTest {
         }
 
         @Override
+        public Entry find(String name) {
+            for (Entry entry : list()) {
+                if (entry.name.equals(name)) return entry;
+            }
+            return null;
+        }
+
+        @Override
         public Path download(Entry entry, Path dir) throws IOException {
             Path src = findStagedJar();
             Path target = dir.resolve(entry.assetName);

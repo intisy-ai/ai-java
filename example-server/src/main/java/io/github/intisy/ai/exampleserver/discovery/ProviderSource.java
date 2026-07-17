@@ -16,6 +16,11 @@ public interface ProviderSource {
      *  are available or the source is unreachable. */
     List<Entry> list();
 
+    /** Targeted lookup of a single installable provider by its {@code name} (repo name), scanning
+     *  only that one repo's latest release -- so an install works even when the full org scan is
+     *  rate-limited or cached-empty. Null when not found. */
+    Entry find(String name);
+
     /** Downloads {@code entry}'s jar into {@code dir}, returning the path written. */
     Path download(Entry entry, Path dir) throws IOException;
 

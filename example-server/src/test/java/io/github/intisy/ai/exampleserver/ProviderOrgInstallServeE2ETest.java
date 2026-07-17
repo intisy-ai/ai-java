@@ -304,6 +304,14 @@ class ProviderOrgInstallServeE2ETest {
         }
 
         @Override
+        public Entry find(String name) {
+            for (Entry entry : list()) {
+                if (entry.name.equals(name)) return entry;
+            }
+            return null;
+        }
+
+        @Override
         public Path download(Entry entry, Path dir) throws IOException {
             Path src = orgProvidersDir.resolve(entry.assetName);
             if (!Files.exists(src)) {
