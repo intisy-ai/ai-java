@@ -51,7 +51,7 @@ class DashboardIntegrationTest {
         Response r = get("/");
         assertEquals(200, r.status);
         assertTrue(r.contentType != null && r.contentType.contains("text/html"), r.contentType);
-        assertTrue(r.body.contains("<title>ai-java example server</title>"), r.body);
+        assertTrue(r.body.contains("<title>AI Java · Provider Console</title>"), r.body);
         assertTrue(r.body.contains("Providers"), r.body);
         assertTrue(r.body.contains("Install"), r.body);
         assertTrue(r.body.contains("Refresh"), r.body);
