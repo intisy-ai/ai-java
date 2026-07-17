@@ -5,3 +5,4 @@ docs/superpowers/
 .superpowers/
 graphify-out/
 *.iml
+*.db
