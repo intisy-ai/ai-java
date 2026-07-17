@@ -3,6 +3,7 @@ package io.github.intisy.ai.exampleserver.api;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -43,6 +44,8 @@ import java.util.function.Supplier;
  * GET    /api/routing/catalog                            -> 200 <models.json>
  * GET    /api/routing/model-map                          -> 200 {"tiers":[...],"map":{...}}
  * PUT    /api/routing/model-map          {"map":{...}}    -> 200 {"ok":true,"warnings":[...]}
+ * GET    /api/providers/{id}/config                       -> 200 {"groups":[...],"values":{...}}
+ * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -58,7 +61,8 @@ import java.util.function.Supplier;
  * <p>The {@code /api/routing/*} + discover routes are only served once a {@link RoutingAdmin} is
  * wired in (the 7-arg constructor); callers still on an older constructor get a plain 404 for
  * these paths instead of an NPE. Same story for {@code /quota/refresh} and {@link QuotaAdmin}
- * (the 8-arg constructor).
+ * (the 8-arg constructor), and for {@code /api/providers/{id}/config} and {@link ConfigAdmin}
+ * (the 9-arg constructor).
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -70,6 +74,7 @@ public final class ManagementApi implements HttpHandler {
     private final ProviderRegistryHolder holder;
     private final RoutingAdmin routing;
     private final QuotaAdmin quota;
+    private final ConfigAdmin config;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -101,12 +106,23 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: adds the quota surface ({@code POST .../quota/refresh}) backed by
-     * {@code quota}.
+     * Adds the quota surface ({@code POST .../quota/refresh}) backed by {@code quota}. No
+     * {@link ConfigAdmin} — {@code /api/providers/{id}/config} 404s (see the full 9-arg
+     * constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, null);
+    }
+
+    /**
+     * Full constructor: adds the provider-config surface ({@code GET/PUT
+     * /api/providers/{id}/config}) backed by {@code config}.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -115,6 +131,7 @@ public final class ManagementApi implements HttpHandler {
         this.holder = holder;
         this.routing = routing;
         this.quota = quota;
+        this.config = config;
     }
 
     @Override
@@ -193,6 +210,16 @@ public final class ManagementApi implements HttpHandler {
                 && "api".equals(seg[0]) && "providers".equals(seg[1])
                 && "quota".equals(seg[3]) && "refresh".equals(seg[4])) {
             handleQuotaRefresh(exchange, decode(seg[2]));
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "config".equals(seg[3])) {
+            handleGetConfig(exchange, decode(seg[2]));
+            return;
+        }
+        if ("PUT".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "config".equals(seg[3])) {
+            handlePutConfig(exchange, decode(seg[2]));
             return;
         }
         handleNotFound(exchange);
@@ -373,6 +400,46 @@ public final class ManagementApi implements HttpHandler {
         }
         try {
             respondJson(exchange, 200, quota.refresh(providerId));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handleGetConfig(HttpExchange exchange, String providerId) throws IOException {
+        if (config == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            Map<String, Object> result = config.getConfig(providerId);
+            if (result == null) {
+                handleNotFound(exchange);
+                return;
+            }
+            respondJson(exchange, 200, result);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handlePutConfig(HttpExchange exchange, String providerId) throws IOException {
+        if (config == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+            Object valuesObj = body != null ? body.get("values") : null;
+            if (!(valuesObj instanceof Map)) {
+                throw new IllegalArgumentException("body.values must be an object");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> values = (Map<String, Object>) valuesObj;
+            respondJson(exchange, 200, config.putConfig(providerId, values));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
