@@ -52,8 +52,8 @@ import java.util.function.Supplier;
  * (app is optional; missing/blank -> the server's default routing profile, for back-compat)
  * GET    /api/providers/{id}/config                       -> 200 {"groups":[...],"values":{...}}
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
- * POST   /api/providers/{id}/oauth/start                  -> 200 {"authorizeUrl":..,"state":..}
- * GET    /api/oauth/callback             ?code=&state=    -> 200/400 text/html (login result page)
+ * POST   /api/providers/{id}/oauth/authorize              -> 200 {"authorizeUrl":..,"completion":..}
+ * POST   /api/providers/{id}/oauth/complete  {code,state} -> 200 {"account":..}
  * GET    /api/proxies                                    -> 200 [{app,profile,port,running,error}]
  * PUT    /api/proxies/{app}              {"port":N}       -> 200 {status}/400
  * POST   /api/proxies/{app}/start                         -> 200 {status}/400
@@ -144,8 +144,8 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Adds the OAuth-login surface ({@code POST .../oauth/start}, {@code GET
-     * /api/oauth/callback}) backed by {@code oauth}. No {@link ProxyAdmin} — the
+     * Adds the OAuth-login surface ({@code POST .../oauth/authorize}, {@code POST
+     * .../oauth/complete}) backed by {@code oauth}. No {@link ProxyAdmin} — the
      * {@code /api/proxies*} routes 404 (see the full 11-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -265,13 +265,14 @@ public final class ManagementApi implements HttpHandler {
         }
         if ("POST".equals(method) && seg.length == 5
                 && "api".equals(seg[0]) && "providers".equals(seg[1])
-                && "oauth".equals(seg[3]) && "start".equals(seg[4])) {
-            handleOAuthStart(exchange, decode(seg[2]));
+                && "oauth".equals(seg[3]) && "authorize".equals(seg[4])) {
+            handleOAuthAuthorize(exchange, decode(seg[2]));
             return;
         }
-        if ("GET".equals(method) && seg.length == 3
-                && "api".equals(seg[0]) && "oauth".equals(seg[1]) && "callback".equals(seg[2])) {
-            handleOAuthCallback(exchange);
+        if ("POST".equals(method) && seg.length == 5
+                && "api".equals(seg[0]) && "providers".equals(seg[1])
+                && "oauth".equals(seg[3]) && "complete".equals(seg[4])) {
+            handleOAuthComplete(exchange, decode(seg[2]));
             return;
         }
         if ("GET".equals(method) && seg.length == 2
@@ -541,14 +542,13 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
-    private void handleOAuthStart(HttpExchange exchange, String providerId) throws IOException {
+    private void handleOAuthAuthorize(HttpExchange exchange, String providerId) throws IOException {
         if (oauth == null) {
             handleNotFound(exchange);
             return;
         }
         try {
-            String base = callbackBaseUrl(exchange);
-            respondJson(exchange, 200, oauth.start(providerId, base));
+            respondJson(exchange, 200, oauth.authorize(providerId));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
@@ -556,58 +556,21 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
-    private void handleOAuthCallback(HttpExchange exchange) throws IOException {
+    private void handleOAuthComplete(HttpExchange exchange, String providerId) throws IOException {
         if (oauth == null) {
             handleNotFound(exchange);
             return;
         }
-        Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
         try {
-            oauth.callback(query.get("code"), query.get("state"));
-            respondHtml(exchange, 200,
-                    "<!doctype html><meta charset=utf-8><title>Signed in</title>"
-                    + "<body style=\"font-family:sans-serif;padding:2rem\">"
-                    + "<h2>Signed in</h2><p>You can close this tab.</p>"
-                    // Target the specific origin (the callback page and dashboard are same-origin)
-                    // instead of '*', so only that opener can receive the message.
-                    + "<script>try{window.opener&&window.opener.postMessage('oauth-done',window.location.origin)}catch(e){}"
-                    + "setTimeout(function(){window.close()},500)</script>");
+            Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+            String code = stringField(body, "code");
+            String state = stringField(body, "state");
+            respondJson(exchange, 200, oauth.complete(providerId, code, state));
         } catch (IllegalArgumentException e) {
-            respondHtml(exchange, 400,
-                    "<!doctype html><meta charset=utf-8><title>Sign-in failed</title>"
-                    + "<body style=\"font-family:sans-serif;padding:2rem\">"
-                    + "<h2>Sign-in failed</h2><p>You can close this tab and try again.</p>");
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
         }
-    }
-
-    // The OAuth redirect_uri MUST NOT be derived from the request's Host header: that header is
-    // fully attacker-controllable (any client can send an arbitrary Host), and since redirect_uri
-    // becomes part of the outbound authorize URL, trusting it would let a caller redirect the
-    // finished OAuth code to a host of their choosing. Instead this is server-controlled: either an
-    // explicit configured public base URL, or the address this server actually bound/is listening
-    // on (never client input).
-    private static String callbackBaseUrl(HttpExchange exchange) {
-        String configured = System.getProperty("exampleserver.publicBaseUrl");
-        if (configured != null && !configured.trim().isEmpty()) {
-            String trimmed = configured.trim();
-            while (trimmed.endsWith("/")) {
-                trimmed = trimmed.substring(0, trimmed.length() - 1);
-            }
-            return trimmed;
-        }
-        return "http://" + exchange.getLocalAddress().getHostString() + ":" + exchange.getLocalAddress().getPort();
-    }
-
-    private static Map<String, String> parseQuery(String rawQuery) {
-        Map<String, String> out = new LinkedHashMap<>();
-        if (rawQuery == null || rawQuery.isEmpty()) return out;
-        for (String pair : rawQuery.split("&")) {
-            int eq = pair.indexOf('=');
-            String key = eq >= 0 ? pair.substring(0, eq) : pair;
-            String value = eq >= 0 ? pair.substring(eq + 1) : "";
-            out.put(decode(key), decode(value));
-        }
-        return out;
     }
 
     private void handleProxiesList(HttpExchange exchange) throws IOException {
@@ -687,15 +650,6 @@ public final class ManagementApi implements HttpHandler {
     private void respondJson(HttpExchange exchange, int status, Object body) throws IOException {
         byte[] bytes = json.stringify(body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("content-type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
-    }
-
-    private void respondHtml(HttpExchange exchange, int status, String html) throws IOException {
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("content-type", "text/html; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

@@ -66,7 +66,7 @@ public final class ServerMain {
             RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), profile, holder, ai.logger());
             QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ConfigAdmin config = new ConfigAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
-            OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin, ai.clock());
+            OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin);
             ProxyManager proxyManager = new ProxyManager(ai, holder, ai.store(), ai.jsonCodec(), ai.logger());
             ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
@@ -87,8 +87,8 @@ public final class ServerMain {
             System.out.println("  PUT  /api/routing/model-map      {\"map\":{...}}");
             System.out.println("  GET  /api/providers/{id}/config");
             System.out.println("  PUT  /api/providers/{id}/config  {\"values\":{...}}");
-            System.out.println("  POST /api/providers/{id}/oauth/start");
-            System.out.println("  GET  /api/oauth/callback?code=&state=");
+            System.out.println("  POST /api/providers/{id}/oauth/authorize");
+            System.out.println("  POST /api/providers/{id}/oauth/complete   {\"code\":..,\"state\":..}");
             System.out.println("  GET  /api/proxies");
             System.out.println("  PUT  /api/proxies/{app}          {\"port\":N}");
             System.out.println("  POST /api/proxies/{app}/start | /stop");
