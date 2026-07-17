@@ -410,6 +410,22 @@
     </div>
   </section>
 
+  <section class="card" id="config-card" style="display:none">
+    <div class="card-head">
+      <h2>Configuration</h2>
+      <div class="card-head-actions">
+        <span class="hint" id="config-hint">provider settings</span>
+        <button class="small" id="save-config-button" type="button">Save</button>
+      </div>
+    </div>
+    <div id="config-toast" class="toast hidden"></div>
+    <div class="card-body">
+      <div id="config-body">
+        <div class="empty-state">Select a provider to view its configuration.</div>
+      </div>
+    </div>
+  </section>
+
   <section class="card chat-card">
     <div class="card-head">
       <h2>Chat</h2>
@@ -922,6 +938,7 @@
     hideAddAccountForm();
     renderMergedProviders();
     loadAccounts();
+    loadConfig(id);
   }
 
   function loadAccounts() {
@@ -1075,6 +1092,104 @@
       var qrow = buildQuotaRow(quotaByAccountId[accountId]);
       tr.parentNode.insertBefore(qrow, tr.nextSibling);
     }
+  }
+
+  // -- provider config (schema-driven /v1/config) --
+
+  var configFields = [];   // flattened [{key,type,options?}] for the selected provider
+  var configSeq = 0;
+
+  function showConfigToast(message, ok) {
+    var toast = document.getElementById("config-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  // Loads config for `providerId`; hides the whole card on 404 (provider has no config surface).
+  function loadConfig(providerId) {
+    var requestId = ++configSeq;
+    var card = document.getElementById("config-card");
+    fetchOrNull404("/api/providers/" + encodeURIComponent(providerId) + "/config")
+      .then(function (resp) {
+        if (requestId !== configSeq || providerId !== selectedProviderId) return; // stale
+        if (!resp) { card.style.display = "none"; return; }
+        card.style.display = "";
+        document.getElementById("config-hint").textContent = providerId;
+        renderConfig(resp);
+      })
+      .catch(function () {
+        if (requestId === configSeq) card.style.display = "none";
+      });
+  }
+
+  function renderConfig(resp) {
+    var body = document.getElementById("config-body");
+    body.innerHTML = "";
+    configFields = [];
+    var groups = (resp && resp.groups) || [];
+    var values = (resp && resp.values) || {};
+    if (!groups.length) {
+      body.appendChild(el("div", "empty-state", "This provider has no configurable settings."));
+      return;
+    }
+    groups.forEach(function (group) {
+      body.appendChild(el("h3", "config-group-title", group.title || ""));
+      (group.fields || []).forEach(function (field) {
+        configFields.push({ key: field.key, type: field.type });
+        var wrap = el("div", "field");
+        wrap.appendChild(el("label", null, field.label || field.key));
+        wrap.appendChild(buildConfigInput(field, values[field.key]));
+        body.appendChild(wrap);
+      });
+    });
+  }
+
+  function buildConfigInput(field, value) {
+    var input;
+    if (field.type === "bool") {
+      input = el("input");
+      input.type = "checkbox";
+      input.checked = value === true;
+    } else if (field.type === "enum") {
+      input = el("select");
+      (field.options || []).forEach(function (opt) {
+        var o = el("option", null, opt);
+        o.value = opt;
+        if (opt === value) o.selected = true;
+        input.appendChild(o);
+      });
+    } else {
+      input = el("input");
+      input.type = field.type === "number" ? "number" : "text";
+      if (value !== undefined && value !== null) input.value = value;
+    }
+    input.id = "config-input-" + field.key;
+    return input;
+  }
+
+  function saveConfig() {
+    if (!selectedProviderId) return;
+    var values = {};
+    configFields.forEach(function (f) {
+      var input = document.getElementById("config-input-" + f.key);
+      if (!input) return;
+      if (f.type === "bool") values[f.key] = input.checked;
+      else if (f.type === "number") values[f.key] = input.value === "" ? null : Number(input.value);
+      else values[f.key] = input.value;
+    });
+    var saveBtn = document.getElementById("save-config-button");
+    saveBtn.disabled = true;
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/config", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ values: values })
+    }).then(function () {
+      showConfigToast("Saved.", true);
+    }).catch(function (err) {
+      showConfigToast("Save failed: " + err.message, false);
+    }).then(function () {
+      saveBtn.disabled = false;
+    });
   }
 
   // -- add account (paste-token seed) --
@@ -1256,6 +1371,7 @@
   document.getElementById("toggle-add-account-button").addEventListener("click", showAddAccountForm);
   document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
+  document.getElementById("save-config-button").addEventListener("click", saveConfig);
 
   loadProvidersInitial();
   loadModels();
