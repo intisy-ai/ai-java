@@ -43,6 +43,12 @@ public final class EchoProvider implements Provider {
         if (request != null && "GET".equals(request.method) && "/v1/quota".equals(request.url)) {
             return quotaResponse();
         }
+        if (request != null && "GET".equals(request.method) && "/v1/config".equals(request.url)) {
+            return configResponse();
+        }
+        if (request != null && "PUT".equals(request.method) && "/v1/config".equals(request.url)) {
+            return putConfigResponse(request.body);
+        }
 
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
@@ -54,6 +60,68 @@ public final class EchoProvider implements Provider {
         response.headers.put("content-type", "application/json");
         response.body = anthropicMessageBody(servedModel);
         return response;
+    }
+
+    // Last-written values object as raw JSON text (defaults shown). PUT replaces it; GET echoes it.
+    // The fixture persists-and-echoes rather than parsing -- enough to prove ConfigAdmin's round-trip;
+    // a real provider parses+validates+coerces against its schema and persists under configDir.
+    private String valuesJson = "{\"greeting\":\"Echo provider handled your request\",\"verbose\":false}";
+
+    private HttpResponse configResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"groups\":[{\"title\":\"General\",\"fields\":["
+                + "{\"key\":\"greeting\",\"label\":\"Greeting\",\"type\":\"string\"},"
+                + "{\"key\":\"verbose\",\"label\":\"Verbose\",\"type\":\"bool\"}"
+                + "]}],"
+                + "\"values\":" + valuesJson
+                + "}";
+        return response;
+    }
+
+    private HttpResponse putConfigResponse(String body) {
+        String extracted = extractJsonObject(body, "values");
+        if (extracted != null) valuesJson = extracted;
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{\"values\":" + valuesJson + "}";
+        return response;
+    }
+
+    // Returns the raw JSON object text that is the value of `key` in `body` (from its opening '{'
+    // to the matching '}', quote/escape-aware), or null if not found. Hand-rolled to keep the
+    // fixture gson-free and transpilable.
+    private static String extractJsonObject(String body, String key) {
+        if (body == null) return null;
+        String needle = "\"" + key + "\"";
+        int k = body.indexOf(needle);
+        if (k < 0) return null;
+        int start = body.indexOf('{', k + needle.length());
+        if (start < 0) return null;
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = start; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') inString = false;
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) return body.substring(start, i + 1);
+            }
+        }
+        return null;
     }
 
     // Canned quota catalog: one active account with a single "5-hour" quota bucket -- shape
