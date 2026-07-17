@@ -430,6 +430,16 @@
         <button class="primary small" id="submit-add-account-button" type="submit">Add</button>
       </div>
     </form>
+    <div class="add-account-form" id="oauth-paste-row" style="display:none">
+      <div class="field">
+        <label for="oauth-code-input">Paste the code (or <code>code#state</code>) from the provider</label>
+        <input type="text" id="oauth-code-input" autocomplete="off">
+      </div>
+      <div class="actions">
+        <button class="subtle small" id="oauth-cancel-button" type="button">Cancel</button>
+        <button class="primary small" id="oauth-complete-button" type="button">Complete login</button>
+      </div>
+    </div>
     <div class="card-body">
       <div class="empty-state" id="accounts-empty">Select a provider to view its accounts.</div>
       <table id="accounts-table" style="display:none">
@@ -1050,6 +1060,7 @@
     document.getElementById("refresh-quota-button").style.display = "";
     document.getElementById("oauth-login-button").style.display = "";
     hideAddAccountForm();
+    hideOauthPasteRow();
     renderMergedProviders();
     loadAccounts();
     loadConfig(id);
@@ -1306,41 +1317,54 @@
     });
   }
 
-  // -- oauth login (full browser flow) --
+  // -- oauth login (provider-authorize + paste-the-code completion) --
 
+  function hideOauthPasteRow() {
+    document.getElementById("oauth-paste-row").style.display = "none";
+  }
+
+  // Asks the server for a fresh authorize URL, opens it in a popup, and (for providers that
+  // can't run a server-side callback) reveals a box for the operator to paste back the code.
   function startOAuthLogin() {
     if (!selectedProviderId) return;
-    var providerId = selectedProviderId;
     var btn = document.getElementById("oauth-login-button");
     btn.disabled = true;
-    jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/oauth/start", { method: "POST" })
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/oauth/authorize", { method: "POST" })
       .then(function (resp) {
-        var popup = window.open(resp.authorizeUrl, "oauth-login", "width=520,height=680");
-        // The callback page posts 'oauth-done' when the exchange completes; refresh accounts then.
-        // Only accept it from our own origin -- the callback page is same-origin, so any other
-        // origin posting this message is not the real callback and must be ignored.
-        var onMessage = function (ev) {
-          if (ev.origin === window.location.origin && ev.data === "oauth-done") {
-            window.removeEventListener("message", onMessage);
-            if (providerId === selectedProviderId) loadAccounts();
-          }
-        };
-        window.addEventListener("message", onMessage);
-        // Fallback: if the popup is closed without a message, refresh once anyway.
-        var poll = setInterval(function () {
-          if (popup && popup.closed) {
-            clearInterval(poll);
-            window.removeEventListener("message", onMessage);
-            if (providerId === selectedProviderId) loadAccounts();
-          }
-        }, 1000);
+        window.open(resp.authorizeUrl, "oauth-login", "width=520,height=720");
+        if (resp.completion === "paste") {
+          document.getElementById("oauth-paste-row").style.display = "";
+          document.getElementById("oauth-code-input").value = "";
+          document.getElementById("oauth-code-input").focus();
+        } else {
+          showAddAccountToast("This provider needs loopback login (not supported yet in this build).", false);
+        }
       })
-      .catch(function (err) {
-        showAddAccountToast("Login failed: " + err.message, false);
-      })
-      .then(function () {
-        btn.disabled = false;
-      });
+      .catch(function (err) { showAddAccountToast("Login failed: " + err.message, false); })
+      .then(function () { btn.disabled = false; });
+  }
+
+  // Splits the pasted "code#state" (a bare code sends state="") and completes the exchange.
+  function completeOAuthLogin() {
+    if (!selectedProviderId) return;
+    var raw = document.getElementById("oauth-code-input").value.trim();
+    if (!raw) return;
+    var hash = raw.indexOf("#");
+    var code = hash >= 0 ? raw.slice(0, hash) : raw;
+    var state = hash >= 0 ? raw.slice(hash + 1) : "";
+    var btn = document.getElementById("oauth-complete-button");
+    btn.disabled = true;
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/oauth/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: code, state: state })
+    }).then(function () {
+      hideOauthPasteRow();
+      showAddAccountToast("Logged in.", true);
+      loadAccounts();
+    }).catch(function (err) {
+      showAddAccountToast("Login failed: " + err.message, false);
+    }).then(function () { btn.disabled = false; });
   }
 
   // -- add account (paste-token seed) --
@@ -1526,6 +1550,8 @@
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
   document.getElementById("save-config-button").addEventListener("click", saveConfig);
   document.getElementById("oauth-login-button").addEventListener("click", startOAuthLogin);
+  document.getElementById("oauth-complete-button").addEventListener("click", completeOAuthLogin);
+  document.getElementById("oauth-cancel-button").addEventListener("click", hideOauthPasteRow);
 
   loadProvidersInitial();
   loadModels();

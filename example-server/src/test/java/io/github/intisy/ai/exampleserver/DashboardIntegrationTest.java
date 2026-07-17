@@ -92,6 +92,13 @@ class DashboardIntegrationTest {
     }
 
     @Test
+    void dashboardIncludesOauthPasteBox() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("id=\"oauth-code-input\""), "oauth paste box missing");
+        assertTrue(html.contains("id=\"oauth-complete-button\""), "oauth complete button missing");
+    }
+
+    @Test
     void dashboardIncludesProxiesCard() throws IOException {
         String html = get("/").body;
         assertTrue(html.contains("id=\"proxies-card\""), "proxies card missing");
