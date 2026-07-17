@@ -226,10 +226,11 @@ public final class GithubOrgScan {
         try {
             connection.setRequestMethod("GET");
             connection.setRequestProperty("User-Agent", USER_AGENT);
-            String bearerToken = token.get();
-            if (bearerToken != null && !bearerToken.trim().isEmpty()) {
-                connection.setRequestProperty("Authorization", "Bearer " + bearerToken);
-            }
+            // Deliberately NO Authorization header here: a release asset's browser_download_url
+            // 302-redirects to a presigned objects.githubusercontent.com/S3 URL that rejects a
+            // request also carrying a bearer token ("only one auth mechanism allowed"), and some
+            // JDKs forward request headers across the redirect. Public release assets need no auth
+            // to download -- the token is only needed for the API scan calls in httpGet.
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
             connection.setInstanceFollowRedirects(true);
