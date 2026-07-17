@@ -23,7 +23,8 @@ public final class GithubOrgProviderSource implements ProviderSource {
         this(new GithubOrgScan(json));
     }
 
-    GithubOrgProviderSource(GithubOrgScan scan) {
+    /** Shares one scan instance so the org is scanned once for both providers and proxies. */
+    public GithubOrgProviderSource(GithubOrgScan scan) {
         this.scan = scan;
     }
 

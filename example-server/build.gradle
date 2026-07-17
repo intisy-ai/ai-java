@@ -33,9 +33,11 @@ def stageProviders = tasks.register("stageProviders", Copy) {
 }
 
 def runProvidersDir = layout.buildDirectory.dir("run-providers")
+def runProxiesDir = layout.buildDirectory.dir("run-proxies")
 
 tasks.named("run") {
     systemProperty("exampleserver.providersDir", runProvidersDir.get().asFile.absolutePath)
+    systemProperty("exampleserver.proxiesDir", runProxiesDir.get().asFile.absolutePath)
 }
 
 tasks.named("test") {

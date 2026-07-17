@@ -8,6 +8,8 @@ import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
+import io.github.intisy.ai.exampleserver.discovery.GithubOrgProxySource;
+import io.github.intisy.ai.exampleserver.discovery.GithubOrgScan;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxyDiscovery;
@@ -74,9 +76,13 @@ public final class ServerMain {
             OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin);
             ProxyManager proxyManager = new ProxyManager(ai, holder, proxyHolder, ai.store(), ai.jsonCodec(), ai.logger());
             ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
+            // ONE shared org scan feeds both sources so the org is only ever scanned once.
+            GithubOrgScan orgScan = new GithubOrgScan(ai.jsonCodec());
+            GithubOrgProviderSource providerSource = new GithubOrgProviderSource(orgScan);
+            GithubOrgProxySource proxySource = new GithubOrgProxySource(orgScan);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
-                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config, oauth,
-                    proxyAdmin);
+                    providerSource, providersDir, holder, routing, quota, config, oauth,
+                    proxyAdmin, proxySource, proxyHolder, proxiesDir);
             ExampleServer server = ExampleServer.start(router, port, api);
             proxyManager.startEnabledOnBoot();
 
@@ -95,8 +101,11 @@ public final class ServerMain {
             System.out.println("  POST /api/providers/{id}/oauth/authorize");
             System.out.println("  POST /api/providers/{id}/oauth/complete   {\"code\":..,\"state\":..}");
             System.out.println("  GET  /api/proxies");
-            System.out.println("  PUT  /api/proxies/{app}          {\"port\":N}");
-            System.out.println("  POST /api/proxies/{app}/start | /stop");
+            System.out.println("  GET  /api/proxies/available     list installable proxies");
+            System.out.println("  POST /api/proxies/install         {\"name\":\"<entry name>\"}");
+            System.out.println("  DELETE /api/proxies/{id}");
+            System.out.println("  PUT  /api/proxies/{id}          {\"port\":N}");
+            System.out.println("  POST /api/proxies/{id}/start | /stop");
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");

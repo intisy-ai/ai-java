@@ -21,7 +21,8 @@ public final class GithubOrgProxySource implements ProxySource {
         this(new GithubOrgScan(json));
     }
 
-    GithubOrgProxySource(GithubOrgScan scan) {
+    /** Shares one scan instance so the org is scanned once for both providers and proxies. */
+    public GithubOrgProxySource(GithubOrgScan scan) {
         this.scan = scan;
     }
 
