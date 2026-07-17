@@ -113,21 +113,26 @@ public class RoutingAdmin {
         return raw != null ? raw : "{}";
     }
 
-    /** {@code {tiers: <detected tier names>, map: <raw stored tier map>}}. */
-    public Map<String, Object> modelMapView() {
+    /** {@code {tiers: <detected tier names>, map: <raw stored tier map>}} for the given profile's config file. */
+    public Map<String, Object> modelMapView(RoutingProfile profile) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("tiers", ModelMap.resolveTiers(store, json, profile));
         view.put("map", ModelMap.readModelMap(store, json, profile));
         return view;
     }
 
+    /** {@code {tiers, map}} for the ctor's default profile (back-compat). */
+    public Map<String, Object> modelMapView() {
+        return modelMapView(this.profile);
+    }
+
     /**
-     * Validates and persists a full tier -&gt; chain map. Every {@code provider} must be one of
-     * {@link ProviderRegistryHolder#listProviderIds()} (unknown -&gt; throws); an unknown
-     * {@code model} for an otherwise-known provider is not fatal (the router self-heals it) but
-     * is surfaced back as a warning.
+     * Validates and persists a full tier -&gt; chain map into the given profile's config file.
+     * Every {@code provider} must be one of {@link ProviderRegistryHolder#listProviderIds()}
+     * (unknown -&gt; throws); an unknown {@code model} for an otherwise-known provider is not
+     * fatal (the router self-heals it) but is surfaced back as a warning.
      */
-    public Map<String, Object> putModelMap(Map<String, Object> map) {
+    public Map<String, Object> putModelMap(RoutingProfile profile, Map<String, Object> map) {
         List<String> providerIds = holder.listProviderIds();
         Map<String, Object> catalog = readCatalog();
         List<String> warnings = new ArrayList<>();
@@ -153,6 +158,11 @@ public class RoutingAdmin {
         result.put("ok", true);
         result.put("warnings", warnings);
         return result;
+    }
+
+    /** Validates + persists a full tier-&gt;chain map for the ctor's default profile (back-compat). */
+    public Map<String, Object> putModelMap(Map<String, Object> map) {
+        return putModelMap(this.profile, map);
     }
 
     // A stored slot is either a single {provider,model} object (legacy) or an ordered chain

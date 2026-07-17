@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver.api;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import io.github.intisy.ai.exampleserver.AppProfiles;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
@@ -10,6 +11,7 @@ import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
+import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 
 import java.io.ByteArrayOutputStream;
@@ -44,8 +46,10 @@ import java.util.function.Supplier;
  * POST   /api/providers/{id}/models/discover              -> 200 {"provider":..,"models":[...]}
  * POST   /api/providers/{id}/quota/refresh                -> 200 {"accounts":[...]}
  * GET    /api/routing/catalog                            -> 200 <models.json>
- * GET    /api/routing/model-map                          -> 200 {"tiers":[...],"map":{...}}
- * PUT    /api/routing/model-map          {"map":{...}}    -> 200 {"ok":true,"warnings":[...]}
+ * GET    /api/routing/model-map          ?app=<app>       -> 200 {"tiers":[...],"map":{...}}
+ * PUT    /api/routing/model-map          ?app=<app>       -> 200 {"ok":true,"warnings":[...]}
+ *                                        {"map":{...}}
+ * (app is optional; missing/blank -> the server's default routing profile, for back-compat)
  * GET    /api/providers/{id}/config                       -> 200 {"groups":[...],"values":{...}}
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
  * POST   /api/providers/{id}/oauth/start                  -> 200 {"authorizeUrl":..,"state":..}
@@ -433,7 +437,14 @@ public final class ManagementApi implements HttpHandler {
             handleNotFound(exchange);
             return;
         }
-        respondJson(exchange, 200, routing.modelMapView());
+        try {
+            RoutingProfile p = profileFromQuery(exchange);
+            respondJson(exchange, 200, p == null ? routing.modelMapView() : routing.modelMapView(p));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
     }
 
     private void handleModelMapPut(HttpExchange exchange) throws IOException {
@@ -442,6 +453,7 @@ public final class ManagementApi implements HttpHandler {
             return;
         }
         try {
+            RoutingProfile p = profileFromQuery(exchange);
             Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
             Object mapObj = body != null ? body.get("map") : null;
             if (!(mapObj instanceof Map)) {
@@ -449,12 +461,30 @@ public final class ManagementApi implements HttpHandler {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) mapObj;
-            respondJson(exchange, 200, routing.putModelMap(map));
+            respondJson(exchange, 200, p == null ? routing.putModelMap(map) : routing.putModelMap(p, map));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
             respondJson(exchange, 400, error);
         }
+    }
+
+    // A missing/blank ?app= keeps existing behavior (the server's default routing profile);
+    // an unrecognized app propagates AppProfiles.byApp's IllegalArgumentException to the 400 path.
+    private RoutingProfile profileFromQuery(HttpExchange exchange) {
+        String app = queryParam(exchange, "app");
+        return (app == null || app.isEmpty()) ? null : AppProfiles.byApp(app);
+    }
+
+    private static String queryParam(HttpExchange exchange, String key) {
+        String raw = exchange.getRequestURI().getRawQuery();
+        if (raw == null || raw.isEmpty()) return null;
+        for (String pair : raw.split("&")) {
+            int eq = pair.indexOf('=');
+            String k = eq >= 0 ? pair.substring(0, eq) : pair;
+            if (key.equals(decode(k))) return eq >= 0 ? decode(pair.substring(eq + 1)) : "";
+        }
+        return null;
     }
 
     private void handleQuotaRefresh(HttpExchange exchange, String providerId) throws IOException {

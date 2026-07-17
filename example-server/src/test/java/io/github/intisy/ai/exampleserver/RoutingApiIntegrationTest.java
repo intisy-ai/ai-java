@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.util.Scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -147,6 +148,30 @@ class RoutingApiIntegrationTest {
         Response put = put("/api/routing/model-map", body);
         assertEquals(400, put.status, put.body);
         assertTrue(put.body.contains("error"), put.body);
+    }
+
+    @Test
+    void modelMapIsAppScoped() throws IOException {
+        // Save a map for claude-code, and a different one for opencode; each reads back its own.
+        assertEquals(200, put("/api/routing/model-map?app=claude-code",
+                "{\"map\":{\"opus\":[{\"provider\":\"echo\",\"model\":\"m-echo-opus\"}]}}").status);
+        assertEquals(200, put("/api/routing/model-map?app=opencode",
+                "{\"map\":{\"haiku\":[{\"provider\":\"echo\",\"model\":\"m-echo-haiku\"}]}}").status);
+
+        Response cc = get("/api/routing/model-map?app=claude-code");
+        assertTrue(cc.body.contains("m-echo-opus"), cc.body);
+        assertFalse(cc.body.contains("m-echo-haiku"), cc.body);
+
+        Response oc = get("/api/routing/model-map?app=opencode");
+        assertTrue(oc.body.contains("m-echo-haiku"), oc.body);
+        assertFalse(oc.body.contains("m-echo-opus"), oc.body);
+    }
+
+    @Test
+    void modelMapWithoutAppUsesDefaultProfile() throws IOException {
+        // Back-compat: no app param still round-trips against the default (demo) profile.
+        Response r = get("/api/routing/model-map");
+        assertEquals(200, r.status, r.body);
     }
 
     // -- tiny loopback HTTP client (test-only; mirrors ManagementApiIntegrationTest's helper) --
