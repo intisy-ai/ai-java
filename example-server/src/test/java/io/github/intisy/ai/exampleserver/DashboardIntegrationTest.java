@@ -145,6 +145,35 @@ class DashboardIntegrationTest {
         assertTrue(html.contains("uninstallProvider"), "uninstall affordance missing");
     }
 
+    @Test
+    void proxiesCardHasInstallAvailableAndUninstallSurface() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("/api/proxies/available"), "proxies available scan URL missing");
+        assertTrue(html.contains("/api/proxies/install"), "proxies install URL missing");
+        assertTrue(html.contains("function installProxy("), "installProxy handler missing");
+        assertTrue(html.contains("function uninstallProxy("), "uninstallProxy handler missing");
+    }
+
+    @Test
+    void proxyRowRenderingReadsDisplayNameAndRoutingFlag() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("row.displayName"), "proxy rows must read row.displayName");
+        assertTrue(html.contains("row.routing"), "proxy rows must gate on row.routing");
+    }
+
+    @Test
+    void installedRenderIsDecoupledFromAvailableScanForBothCards() throws IOException {
+        String html = get("/").body;
+        // Stable markers proving the installed list renders independently of the (slower,
+        // org-scanning) available fetch, so a failed/slow scan can't blank the installed rows.
+        assertTrue(html.contains("function fetchInstalledProviders("), "providers installed-fetch not decoupled");
+        assertTrue(html.contains("function fetchAvailableProviders("), "providers available-fetch not decoupled");
+        assertTrue(html.contains("function fetchInstalledProxies("), "proxies installed-fetch not decoupled");
+        assertTrue(html.contains("function fetchAvailableProxies("), "proxies available-fetch not decoupled");
+        assertTrue(html.contains("id=\"providers-scan-error\""), "providers scan-error hook missing");
+        assertTrue(html.contains("id=\"proxies-scan-error\""), "proxies scan-error hook missing");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

@@ -375,6 +375,7 @@
       <h2>Providers</h2>
       <div class="card-head-actions">
         <span class="hint">installed &amp; available from the org</span>
+        <span id="providers-scan-error" class="proxy-error" style="display:none"></span>
         <button class="small" id="refresh-providers-button" type="button">Refresh</button>
       </div>
     </div>
@@ -391,7 +392,8 @@
     <div class="card-head">
       <h2>Proxies</h2>
       <div class="card-head-actions">
-        <span class="hint">per-app routing proxy &mdash; click a row for its routing</span>
+        <span class="hint">installed &amp; available &mdash; click a routable row for its routing</span>
+        <span id="proxies-scan-error" class="proxy-error" style="display:none"></span>
         <button class="small" id="refresh-proxies-button" type="button">Refresh</button>
       </div>
     </div>
@@ -689,18 +691,42 @@
     renderProviderRows(mergeProviderRows(installedProviders, availableProviders));
   }
 
-  // Fetches BOTH provider sources (the available fetch re-scans the GitHub org and can take
-  // a few seconds) and re-renders the unified list. Used by the initial load, the Refresh
-  // button, and after a successful install.
-  function fetchAndRenderProviders() {
-    return Promise.all([
-      jsonFetch("/api/providers"),
-      jsonFetch("/api/providers/available")
-    ]).then(function (results) {
-      installedProviders = results[0] || [];
-      availableProviders = results[1] || [];
+  function showProvidersScanError(message) {
+    var span = document.getElementById("providers-scan-error");
+    span.textContent = message;
+    span.style.display = "";
+  }
+
+  function hideProvidersScanError() {
+    var span = document.getElementById("providers-scan-error");
+    span.style.display = "none";
+    span.textContent = "";
+  }
+
+  // Renders the installed list as soon as it resolves -- independent of the available fetch below.
+  function fetchInstalledProviders() {
+    return jsonFetch("/api/providers").then(function (result) {
+      installedProviders = result || [];
       renderMergedProviders();
     });
+  }
+
+  // The available fetch re-scans the GitHub org and can be slow or fail; it never rejects the
+  // caller and never touches installedProviders, so a bad scan can't blank the installed rows.
+  function fetchAvailableProviders() {
+    return jsonFetch("/api/providers/available").then(function (result) {
+      availableProviders = result || [];
+      hideProvidersScanError();
+      renderMergedProviders();
+    }).catch(function (err) {
+      showProvidersScanError("Scan failed: " + err.message);
+    });
+  }
+
+  // Used by the initial load, the Refresh button, and after a successful install. The two
+  // sources are fetched/rendered independently (see above) -- this just waits for both.
+  function fetchAndRenderProviders() {
+    return Promise.all([fetchInstalledProviders(), fetchAvailableProviders()]);
   }
 
   function loadProvidersInitial() {
@@ -746,6 +772,7 @@
     btn.appendChild(el("span", "spinner"));
     btn.appendChild(document.createTextNode("Refreshing…"));
     hideProvidersToast();
+    hideProvidersScanError();
     fetchAndRenderProviders().catch(function (err) {
       showProvidersToast("Refresh failed: " + err.message, false);
     }).then(function () {
@@ -1025,7 +1052,10 @@
     });
   }
 
-  // -- proxies (per-app JVM routing proxy) --
+  // -- proxies (installed + available like the providers card; server row is always first) --
+
+  var installedProxies = [];
+  var availableProxies = [];
 
   function showProxiesToast(message, ok) {
     var toast = document.getElementById("proxies-toast");
@@ -1033,21 +1063,80 @@
     toast.className = "toast " + (ok ? "ok" : "err");
   }
 
-  // Hides the whole card on 404 (older server built without a ProxyAdmin wired in).
-  function loadProxies() {
-    var body = document.getElementById("proxies-body");
-    fetchOrNull404("/api/proxies").then(function (rows) {
-      if (!rows) { document.getElementById("proxies-card").style.display = "none"; return; }
-      renderProxies(rows);
+  function hideProxiesToast() {
+    document.getElementById("proxies-toast").className = "toast hidden";
+  }
+
+  function showProxiesScanError(message) {
+    var span = document.getElementById("proxies-scan-error");
+    span.textContent = message;
+    span.style.display = "";
+  }
+
+  function hideProxiesScanError() {
+    var span = document.getElementById("proxies-scan-error");
+    span.style.display = "none";
+    span.textContent = "";
+  }
+
+  // Merges the two proxy sources into one row list, same convention as mergeProviderRows:
+  // available entries already installed (installed:true) are skipped to avoid duplicate rows.
+  function mergeProxyRows(installed, available) {
+    var rows = [];
+    (installed || []).forEach(function (p) {
+      rows.push({
+        kind: "installed", id: p.id, displayName: p.displayName, port: p.port,
+        running: p.running, routing: p.routing, error: p.error
+      });
+    });
+    (available || []).forEach(function (item) {
+      if (item.installed === true) return;
+      rows.push({ kind: "available", id: item.name, assetName: item.assetName });
+    });
+    return rows;
+  }
+
+  function renderMergedProxies() {
+    renderProxies(mergeProxyRows(installedProxies, availableProxies));
+  }
+
+  // Renders the installed list as soon as it resolves. Hides the whole card on 404 (older
+  // server built without a ProxyAdmin wired in) -- independent of the available fetch below.
+  function fetchInstalledProxies() {
+    return fetchOrNull404("/api/proxies").then(function (rows) {
+      if (rows === null) { document.getElementById("proxies-card").style.display = "none"; return; }
+      installedProxies = rows;
+      renderMergedProxies();
+    });
+  }
+
+  // The available fetch re-scans the GitHub org and can be slow or fail; it never rejects the
+  // caller and never touches installedProxies, so a bad scan can't blank the installed rows.
+  function fetchAvailableProxies() {
+    return jsonFetch("/api/proxies/available").then(function (result) {
+      availableProxies = result || [];
+      hideProxiesScanError();
+      renderMergedProxies();
     }).catch(function (err) {
+      showProxiesScanError("Scan failed: " + err.message);
+    });
+  }
+
+  // Used by the initial load, the Refresh button, and after install/uninstall. The two sources
+  // are fetched/rendered independently (see above) -- this just waits for both.
+  function loadProxies() {
+    return Promise.all([fetchInstalledProxies(), fetchAvailableProxies()]).catch(function (err) {
+      var body = document.getElementById("proxies-body");
       body.innerHTML = "";
       body.appendChild(el("div", "loading-row", "Failed to load proxies: " + err.message));
     });
   }
 
   // Renders the Server row first (carries the "" / default-profile routing scope, no port or
-  // start/stop controls since it's the running example server itself), then one selectable row
-  // per proxy. Clicking any row opens that target's routing settings via selectProxy(app).
+  // start/stop controls since it's the running example server itself), then one row per merged
+  // entry: installed rows get port/save/start-stop/uninstall and are selectable for routing
+  // ONLY when row.routing === true (a passthrough proxy like opencode shows a hint instead of
+  // opening the tier editor); available rows get an Install button.
   function renderProxies(rows) {
     var body = document.getElementById("proxies-body");
     body.innerHTML = "";
@@ -1059,46 +1148,114 @@
     body.appendChild(serverLine);
 
     rows.forEach(function (row) {
-      var line = el("div", "proxy-row selectable");
-      line.dataset.app = row.app;
-      line.appendChild(el("span", "proxy-app", row.app + " (" + row.profile + ")"));
-      line.addEventListener("click", function () { selectProxy(row.app); });
-
-      var port = el("input", "proxy-port");
-      port.type = "number";
-      port.value = row.port;
-      port.id = "proxy-port-" + row.app;
-      line.appendChild(port);
-
-      line.appendChild(badge(row.running ? "ready" : "disabled"));
-      if (row.error) line.appendChild(el("span", "proxy-error", row.error));
-
-      var save = el("button", "small", "Save port");
-      save.type = "button";
-      save.addEventListener("click", function (evt) { evt.stopPropagation(); saveProxyPort(row.app); });
-      line.appendChild(save);
-
-      var toggle = el("button", "small", row.running ? "Stop" : "Start");
-      toggle.type = "button";
-      toggle.addEventListener("click", function (evt) { evt.stopPropagation(); toggleProxy(row.app, !row.running); });
-      line.appendChild(toggle);
-
-      body.appendChild(line);
+      body.appendChild(row.kind === "installed" ? buildInstalledProxyRow(row) : buildAvailableProxyRow(row));
     });
 
     // If the previously selected proxy disappeared (e.g. uninstalled), close its settings panel
     // rather than leaving it open on a target that no longer exists.
-    if (selectedProxyApp && !rows.some(function (row) { return row.app === selectedProxyApp; })) {
+    var stillPresent = rows.some(function (row) { return row.kind === "installed" && row.id === selectedProxyApp; });
+    if (selectedProxyApp && !stillPresent) {
       selectedProxyApp = null;
       document.getElementById("proxy-settings").style.display = "none";
     }
     markSelectedProxyRow();
   }
 
-  // Opens the routing settings panel for the given proxy app ("" = the Server/default profile).
+  function buildInstalledProxyRow(row) {
+    var canRoute = row.routing === true;
+    var line = el("div", "proxy-row" + (canRoute ? " selectable" : ""));
+    line.dataset.app = row.id;
+    line.appendChild(el("span", "proxy-app", row.displayName || row.id));
+    if (canRoute) {
+      line.addEventListener("click", function () { selectProxy(row.id); });
+    } else {
+      line.appendChild(el("span", "proxy-error", "native / no routing"));
+    }
+
+    var port = el("input", "proxy-port");
+    port.type = "number";
+    port.value = row.port;
+    port.id = "proxy-port-" + row.id;
+    line.appendChild(port);
+
+    line.appendChild(badge(row.running ? "ready" : "disabled"));
+    if (row.error) line.appendChild(el("span", "proxy-error", row.error));
+
+    var save = el("button", "small", "Save port");
+    save.type = "button";
+    save.addEventListener("click", function (evt) { evt.stopPropagation(); saveProxyPort(row.id); });
+    line.appendChild(save);
+
+    var toggle = el("button", "small", row.running ? "Stop" : "Start");
+    toggle.type = "button";
+    toggle.addEventListener("click", function (evt) { evt.stopPropagation(); toggleProxy(row.id, !row.running); });
+    line.appendChild(toggle);
+
+    var uninstallBtn = el("button", "danger small", "Uninstall");
+    uninstallBtn.type = "button";
+    uninstallBtn.addEventListener("click", function (evt) { evt.stopPropagation(); uninstallProxy(row.id); });
+    line.appendChild(uninstallBtn);
+
+    return line;
+  }
+
+  function buildAvailableProxyRow(row) {
+    var line = el("div", "proxy-row");
+    line.appendChild(el("span", "proxy-app", row.id));
+    if (row.assetName) line.appendChild(el("span", "prov-asset", row.assetName));
+    line.appendChild(badge("available"));
+
+    var installBtn = el("button", "primary small", "Install");
+    installBtn.type = "button";
+    installBtn.addEventListener("click", function (evt) {
+      evt.stopPropagation();
+      installProxy(row.id, installBtn);
+    });
+    line.appendChild(installBtn);
+    return line;
+  }
+
+  // Installs a proxy plugin by its org name (POST /api/proxies/install {name}), mirroring
+  // installProvider, then refreshes the merged list.
+  function installProxy(name, button) {
+    hideProxiesToast();
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "Installing…";
+    jsonFetch("/api/proxies/install", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: name })
+    }).then(function () {
+      showProxiesToast("Installed \"" + name + "\".", true);
+      return loadProxies();
+    }).catch(function (err) {
+      button.disabled = false;
+      button.textContent = originalText;
+      showProxiesToast("Install failed: " + err.message, false);
+    });
+  }
+
+  // Deletes an installed proxy (DELETE /api/proxies/{id}), mirroring uninstallProvider.
+  function uninstallProxy(id) {
+    if (!window.confirm("Uninstall proxy \"" + id + "\"?")) return;
+    hideProxiesToast();
+    jsonFetch("/api/proxies/" + encodeURIComponent(id), { method: "DELETE" }).then(function () {
+      showProxiesToast("Uninstalled \"" + id + "\".", true);
+      return loadProxies();
+    }).catch(function (err) {
+      showProxiesToast("Uninstall failed: " + err.message, false);
+    });
+  }
+
+  // Opens the routing settings panel for the given proxy id ("" = the Server/default profile).
   function selectProxy(app) {
     selectedProxyApp = app;
-    var label = app ? app : "Server (this example server)";
+    var label = "Server (this example server)";
+    if (app) {
+      var match = installedProxies.filter(function (p) { return p.id === app; })[0];
+      label = (match && match.displayName) || app;
+    }
     document.getElementById("proxy-settings-title").textContent = "Routing — " + label;
     document.getElementById("proxy-settings").style.display = "";
     markSelectedProxyRow();
