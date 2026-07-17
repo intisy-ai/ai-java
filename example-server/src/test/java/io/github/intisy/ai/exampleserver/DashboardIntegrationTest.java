@@ -123,6 +123,13 @@ class DashboardIntegrationTest {
         assertFalse(html.contains("id=\"toggle-add-account-button\""), "manual-add toggle should be removed");
     }
 
+    @Test
+    void accountsAreClickableWithDetailPanel() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("id=\"account-detail\""), "account detail panel missing");
+        assertTrue(html.contains("id=\"provider-quota\""), "combined quota summary missing");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

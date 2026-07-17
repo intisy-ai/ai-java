@@ -247,13 +247,24 @@
   .add-account-form .row .field { flex: 1; }
   .add-account-form .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
 
-  /* -- per-account quota bars (sub-row under an accounts-table entry) -- */
-  .qrow td { padding-top: 0.3rem; padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-soft); }
+  /* -- quota bars, shared by the provider-wide summary and the account detail panel -- */
   .qbars { display: flex; flex-direction: column; gap: 0.35rem; }
   .qbar-label { font-size: 0.74rem; color: var(--muted); }
   .qbar-track { height: 8px; border-radius: 4px; background: var(--grey-bg); overflow: hidden; }
   .qbar-fill { height: 100%; background: var(--accent); }
   .qbar-reset { font-size: 0.7rem; color: var(--muted); }
+
+  /* -- combined provider-wide quota summary, top of #accounts-card -- */
+  .qbars-panel { margin-bottom: 0.9rem; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .qbars-panel-title { font-size: 0.78rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .subtle-caption { font-weight: 400; color: var(--muted); }
+
+  /* -- account detail panel (identity/status/expiry/quota/actions for one selected account) -- */
+  .detail-panel { margin-top: 0.9rem; padding: 0.85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .detail-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .detail-identity { font-weight: 600; font-size: 0.88rem; overflow-wrap: anywhere; }
+  .detail-expiry { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.6rem; }
+  .detail-panel .actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.7rem; }
 
   .discover-inline { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: 0.35rem; }
   .discover-result { font-size: 0.76rem; color: var(--muted); }
@@ -450,11 +461,31 @@
     </div>
     <div class="card-body">
       <div class="empty-state" id="accounts-empty">Select a provider to view its accounts.</div>
+      <div id="provider-quota" class="qbars-panel" style="display:none">
+        <div class="qbars-panel-title">Provider quota <span id="provider-quota-caption" class="subtle-caption"></span></div>
+        <div class="qbars" id="provider-quota-bars"></div>
+      </div>
       <button class="subtle small" id="add-account-fallback" type="button" style="display:none">Add account manually</button>
       <table id="accounts-table" style="display:none">
         <thead><tr><th>Id</th><th>Email</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      <div id="account-detail" class="detail-panel" style="display:none">
+        <div class="detail-panel-head">
+          <div>
+            <div id="account-detail-identity" class="detail-identity"></div>
+            <span id="account-detail-status"></span>
+          </div>
+          <button class="subtle small" id="account-detail-close" type="button">Close</button>
+        </div>
+        <div id="account-detail-expiry" class="detail-expiry"></div>
+        <div class="qbars-panel-title">Quota</div>
+        <div id="account-detail-quota" class="qbars"></div>
+        <div class="actions">
+          <button class="small" id="account-detail-toggle" type="button">Disable</button>
+          <button class="danger small" id="account-detail-remove" type="button">Remove</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -504,6 +535,7 @@
   "use strict";
 
   var selectedProviderId = null;
+  var selectedAccountId = null;
 
   // -- tiny helpers --
 
@@ -1070,6 +1102,8 @@
     document.getElementById("add-account-fallback").style.display = "none";
     hideAddAccountForm();
     hideOauthPasteRow();
+    document.getElementById("provider-quota").style.display = "none";
+    closeAccountDetail();
     renderMergedProviders();
     loadAccounts();
     loadConfig(id);
@@ -1101,7 +1135,10 @@
       });
   }
 
+  var currentAccounts = []; // last-rendered accounts list for the selected provider, keyed by id in selectAccount
+
   function renderAccounts(accounts) {
+    currentAccounts = accounts || [];
     var tbody = document.querySelector("#accounts-table tbody");
     tbody.innerHTML = "";
     if (!accounts || !accounts.length) {
@@ -1114,8 +1151,10 @@
     }
     accounts.forEach(function (a) {
       var enabled = a.status !== "disabled" && a.enabled !== false;
-      var tr = el("tr");
+      var tr = el("tr", "selectable");
       tr.dataset.accountId = a.id;
+      if (a.id === selectedAccountId) tr.classList.add("active");
+      tr.addEventListener("click", function () { selectAccount(a.id); });
       tr.appendChild(el("td", null, a.id));
       tr.appendChild(el("td", null, a.email || ""));
 
@@ -1126,22 +1165,31 @@
       var actionsTd = el("td", "actions");
       var toggleBtn = el("button", "small", enabled ? "Disable" : "Enable");
       toggleBtn.type = "button";
-      toggleBtn.addEventListener("click", function () { setAccountEnabled(a.id, !enabled); });
+      toggleBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        setAccountEnabled(a.id, !enabled);
+      });
       actionsTd.appendChild(toggleBtn);
 
       var removeBtn = el("button", "danger small", "Remove");
       removeBtn.type = "button";
-      removeBtn.addEventListener("click", function () { removeAccount(a.id); });
+      removeBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        removeAccount(a.id);
+      });
       actionsTd.appendChild(removeBtn);
 
       tr.appendChild(actionsTd);
       tbody.appendChild(tr);
     });
+
+    if (selectedAccountId) renderAccountDetail(); // keep an open detail panel in sync with fresh data
   }
 
-  // -- per-account quota bars --
+  // -- quota: per-account (detail panel) + combined provider-wide summary --
 
   var quotaByAccountId = {};   // account id -> {status, quota:[{label,remainingFraction,resetTime}]}
+  var quotaCombined = null;    // {pools:[{label,remainingFraction,accounts}], accountCount} or null
   var quotaAvailable = false;  // false until a quota/refresh call for the current provider succeeds
   var quotaRequestSeq = 0;     // monotonic id so a stale in-flight request can't clobber a newer one
 
@@ -1149,8 +1197,9 @@
     return new Date(epochMs).toLocaleString();
   }
 
-  // Fetches quota for every account of `providerId` and re-renders. 404 (no QuotaAdmin on this
-  // server) degrades silently to no quota UI at all, same for any other failure; never throws.
+  // Fetches quota for every account of `providerId` (plus the provider-wide combined summary) and
+  // re-renders. 404 (no QuotaAdmin on this server) degrades silently to no quota UI, same for any
+  // other failure; never throws.
   function loadQuota(providerId) {
     if (!providerId) return;
     var requestId = ++quotaRequestSeq;
@@ -1163,8 +1212,10 @@
         quotaByAccountId = {};
         if (resp && resp.accounts) {
           resp.accounts.forEach(function (a) { quotaByAccountId[a.id] = a; });
+          quotaCombined = resp.combined || null;
           quotaAvailable = true;
         } else {
+          quotaCombined = null;
           quotaAvailable = false; // 404 -> feature not wired in on this server
         }
         renderQuota();
@@ -1172,6 +1223,7 @@
       .catch(function () {
         if (requestId !== quotaRequestSeq || providerId !== selectedProviderId) return; // stale
         quotaByAccountId = {};
+        quotaCombined = null;
         quotaAvailable = false;
         renderQuota();
       })
@@ -1180,10 +1232,9 @@
       });
   }
 
-  function buildQuotaRow(entry) {
-    var qrow = el("tr", "qrow");
-    var td = el("td");
-    td.colSpan = 4;
+  // Builds a `.qbars` fragment (label + track/fill bar + reset line, per entry.quota[]) — shared by
+  // the account detail panel; `entry` is one element of the quota-refresh response's `accounts[]`.
+  function buildQuotaBars(entry) {
     var qbars = el("div", "qbars");
 
     if (entry && entry.status === "error") {
@@ -1204,28 +1255,104 @@
         }
       });
     }
-
-    td.appendChild(qbars);
-    qrow.appendChild(td);
-    return qrow;
+    return qbars;
   }
 
-  // Idempotent: drops any prior .qrow sub-rows, then (if the last quota fetch succeeded) inserts
-  // one fresh .qrow after each account row, keyed by the data-account-id set in renderAccounts.
-  function renderQuota() {
-    var existingRows = document.querySelectorAll("#accounts-table tbody tr.qrow");
-    for (var i = 0; i < existingRows.length; i++) {
-      existingRows[i].parentNode.removeChild(existingRows[i]);
-    }
-    if (!quotaAvailable) return;
+  // Renders `combined.pools` (provider-wide, cross-account) into `#provider-quota-bars`.
+  function buildProviderQuotaBars(pools) {
+    var qbars = el("div", "qbars");
+    pools.forEach(function (pool) {
+      var usedPct = Math.round((1 - pool.remainingFraction) * 100);
+      qbars.appendChild(el("div", "qbar-label", pool.label + " — " + usedPct + "% used"));
+      var track = el("div", "qbar-track");
+      var fill = el("div", "qbar-fill");
+      fill.style.width = usedPct + "%";
+      track.appendChild(fill);
+      qbars.appendChild(track);
+    });
+    return qbars;
+  }
 
-    var accountRows = document.querySelectorAll("#accounts-table tbody tr[data-account-id]");
-    for (var j = 0; j < accountRows.length; j++) {
-      var tr = accountRows[j];
-      var accountId = tr.getAttribute("data-account-id");
-      var qrow = buildQuotaRow(quotaByAccountId[accountId]);
-      tr.parentNode.insertBefore(qrow, tr.nextSibling);
+  // Idempotent. No longer injects per-account sub-rows into the table (quota moved to the account
+  // detail panel + the combined summary): refreshes `#provider-quota` from `quotaCombined`, and — if
+  // a detail panel is currently open — refreshes its quota section from `quotaByAccountId`.
+  function renderQuota() {
+    var panel = document.getElementById("provider-quota");
+    var pools = quotaAvailable && quotaCombined && quotaCombined.pools ? quotaCombined.pools : null;
+    if (pools && pools.length) {
+      var barsContainer = document.getElementById("provider-quota-bars");
+      barsContainer.innerHTML = "";
+      barsContainer.appendChild(buildProviderQuotaBars(pools));
+      document.getElementById("provider-quota-caption").textContent =
+        "(" + quotaCombined.accountCount + " accounts)";
+      panel.style.display = "";
+    } else {
+      panel.style.display = "none";
     }
+
+    if (selectedAccountId) renderAccountDetail();
+  }
+
+  // -- account detail panel (identity, status, expiry, that account's quota, enable/disable/remove) --
+
+  // Relative + absolute rendering of an account's token expiry; null/undefined means no expiry.
+  function formatExpiry(ms) {
+    if (ms === null || ms === undefined) return "no expiry";
+    var deltaMs = ms - Date.now();
+    var absolute = new Date(ms).toLocaleString();
+    if (deltaMs <= 0) return "expired (" + absolute + ")";
+    var deltaMin = Math.round(deltaMs / 60000);
+    var relative = deltaMin < 60 ? "in " + deltaMin + " min"
+      : deltaMin < 1440 ? "in " + Math.round(deltaMin / 60) + " hr"
+      : "in " + Math.round(deltaMin / 1440) + " d";
+    return relative + " (" + absolute + ")";
+  }
+
+  function selectAccount(id) {
+    selectedAccountId = id;
+    renderAccounts(currentAccounts); // re-render for the .active highlight; also opens the detail panel
+  }
+
+  function closeAccountDetail() {
+    selectedAccountId = null;
+    document.getElementById("account-detail").style.display = "none";
+  }
+
+  // Re-renders #account-detail for `selectedAccountId` from `currentAccounts`/`quotaByAccountId`.
+  // If the account is no longer present (e.g. just removed), closes the panel instead.
+  function renderAccountDetail() {
+    var account = null;
+    for (var i = 0; i < currentAccounts.length; i++) {
+      if (currentAccounts[i].id === selectedAccountId) { account = currentAccounts[i]; break; }
+    }
+    if (!account) { closeAccountDetail(); return; }
+
+    var enabled = account.status !== "disabled" && account.enabled !== false;
+    var panel = document.getElementById("account-detail");
+    panel.style.display = "";
+
+    document.getElementById("account-detail-identity").textContent =
+      account.id + (account.email ? " — " + account.email : "");
+
+    var statusSlot = document.getElementById("account-detail-status");
+    statusSlot.innerHTML = "";
+    statusSlot.appendChild(badge(account.status || (enabled ? "ready" : "disabled")));
+
+    document.getElementById("account-detail-expiry").textContent =
+      "Token expiry: " + formatExpiry(account.expires);
+
+    var quotaSlot = document.getElementById("account-detail-quota");
+    quotaSlot.innerHTML = "";
+    if (quotaAvailable) {
+      quotaSlot.appendChild(buildQuotaBars(quotaByAccountId[account.id]));
+    } else {
+      quotaSlot.appendChild(el("div", "qbar-reset", "quota unavailable"));
+    }
+
+    var toggleBtn = document.getElementById("account-detail-toggle");
+    toggleBtn.textContent = enabled ? "Disable" : "Enable";
+    toggleBtn.onclick = function () { setAccountEnabled(account.id, !enabled); };
+    document.getElementById("account-detail-remove").onclick = function () { removeAccount(account.id); };
   }
 
   // -- provider config (schema-driven /v1/config) --
@@ -1565,6 +1692,7 @@
   document.getElementById("oauth-login-button").addEventListener("click", startOAuthLogin);
   document.getElementById("oauth-complete-button").addEventListener("click", completeOAuthLogin);
   document.getElementById("oauth-cancel-button").addEventListener("click", hideOauthPasteRow);
+  document.getElementById("account-detail-close").addEventListener("click", closeAccountDetail);
 
   loadProvidersInitial();
   loadModels();
