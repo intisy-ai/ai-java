@@ -108,4 +108,36 @@ class OAuthAdminTest {
     void startUnknownProviderThrows() {
         assertThrows(IllegalArgumentException.class, () -> oauth.start("nope", "http://x"));
     }
+
+    @Test
+    void callbackReplayOfSameStateIsRejected() {
+        Map<String, Object> started = oauth.start("echo", "http://127.0.0.1:9999");
+        String state = (String) started.get("state");
+
+        oauth.callback("auth-code-xyz", state); // first use succeeds
+
+        // Single-use: the same state must not be redeemable a second time (replay).
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> oauth.callback("auth-code-xyz", state));
+        assertTrue(e.getMessage().toLowerCase().contains("state"), e.getMessage());
+    }
+
+    @Test
+    void callbackWithExpiredStateIsRejectedAndSeedsNoAccount() {
+        // Separate OAuthAdmin with an advanceable clock so the fixed-clock instance used by the
+        // other tests in this class is left undisturbed.
+        long[] now = {1000L};
+        AccountAdmin admin = new AccountAdmin(accountStore, () -> now[0]);
+        OAuthAdmin expiring = new OAuthAdmin(store, json, holder, msg -> { }, admin, () -> now[0]);
+
+        Map<String, Object> started = expiring.start("echo", "http://127.0.0.1:9999");
+        String state = (String) started.get("state");
+
+        now[0] += 10 * 60 * 1000L + 1; // advance past the 10-minute pending TTL
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> expiring.callback("auth-code-xyz", state));
+        assertTrue(e.getMessage().toLowerCase().contains("expired"), e.getMessage());
+        assertEquals(0, accountStore.list("echo").size());
+    }
 }

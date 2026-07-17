@@ -1205,8 +1205,10 @@
       .then(function (resp) {
         var popup = window.open(resp.authorizeUrl, "oauth-login", "width=520,height=680");
         // The callback page posts 'oauth-done' when the exchange completes; refresh accounts then.
+        // Only accept it from our own origin -- the callback page is same-origin, so any other
+        // origin posting this message is not the real callback and must be ignored.
         var onMessage = function (ev) {
-          if (ev.data === "oauth-done") {
+          if (ev.origin === window.location.origin && ev.data === "oauth-done") {
             window.removeEventListener("message", onMessage);
             if (providerId === selectedProviderId) loadAccounts();
           }

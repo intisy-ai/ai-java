@@ -502,7 +502,9 @@ public final class ManagementApi implements HttpHandler {
                     "<!doctype html><meta charset=utf-8><title>Signed in</title>"
                     + "<body style=\"font-family:sans-serif;padding:2rem\">"
                     + "<h2>Signed in</h2><p>You can close this tab.</p>"
-                    + "<script>try{window.opener&&window.opener.postMessage('oauth-done','*')}catch(e){}"
+                    // Target the specific origin (the callback page and dashboard are same-origin)
+                    // instead of '*', so only that opener can receive the message.
+                    + "<script>try{window.opener&&window.opener.postMessage('oauth-done',window.location.origin)}catch(e){}"
                     + "setTimeout(function(){window.close()},500)</script>");
         } catch (IllegalArgumentException e) {
             respondHtml(exchange, 400,
@@ -512,13 +514,22 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
-    // scheme is http for the loopback example server; Host carries host:port.
+    // The OAuth redirect_uri MUST NOT be derived from the request's Host header: that header is
+    // fully attacker-controllable (any client can send an arbitrary Host), and since redirect_uri
+    // becomes part of the outbound authorize URL, trusting it would let a caller redirect the
+    // finished OAuth code to a host of their choosing. Instead this is server-controlled: either an
+    // explicit configured public base URL, or the address this server actually bound/is listening
+    // on (never client input).
     private static String callbackBaseUrl(HttpExchange exchange) {
-        String host = exchange.getRequestHeaders().getFirst("Host");
-        if (host == null || host.isEmpty()) {
-            host = "127.0.0.1:" + exchange.getLocalAddress().getPort();
+        String configured = System.getProperty("exampleserver.publicBaseUrl");
+        if (configured != null && !configured.trim().isEmpty()) {
+            String trimmed = configured.trim();
+            while (trimmed.endsWith("/")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            return trimmed;
         }
-        return "http://" + host;
+        return "http://" + exchange.getLocalAddress().getHostString() + ":" + exchange.getLocalAddress().getPort();
     }
 
     private static Map<String, String> parseQuery(String rawQuery) {
