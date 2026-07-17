@@ -43,6 +43,18 @@ public final class EchoProvider implements Provider {
         if (request != null && "GET".equals(request.method) && "/v1/quota".equals(request.url)) {
             return quotaResponse();
         }
+        if (request != null && "GET".equals(request.method) && "/v1/config".equals(request.url)) {
+            return configResponse();
+        }
+        if (request != null && "PUT".equals(request.method) && "/v1/config".equals(request.url)) {
+            return putConfigResponse(request.body);
+        }
+        if (request != null && "GET".equals(request.method) && "/v1/oauth/params".equals(request.url)) {
+            return oauthParamsResponse();
+        }
+        if (request != null && "POST".equals(request.method) && "/v1/oauth/exchange".equals(request.url)) {
+            return oauthExchangeResponse(request.body);
+        }
 
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
@@ -54,6 +66,123 @@ public final class EchoProvider implements Provider {
         response.headers.put("content-type", "application/json");
         response.body = anthropicMessageBody(servedModel);
         return response;
+    }
+
+    // Last-written values object as raw JSON text (defaults shown). PUT replaces it; GET echoes it.
+    // The fixture persists-and-echoes rather than parsing -- enough to prove ConfigAdmin's round-trip;
+    // a real provider parses+validates+coerces against its schema and persists under configDir.
+    private String valuesJson = "{\"greeting\":\"Echo provider handled your request\",\"verbose\":false}";
+
+    private HttpResponse configResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"groups\":[{\"title\":\"General\",\"fields\":["
+                + "{\"key\":\"greeting\",\"label\":\"Greeting\",\"type\":\"string\"},"
+                + "{\"key\":\"verbose\",\"label\":\"Verbose\",\"type\":\"bool\"}"
+                + "]}],"
+                + "\"values\":" + valuesJson
+                + "}";
+        return response;
+    }
+
+    private HttpResponse putConfigResponse(String body) {
+        String extracted = extractJsonObject(body, "values");
+        if (extracted != null) valuesJson = extracted;
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{\"values\":" + valuesJson + "}";
+        return response;
+    }
+
+    // Returns the raw JSON object text that is the value of `key` in `body` (from its opening '{'
+    // to the matching '}', quote/escape-aware), or null if not found. Hand-rolled to keep the
+    // fixture gson-free and transpilable.
+    private static String extractJsonObject(String body, String key) {
+        if (body == null) return null;
+        String needle = "\"" + key + "\"";
+        int k = body.indexOf(needle);
+        if (k < 0) return null;
+        int start = body.indexOf('{', k + needle.length());
+        if (start < 0) return null;
+        int depth = 0;
+        boolean inString = false;
+        boolean escaped = false;
+        for (int i = start; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (c == '\\') escaped = true;
+                else if (c == '"') inString = false;
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) return body.substring(start, i + 1);
+            }
+        }
+        return null;
+    }
+
+    private static HttpResponse oauthParamsResponse() {
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{"
+                + "\"authorizeUrl\":\"https://echo.example/authorize\","
+                + "\"clientId\":\"echo-client-id\","
+                + "\"scopes\":\"openid email\","
+                + "\"redirectPath\":\"/api/oauth/callback\","
+                + "\"usesPkce\":true"
+                + "}";
+        return response;
+    }
+
+    // Fixture exchange: no network. Echoes the code into the refresh token so a test can prove the
+    // code reached the provider. A real provider calls OAuthExchange.exchangeCode here.
+    private HttpResponse oauthExchangeResponse(String body) {
+        String code = extractStringField(body, "code");
+        HttpResponse response = new HttpResponse();
+        response.status = 200;
+        response.headers = new HashMap<>();
+        response.headers.put("content-type", "application/json");
+        response.body = "{\"account\":{"
+                + "\"id\":\"echo-oauth-user\","
+                + "\"email\":\"echo-oauth@example.com\","
+                + "\"refresh\":" + quote("echo-refresh-" + (code != null ? code : ""))
+                + "}}";
+        return response;
+    }
+
+    // Returns the string value of `key` in a flat JSON object (quote/escape-aware), or null.
+    private static String extractStringField(String body, String key) {
+        if (body == null) return null;
+        String needle = "\"" + key + "\"";
+        int k = body.indexOf(needle);
+        if (k < 0) return null;
+        int colon = body.indexOf(':', k + needle.length());
+        if (colon < 0) return null;
+        int i = colon + 1;
+        while (i < body.length() && body.charAt(i) != '"') i++;   // skip to opening quote
+        if (i >= body.length()) return null;
+        i++;
+        StringBuilder sb = new StringBuilder();
+        boolean escaped = false;
+        for (; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (escaped) { sb.append(c); escaped = false; }
+            else if (c == '\\') escaped = true;
+            else if (c == '"') break;
+            else sb.append(c);
+        }
+        return sb.toString();
     }
 
     // Canned quota catalog: one active account with a single "5-hour" quota bucket -- shape
