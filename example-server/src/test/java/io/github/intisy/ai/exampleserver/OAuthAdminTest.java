@@ -29,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * Exercises {@link OAuthAdmin} against the same REAL jar-discovered {@code echo} provider
  * {@link ConfigAdminTest}/{@link QuotaAdminTest} use, staged the same way. {@code EchoProvider}
- * answers {@code GET /v1/oauth/params} + {@code POST /v1/oauth/exchange} (added alongside this
- * task), giving a real full authorize-url + state/PKCE + callback round-trip with no network
- * involved.
+ * answers {@code GET /v1/oauth/authorize} + {@code POST /v1/oauth/exchange} (provider-authorize
+ * model: the provider builds its own authorize URL, PKCE and state; the server only relays), giving
+ * a real full authorize + exchange round-trip with no network involved.
  */
 class OAuthAdminTest {
 
@@ -52,7 +52,7 @@ class OAuthAdminTest {
 
         accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, () -> 1000L);
-        oauth = new OAuthAdmin(store, json, holder, msg -> { }, admin, () -> 1000L);
+        oauth = new OAuthAdmin(store, json, holder, msg -> { }, admin);
     }
 
     @AfterEach
@@ -75,69 +75,25 @@ class OAuthAdminTest {
     }
 
     @Test
-    void startReturnsAuthorizeUrlWithStateAndChallenge() {
-        Map<String, Object> result = oauth.start("echo", "http://127.0.0.1:9999");
+    void authorizeReturnsProviderUrlAndCompletion() {
+        Map<String, Object> result = oauth.authorize("echo");
         String url = (String) result.get("authorizeUrl");
         assertNotNull(url);
         assertTrue(url.contains("echo-client-id"), url);           // provider's public client id
         assertTrue(url.contains("code_challenge="), url);
-        assertTrue(url.contains("code_challenge_method=S256"), url);
         assertTrue(url.contains("state="), url);
-        assertNotNull(result.get("state"));
+        assertEquals("paste", result.get("completion"));
     }
 
     @Test
-    void callbackWithValidStateSeedsAccount() {
-        Map<String, Object> started = oauth.start("echo", "http://127.0.0.1:9999");
-        String state = (String) started.get("state");
-
-        Map<String, Object> result = oauth.callback("auth-code-xyz", state);
-        Object account = result.get("account");
-        assertNotNull(account);
+    void completeSeedsAccount() {
+        Map<String, Object> result = oauth.complete("echo", "auth-code-xyz", "echo-state");
+        assertNotNull(result.get("account"));
         assertEquals(1, accountStore.list("echo").size());
     }
 
     @Test
-    void callbackWithUnknownStateThrows() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> oauth.callback("code", "not-a-real-state"));
-        assertTrue(e.getMessage().toLowerCase().contains("state"), e.getMessage());
-    }
-
-    @Test
-    void startUnknownProviderThrows() {
-        assertThrows(IllegalArgumentException.class, () -> oauth.start("nope", "http://x"));
-    }
-
-    @Test
-    void callbackReplayOfSameStateIsRejected() {
-        Map<String, Object> started = oauth.start("echo", "http://127.0.0.1:9999");
-        String state = (String) started.get("state");
-
-        oauth.callback("auth-code-xyz", state); // first use succeeds
-
-        // Single-use: the same state must not be redeemable a second time (replay).
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> oauth.callback("auth-code-xyz", state));
-        assertTrue(e.getMessage().toLowerCase().contains("state"), e.getMessage());
-    }
-
-    @Test
-    void callbackWithExpiredStateIsRejectedAndSeedsNoAccount() {
-        // Separate OAuthAdmin with an advanceable clock so the fixed-clock instance used by the
-        // other tests in this class is left undisturbed.
-        long[] now = {1000L};
-        AccountAdmin admin = new AccountAdmin(accountStore, () -> now[0]);
-        OAuthAdmin expiring = new OAuthAdmin(store, json, holder, msg -> { }, admin, () -> now[0]);
-
-        Map<String, Object> started = expiring.start("echo", "http://127.0.0.1:9999");
-        String state = (String) started.get("state");
-
-        now[0] += 10 * 60 * 1000L + 1; // advance past the 10-minute pending TTL
-
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> expiring.callback("auth-code-xyz", state));
-        assertTrue(e.getMessage().toLowerCase().contains("expired"), e.getMessage());
-        assertEquals(0, accountStore.list("echo").size());
+    void authorizeUnknownProviderThrows() {
+        assertThrows(IllegalArgumentException.class, () -> oauth.authorize("nope"));
     }
 }

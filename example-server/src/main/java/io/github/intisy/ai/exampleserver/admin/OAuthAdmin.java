@@ -1,102 +1,64 @@
 package io.github.intisy.ai.exampleserver.admin;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
-import io.github.intisy.ai.exampleserver.oauth.Pkce;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
-import io.github.intisy.ai.shared.spi.Clock;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Logger;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
-import java.security.SecureRandom;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * UI-safe OAuth login administration: drives a full browser {@code authorization_code} + PKCE flow
- * against an installed provider's {@code /v1/oauth/params} + {@code /v1/oauth/exchange} conventions.
- * {@link #start} builds the authorize URL and stashes a single-use, short-TTL pending entry keyed by
- * {@code state}; {@link #callback} validates + consumes it, exchanges the code via the provider, and
- * seeds the account through {@link AccountAdmin}. Mirrors {@link QuotaAdmin}'s shape (encapsulates
- * the {@link Store}). Never logs {@code code}/{@code code_verifier}/tokens.
+ * UI-safe OAuth login administration (provider-authorize model): the installed provider builds its
+ * own authorize URL (its PKCE, its {@code state} with the verifier packed in, its registered
+ * redirect) via {@code GET /v1/oauth/authorize}; the operator completes the flow (paste the code)
+ * and {@link #complete} relays it to {@code POST /v1/oauth/exchange} and seeds the account through
+ * {@link AccountAdmin}. The server generates no PKCE/state and holds no pending state. Never logs
+ * {@code code}/{@code state}/tokens.
  */
 public final class OAuthAdmin {
-    private static final long PENDING_TTL_MS = 10 * 60 * 1000L;
-
     private final ProviderRegistryHolder holder;
     private final JsonCodec json;
     private final Logger log;
     private final AccountAdmin accounts;
-    private final Clock clock;
     private final String configDir;
-    private final SecureRandom rng = new SecureRandom();
-    private final Map<String, Pending> pending = new ConcurrentHashMap<>();
 
     public OAuthAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log,
-                      AccountAdmin accounts, Clock clock) {
+                      AccountAdmin accounts) {
         this.holder = holder;
         this.json = json;
         this.log = log;
         this.accounts = accounts;
-        this.clock = clock;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
     }
 
-    public Map<String, Object> start(String providerId, String callbackBaseUrl) {
-        Map<String, Object> params = asMap(json.parse(call(providerId, "GET", "/v1/oauth/params", null).body));
-        if (params == null) throw new IllegalArgumentException("provider has no oauth params: " + providerId);
-
-        String authorizeBase = stringOf(params.get("authorizeUrl"));
-        String clientId = stringOf(params.get("clientId"));
-        String scopes = stringOf(params.get("scopes"));
-        String redirectPath = stringOf(params.get("redirectPath"));
-        boolean usesPkce = Boolean.TRUE.equals(params.get("usesPkce"));
-        if (authorizeBase == null || clientId == null) {
-            throw new IllegalArgumentException("provider oauth params missing authorizeUrl/clientId");
+    /** The provider's {@code {authorizeUrl, completion, loopbackPort?, loopbackPath?}}. */
+    public Map<String, Object> authorize(String providerId) {
+        HttpResponse response = call(providerId, "GET", "/v1/oauth/authorize", null);
+        if (response.status == 404) {
+            throw new IllegalArgumentException("provider has no oauth surface: " + providerId);
         }
-        String redirectUri = callbackBaseUrl + (redirectPath != null ? redirectPath : "/api/oauth/callback");
-
-        String state = Pkce.state(rng);
-        String verifier = usesPkce ? Pkce.verifier(rng) : null;
-
-        StringBuilder url = new StringBuilder(authorizeBase);
-        url.append(authorizeBase.contains("?") ? '&' : '?');
-        url.append("response_type=code");
-        url.append("&client_id=").append(enc(clientId));
-        if (scopes != null) url.append("&scope=").append(enc(scopes));
-        url.append("&redirect_uri=").append(enc(redirectUri));
-        url.append("&state=").append(enc(state));
-        if (usesPkce) {
-            url.append("&code_challenge=").append(enc(Pkce.challengeS256(verifier)));
-            url.append("&code_challenge_method=S256");
+        if (response.status / 100 != 2) {
+            throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
         }
-
-        pending.put(state, new Pending(providerId, verifier, redirectUri, clock.now()));
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("authorizeUrl", url.toString());
-        result.put("state", state);
-        return result;
+        Map<String, Object> params = asMap(json.parse(response.body));
+        if (params == null || stringOf(params.get("authorizeUrl")) == null) {
+            throw new IllegalArgumentException("provider returned no authorizeUrl");
+        }
+        return params;
     }
 
-    public Map<String, Object> callback(String code, String state) {
-        Pending entry = state != null ? pending.remove(state) : null;   // single-use
-        if (entry == null) {
-            throw new IllegalArgumentException("unknown or expired oauth state");
-        }
-        if (clock.now() - entry.createdAt > PENDING_TTL_MS) {
-            throw new IllegalArgumentException("expired oauth state");
-        }
-
-        String body = json.stringify(exchangeBody(code, entry.verifier, entry.redirectUri));
-        HttpResponse response = call(entry.providerId, "POST", "/v1/oauth/exchange", body);
+    /** Relays {@code {code,state}} to the provider's exchange and seeds the returned account. */
+    public Map<String, Object> complete(String providerId, String code, String state) {
+        Map<String, Object> reqBody = new LinkedHashMap<>();
+        reqBody.put("code", code);
+        reqBody.put("state", state != null ? state : "");
+        HttpResponse response = call(providerId, "POST", "/v1/oauth/exchange", json.stringify(reqBody));
         if (response.status / 100 != 2) {
             throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
         }
@@ -107,24 +69,15 @@ public final class OAuthAdmin {
         }
         Map<String, Object> meta = asMap(account.get("meta"));
         AccountAdmin.AccountView view = accounts.addToken(
-                entry.providerId,
+                providerId,
                 stringOf(account.get("id")),
                 stringOf(account.get("email")),
                 stringOf(account.get("refresh")),
                 meta != null ? stringOf(meta.get("projectId")) : null,
                 meta != null ? stringOf(meta.get("managedProjectId")) : null);
-
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("account", view);
         return result;
-    }
-
-    private static Map<String, Object> exchangeBody(String code, String verifier, String redirectUri) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("code", code);
-        if (verifier != null) body.put("codeVerifier", verifier);
-        body.put("redirectUri", redirectUri);
-        return body;
     }
 
     private HttpResponse call(String providerId, String method, String url, String body) {
@@ -144,14 +97,6 @@ public final class OAuthAdmin {
         }
     }
 
-    private static String enc(String s) {
-        try {
-            return URLEncoder.encode(s, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            return s; // UTF-8 always supported
-        }
-    }
-
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;
@@ -159,19 +104,5 @@ public final class OAuthAdmin {
 
     private static String stringOf(Object o) {
         return o instanceof String ? (String) o : null;
-    }
-
-    private static final class Pending {
-        final String providerId;
-        final String verifier;
-        final String redirectUri;
-        final long createdAt;
-
-        Pending(String providerId, String verifier, String redirectUri, long createdAt) {
-            this.providerId = providerId;
-            this.verifier = verifier;
-            this.redirectUri = redirectUri;
-            this.createdAt = createdAt;
-        }
     }
 }

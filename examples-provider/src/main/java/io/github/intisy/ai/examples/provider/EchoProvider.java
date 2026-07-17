@@ -49,8 +49,8 @@ public final class EchoProvider implements Provider {
         if (request != null && "PUT".equals(request.method) && "/v1/config".equals(request.url)) {
             return putConfigResponse(request.body);
         }
-        if (request != null && "GET".equals(request.method) && "/v1/oauth/params".equals(request.url)) {
-            return oauthParamsResponse();
+        if (request != null && "GET".equals(request.method) && "/v1/oauth/authorize".equals(request.url)) {
+            return oauthAuthorizeResponse();
         }
         if (request != null && "POST".equals(request.method) && "/v1/oauth/exchange".equals(request.url)) {
             return oauthExchangeResponse(request.body);
@@ -130,17 +130,15 @@ public final class EchoProvider implements Provider {
         return null;
     }
 
-    private static HttpResponse oauthParamsResponse() {
+    private static HttpResponse oauthAuthorizeResponse() {
         HttpResponse response = new HttpResponse();
         response.status = 200;
         response.headers = new HashMap<>();
         response.headers.put("content-type", "application/json");
         response.body = "{"
-                + "\"authorizeUrl\":\"https://echo.example/authorize\","
-                + "\"clientId\":\"echo-client-id\","
-                + "\"scopes\":\"openid email\","
-                + "\"redirectPath\":\"/api/oauth/callback\","
-                + "\"usesPkce\":true"
+                + "\"authorizeUrl\":\"https://echo.example/authorize?response_type=code&client_id=echo-client-id"
+                + "&code_challenge=echo-challenge&code_challenge_method=S256&state=echo-state\","
+                + "\"completion\":\"paste\""
                 + "}";
         return response;
     }
