@@ -85,6 +85,12 @@ class DashboardIntegrationTest {
         assertTrue(r.body.contains("id=\"config-body\""), "config body missing");
     }
 
+    @Test
+    void dashboardIncludesLoginButton() throws IOException {
+        Response r = get("/");
+        assertTrue(r.body.contains("id=\"oauth-login-button\""), "login button missing");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

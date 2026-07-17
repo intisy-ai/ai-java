@@ -383,6 +383,7 @@
         <span class="hint" id="accounts-hint">select a provider</span>
         <button class="small" id="refresh-quota-button" type="button" style="display:none">Refresh quota</button>
         <button class="small" id="toggle-add-account-button" type="button" style="display:none">Add account</button>
+        <button class="small" id="oauth-login-button" type="button" style="display:none">Log in</button>
       </div>
     </div>
     <div id="add-account-toast" class="toast hidden"></div>
@@ -935,6 +936,7 @@
     document.getElementById("accounts-table").style.display = "";
     document.getElementById("toggle-add-account-button").style.display = "";
     document.getElementById("refresh-quota-button").style.display = "";
+    document.getElementById("oauth-login-button").style.display = "";
     hideAddAccountForm();
     renderMergedProviders();
     loadAccounts();
@@ -1192,6 +1194,41 @@
     });
   }
 
+  // -- oauth login (full browser flow) --
+
+  function startOAuthLogin() {
+    if (!selectedProviderId) return;
+    var providerId = selectedProviderId;
+    var btn = document.getElementById("oauth-login-button");
+    btn.disabled = true;
+    jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/oauth/start", { method: "POST" })
+      .then(function (resp) {
+        var popup = window.open(resp.authorizeUrl, "oauth-login", "width=520,height=680");
+        // The callback page posts 'oauth-done' when the exchange completes; refresh accounts then.
+        var onMessage = function (ev) {
+          if (ev.data === "oauth-done") {
+            window.removeEventListener("message", onMessage);
+            if (providerId === selectedProviderId) loadAccounts();
+          }
+        };
+        window.addEventListener("message", onMessage);
+        // Fallback: if the popup is closed without a message, refresh once anyway.
+        var poll = setInterval(function () {
+          if (popup && popup.closed) {
+            clearInterval(poll);
+            window.removeEventListener("message", onMessage);
+            if (providerId === selectedProviderId) loadAccounts();
+          }
+        }, 1000);
+      })
+      .catch(function (err) {
+        showAddAccountToast("Login failed: " + err.message, false);
+      })
+      .then(function () {
+        btn.disabled = false;
+      });
+  }
+
   // -- add account (paste-token seed) --
 
   function showAddAccountForm() {
@@ -1372,6 +1409,7 @@
   document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
   document.getElementById("save-config-button").addEventListener("click", saveConfig);
+  document.getElementById("oauth-login-button").addEventListener("click", startOAuthLogin);
 
   loadProvidersInitial();
   loadModels();
