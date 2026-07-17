@@ -5,8 +5,11 @@ import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProxyDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
+import io.github.intisy.ai.shared.routing.ProxyPlugin;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
@@ -26,6 +29,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Scanner;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,23 +39,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Boots {@link ExampleServer} with the routing surface wired in (the 7-arg {@link ManagementApi}
+ * Boots {@link ExampleServer} with the routing surface wired in (the full {@link ManagementApi}
  * constructor) and drives the discover/catalog/model-map endpoints over loopback, mirroring
  * {@link ManagementApiIntegrationTest}'s harness style. The echo + ratelimited providers are
  * staged the same way {@link ProviderInstallIntegrationTest} does, giving a real 2xx and a real
- * non-2xx discovery response with no network involved.
+ * non-2xx discovery response with no network involved. A single fixture {@link ProxyPlugin}
+ * (id {@code "claude-code"}, its own distinct {@code configFile}) is installed so {@code
+ * ?app=claude-code} resolves to a real installed proxy's {@link RoutingProfile} (mirroring how
+ * {@code ?app=} resolution now works via {@link ProxyRegistryHolder#profileFor} instead of the
+ * a hardcoded per-app table), exercising the app-scoped storage tests below.
  */
 class RoutingApiIntegrationTest {
 
     private static final String CONFIG_FILE = "routing-api-routing.json";
+    private static final String APP_PROXY_ID = "claude-code";
+    private static final String APP_CONFIG_FILE = "claude-code-app-routing.json";
 
     private AiJava ai;
     private ExampleServer server;
     private ProviderRegistryHolder holder;
+    private ProxyRegistryHolder proxyHolder;
 
     @BeforeEach
-    void setUp(@TempDir Path providersDir) throws IOException {
+    void setUp(@TempDir Path providersDir, @TempDir Path proxiesDir) throws IOException {
         stageProviderJar(providersDir);
+        stageAppProxyJar(proxiesDir);
 
         ai = AiJava.builder().storage(Storage.memory()).build();
         Store store = ai.store();
@@ -59,13 +72,16 @@ class RoutingApiIntegrationTest {
 
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+        proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
+        assertTrue(proxyHolder.listProxyIds().contains(APP_PROXY_ID), proxyHolder.listProxyIds().toString());
 
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
         RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
         RoutingAdmin routing = new RoutingAdmin(store, json, profile, holder, ai.logger());
-        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder, routing);
+        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
+                routing, null, null, null, null, null, proxyHolder, proxiesDir);
 
         AiJava.WiredRouter router = ai.router(profile,
                 id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
@@ -76,6 +92,7 @@ class RoutingApiIntegrationTest {
     void tearDown() throws IOException {
         if (server != null) server.stop();
         if (holder != null && holder.get() != null) holder.get().close();
+        if (proxyHolder != null && proxyHolder.get() != null) proxyHolder.get().close();
         if (ai != null) ai.close();
     }
 
@@ -89,6 +106,35 @@ class RoutingApiIntegrationTest {
             }
         }
         fail("no staged provider jar found in " + staged);
+    }
+
+    /** Packages the compiled {@link AppFixtureProxyPlugin} into a real jar (mirrors {@code
+     *  ProxyApiIntegrationTest#stageProxyJar}) so {@code ?app=claude-code} resolves against a real
+     *  installed proxy rather than a hardcoded per-app table. */
+    private static void stageAppProxyJar(Path proxiesDir) throws IOException {
+        Path jarPath = proxiesDir.resolve("claude-code-fixture-proxy.jar");
+        String className = AppFixtureProxyPlugin.class.getName();
+        String classResourcePath = className.replace('.', '/') + ".class";
+        try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(jarPath))) {
+            try (InputStream in = RoutingApiIntegrationTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
+                if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
+                jar.putNextEntry(new JarEntry(classResourcePath));
+                jar.write(in.readAllBytes());
+                jar.closeEntry();
+            }
+            jar.putNextEntry(new JarEntry("META-INF/services/" + ProxyPlugin.class.getName()));
+            jar.write(className.getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
+        }
+    }
+
+    /** Test-only proxy plugin standing in for a real "claude-code" proxy: its {@code configFile}
+     *  deliberately differs from {@link #CONFIG_FILE} so app-scoped model-map storage lands in a
+     *  separate row from the default/server profile. */
+    public static final class AppFixtureProxyPlugin implements ProxyPlugin {
+        @Override public String id() { return APP_PROXY_ID; }
+        @Override public String displayName() { return "Claude Code (fixture)"; }
+        @Override public RoutingProfile profile() { return ServerProfile.echoTiers(APP_CONFIG_FILE); }
     }
 
     @Test

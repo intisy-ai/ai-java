@@ -2,7 +2,6 @@ package io.github.intisy.ai.exampleserver.api;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import io.github.intisy.ai.exampleserver.AppProfiles;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
@@ -11,6 +10,8 @@ import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
+import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProxySource;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 
@@ -58,6 +59,9 @@ import java.util.function.Supplier;
  * POST   /api/providers/{id}/oauth/authorize              -> 200 {"authorizeUrl":..,"completion":..}
  * POST   /api/providers/{id}/oauth/complete  {code,state} -> 200 {"account":..}
  * GET    /api/proxies                                    -> 200 [{app,profile,port,running,error}]
+ * GET    /api/proxies/available                          -> [{"name":..,"assetName":..,"installed":bool}]
+ * POST   /api/proxies/install           {"name":..}       -> 200 {"installed":true,"proxies":[...]}
+ * DELETE /api/proxies/{id}                               -> 200 {"uninstalled":true,"proxies":[...]} / 404
  * PUT    /api/proxies/{app}              {"port":N}       -> 200 {status}/400
  * POST   /api/proxies/{app}/start                         -> 200 {status}/400
  * POST   /api/proxies/{app}/stop                          -> 200 {status}/400
@@ -68,10 +72,12 @@ import java.util.function.Supplier;
  * is wrapped so an unexpected exception never leaks a stack trace to the client — it degrades to
  * a plain 500 JSON error instead.
  *
- * <p>{@code available}/{@code install} are reserved single-segment names under {@code /api/providers/},
- * checked as exact 3-segment paths before the (4+ segment) {@code {id}/accounts...} routes, so
- * there is no ambiguity between a provider id happening to be named "available" or "install" and
- * these reserved routes -- the existing routes never match at 3 segments in the first place.
+ * <p>{@code available}/{@code install} are reserved single-segment names under {@code /api/providers/}
+ * and {@code /api/proxies/}, checked as exact 3-segment paths before the (4+ segment)
+ * {@code {id}/accounts...} routes (providers) or the {@code {app}/start|stop} routes (proxies), so
+ * there is no ambiguity between an id happening to be named "available" or "install" and
+ * these reserved routes -- the existing routes never match at 3 segments in the first place
+ * (the proxy {@code PUT /api/proxies/{app}} route is also 3-segment but a different HTTP method).
  *
  * <p>The {@code /api/routing/*} + discover routes are only served once a {@link RoutingAdmin} is
  * wired in (the 7-arg constructor); callers still on an older constructor get a plain 404 for
@@ -79,7 +85,11 @@ import java.util.function.Supplier;
  * (the 8-arg constructor), and for {@code /api/providers/{id}/config} and {@link ConfigAdmin}
  * (the 9-arg constructor). Same for the {@code /oauth/*} routes and {@link OAuthAdmin} (the
  * 10-arg constructor), and for the {@code /api/proxies*} routes and {@link ProxyAdmin} (the
- * 11-arg constructor).
+ * 11-arg constructor). The proxy install/available/uninstall routes, and per-app resolution of
+ * {@code ?app=} in {@code /api/routing/model-map} against an INSTALLED PROXY (rather than the
+ * previously hardcoded per-app table), additionally require {@link ProxySource}/{@link
+ * ProxyRegistryHolder} (the full constructor); without them those three routes 404 and an
+ * {@code ?app=} query 400s with "unknown proxy: ...".
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -94,6 +104,9 @@ public final class ManagementApi implements HttpHandler {
     private final ConfigAdmin config;
     private final OAuthAdmin oauth;
     private final ProxyAdmin proxy;
+    private final ProxySource proxySource;
+    private final ProxyRegistryHolder proxyHolder;
+    private final Path proxiesDir;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -158,13 +171,30 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: adds the proxy-management surface ({@code /api/proxies*}) backed by
-     * {@code proxy}.
+     * Adds the proxy-management surface ({@code /api/proxies*}) backed by {@code proxy}. No
+     * {@link ProxySource}/{@link ProxyRegistryHolder} — the proxy install/available/uninstall
+     * routes 404, and an {@code ?app=} query on {@code /api/routing/model-map} always 400s (see the
+     * full constructor below for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
                           ProxyAdmin proxy) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, config, oauth, proxy,
+                null, null, null);
+    }
+
+    /**
+     * Full constructor: additionally adds the proxy install/available/uninstall surface backed by
+     * {@code proxySource}/{@code proxyHolder} (jars land in {@code proxiesDir}), and makes {@code
+     * ?app=} on {@code /api/routing/model-map} resolve against an installed proxy's {@link
+     * RoutingProfile} via {@code proxyHolder.profileFor} instead of a hardcoded per-app table.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
+                          ProxyAdmin proxy, ProxySource proxySource, ProxyRegistryHolder proxyHolder,
+                          Path proxiesDir) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -176,6 +206,9 @@ public final class ManagementApi implements HttpHandler {
         this.config = config;
         this.oauth = oauth;
         this.proxy = proxy;
+        this.proxySource = proxySource;
+        this.proxyHolder = proxyHolder;
+        this.proxiesDir = proxiesDir;
     }
 
     @Override
@@ -281,6 +314,21 @@ public final class ManagementApi implements HttpHandler {
                 && "api".equals(seg[0]) && "providers".equals(seg[1])
                 && "oauth".equals(seg[3]) && "complete".equals(seg[4])) {
             handleOAuthComplete(exchange, decode(seg[2]));
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "proxies".equals(seg[1]) && "available".equals(seg[2])) {
+            handleProxyAvailable(exchange);
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "proxies".equals(seg[1]) && "install".equals(seg[2])) {
+            handleProxyInstall(exchange);
+            return;
+        }
+        if ("DELETE".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "proxies".equals(seg[1])) {
+            handleProxyUninstall(exchange, decode(seg[2]));
             return;
         }
         if ("GET".equals(method) && seg.length == 2
@@ -498,11 +546,18 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
-    // A missing/blank ?app= keeps existing behavior (the server's default routing profile);
-    // an unrecognized app propagates AppProfiles.byApp's IllegalArgumentException to the 400 path.
+    // A missing/blank ?app= keeps existing behavior (the server's default routing profile); a
+    // named app resolves against an INSTALLED PROXY's own RoutingProfile (proxyHolder.profileFor)
+    // rather than a hardcoded per-app table -- an app with no installed proxy (or no proxyHolder
+    // wired in at all) throws, which routes to the 400 path.
     private RoutingProfile profileFromQuery(HttpExchange exchange) {
         String app = queryParam(exchange, "app");
-        return (app == null || app.isEmpty()) ? null : AppProfiles.byApp(app);
+        if (app == null || app.isEmpty()) return null;
+        RoutingProfile p = proxyHolder != null ? proxyHolder.profileFor(app) : null;
+        if (p == null) {
+            throw new IllegalArgumentException("unknown proxy: " + app);
+        }
+        return p;
     }
 
     private static String queryParam(HttpExchange exchange, String key) {
@@ -599,6 +654,91 @@ public final class ManagementApi implements HttpHandler {
             error.put("error", e.getMessage());
             respondJson(exchange, 400, error);
         }
+    }
+
+    private void handleProxyAvailable(HttpExchange exchange) throws IOException {
+        if (proxySource == null || proxyHolder == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        List<Map<String, Object>> body = new ArrayList<>();
+        Set<String> installedIds = new HashSet<>(proxyHolder.listProxyIds());
+        for (ProxySource.Entry entry : proxySource.list()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", entry.name);
+            item.put("assetName", entry.assetName);
+            boolean installed = Files.exists(proxiesDir.resolve(entry.assetName))
+                    || installedIds.contains(entry.name);
+            item.put("installed", installed);
+            body.add(item);
+        }
+        respondJson(exchange, 200, body);
+    }
+
+    private void handleProxyInstall(HttpExchange exchange) throws IOException {
+        if (proxySource == null || proxyHolder == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        Object parsed = json.parse(readBody(exchange.getRequestBody()));
+        String name = null;
+        if (parsed instanceof Map) {
+            Object nameObj = ((Map<?, ?>) parsed).get("name");
+            if (nameObj instanceof String) {
+                name = (String) nameObj;
+            }
+        }
+
+        // Targeted find() first (works even when a full list() scan is rate-limited/cached-empty);
+        // fall back to scanning list() only if find() comes up empty.
+        ProxySource.Entry match = proxySource.find(name);
+        if (match == null) {
+            for (ProxySource.Entry entry : proxySource.list()) {
+                if (entry.name.equals(name)) {
+                    match = entry;
+                    break;
+                }
+            }
+        }
+        if (match == null) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "unknown proxy");
+            respondJson(exchange, 404, body);
+            return;
+        }
+
+        try {
+            proxySource.download(match, proxiesDir);
+        } catch (IOException e) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "download failed: " + e.getMessage());
+            respondJson(exchange, 502, body);
+            return;
+        }
+        proxyHolder.refresh(proxiesDir);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("installed", true);
+        body.put("proxies", proxyHolder.listProxyIds());
+        respondJson(exchange, 200, body);
+    }
+
+    /** Uninstalls a proxy: deletes its jar (Windows-safe close-before-delete, see
+     *  {@link ProxyRegistryHolder#uninstall}) and rebuilds the live registry without it. */
+    private void handleProxyUninstall(HttpExchange exchange, String proxyId) throws IOException {
+        if (proxySource == null || proxyHolder == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        boolean ok = proxyHolder.uninstall(proxyId, proxiesDir);
+        if (!ok) {
+            handleNotFound(exchange);
+            return;
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("uninstalled", true);
+        body.put("proxies", proxyHolder.listProxyIds());
+        respondJson(exchange, 200, body);
     }
 
     private void handleProxiesList(HttpExchange exchange) throws IOException {

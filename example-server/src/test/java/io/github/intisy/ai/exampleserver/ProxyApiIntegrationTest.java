@@ -9,6 +9,7 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxyDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
+import io.github.intisy.ai.exampleserver.discovery.ProxySource;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.routing.ProxyPlugin;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -30,6 +32,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
 import java.util.Scanner;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -37,6 +41,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -56,6 +61,8 @@ class ProxyApiIntegrationTest {
 
     private static final String CONFIG_FILE = "proxy-api-routing.json";
     private static final String PROXY_ID = "routing-proxy";
+    private static final String INSTALL_NAME = "installable-proxy";
+    private static final String INSTALL_ASSET = "installable-proxy.jar";
     private static final Pattern PORT_PATTERN = Pattern.compile("\"port\"\\s*:\\s*(\\d+)");
 
     private AiJava ai;
@@ -63,9 +70,16 @@ class ProxyApiIntegrationTest {
     private ProviderRegistryHolder holder;
     private ProxyRegistryHolder proxyHolder;
     private ProxyManager proxyManager;
+    private Path proxiesDir;
 
     @BeforeEach
-    void setUp(@TempDir Path providersDir, @TempDir Path proxiesDir, @TempDir Path configDir) throws IOException {
+    void setUp(@TempDir Path providersDir, @TempDir Path configDir) throws IOException {
+        // proxiesDir is NOT a JUnit @TempDir: the install/uninstall tests trigger a SECOND
+        // ProxyRegistryHolder#refresh, whose documented tradeoff leaks the FIRST registry's
+        // URLClassLoader (still holding fixture-proxy.jar open on Windows) -- JUnit's @TempDir
+        // cleanup treats that as a hard failure, so this dir is cleaned up best-effort instead
+        // (see tearDown).
+        proxiesDir = Files.createTempDirectory("proxy-api-test-proxies");
         stageProviderJar(providersDir);
         stageProxyJar(proxiesDir);
 
@@ -87,8 +101,9 @@ class ProxyApiIntegrationTest {
         QuotaAdmin quota = new QuotaAdmin(store, json, holder, ai.logger());
         proxyManager = new ProxyManager(ai, holder, proxyHolder, store, json, ai.logger());
         ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
+        ProxySource fakeProxySource = new FakeProxySource();
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
-                routing, quota, null, null, proxyAdmin);
+                routing, quota, null, null, proxyAdmin, fakeProxySource, proxyHolder, proxiesDir);
 
         AiJava.WiredRouter router = ai.router(profile,
                 id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
@@ -102,6 +117,26 @@ class ProxyApiIntegrationTest {
         if (holder != null && holder.get() != null) holder.get().close();
         if (proxyHolder != null && proxyHolder.get() != null) proxyHolder.get().close();
         if (ai != null) ai.close();
+        deleteBestEffort(proxiesDir);
+    }
+
+    /** Best-effort recursive delete: a leaked {@link java.net.URLClassLoader} from an earlier
+     *  {@link ProxyRegistryHolder#refresh} may still hold a jar open on Windows (an accepted
+     *  tradeoff, see {@link ProxyRegistryHolder#refresh}'s javadoc) -- leftover files are simply
+     *  abandoned to the OS temp-dir sweep rather than failing the test. */
+    private static void deleteBestEffort(Path dir) {
+        if (dir == null || !Files.exists(dir)) return;
+        try (java.util.stream.Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // still locked by a leaked classloader -- leave it for the OS to reclaim
+                }
+            });
+        } catch (IOException ignored) {
+            // walk itself failed; nothing more we can do here
+        }
     }
 
     private static void stageProviderJar(Path targetDir) throws IOException {
@@ -123,10 +158,18 @@ class ProxyApiIntegrationTest {
      * through the HTTP API rather than {@link ProxyManager} directly.
      */
     private static void stageProxyJar(Path proxiesDir) throws IOException {
-        Path jarPath = proxiesDir.resolve("fixture-proxy.jar");
-        String className = RoutingFixtureProxyPlugin.class.getName();
+        Files.write(proxiesDir.resolve("fixture-proxy.jar"), buildProxyJarBytes(RoutingFixtureProxyPlugin.class));
+    }
+
+    /** Packages a compiled {@link ProxyPlugin} fixture class plus a real
+     *  {@code META-INF/services} registration into an in-memory jar -- shared by the initial
+     *  {@link #stageProxyJar} staging and {@link FakeProxySource#download}, which simulates a real
+     *  install download with no network. */
+    private static byte[] buildProxyJarBytes(Class<? extends ProxyPlugin> pluginClass) throws IOException {
+        String className = pluginClass.getName();
         String classResourcePath = className.replace('.', '/') + ".class";
-        try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(jarPath))) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (JarOutputStream jar = new JarOutputStream(baos)) {
             try (InputStream in = ProxyApiIntegrationTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
                 if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
                 jar.putNextEntry(new JarEntry(classResourcePath));
@@ -137,6 +180,38 @@ class ProxyApiIntegrationTest {
             jar.write(className.getBytes(StandardCharsets.UTF_8));
             jar.closeEntry();
         }
+        return baos.toByteArray();
+    }
+
+    /** Simulates a real proxy download with no network: {@link #find}/{@link #list} report a
+     *  single installable entry ({@link #INSTALL_NAME}), and {@link #download} writes a real jar
+     *  for {@link InstallableFixtureProxyPlugin} -- mirrors {@code ProviderInstallIntegrationTest}'s
+     *  {@code FakeProviderSource}. {@link #find} is implemented directly (not by delegating through
+     *  {@link #list}) so the install route's find()-first lookup is genuinely exercised. */
+    private static final class FakeProxySource implements ProxySource {
+        @Override
+        public List<Entry> list() {
+            return Collections.singletonList(new Entry(INSTALL_NAME, INSTALL_ASSET, ""));
+        }
+
+        @Override
+        public Entry find(String name) {
+            return INSTALL_NAME.equals(name) ? new Entry(INSTALL_NAME, INSTALL_ASSET, "") : null;
+        }
+
+        @Override
+        public Path download(Entry entry, Path dir) throws IOException {
+            Path target = dir.resolve(entry.assetName);
+            Files.write(target, buildProxyJarBytes(InstallableFixtureProxyPlugin.class));
+            return target;
+        }
+    }
+
+    /** Test-only proxy plugin installed on demand via {@code POST /api/proxies/install}. */
+    public static final class InstallableFixtureProxyPlugin implements ProxyPlugin {
+        @Override public String id() { return INSTALL_NAME; }
+        @Override public String displayName() { return "Installable Proxy"; }
+        @Override public RoutingProfile profile() { return ServerProfile.echoTiers(CONFIG_FILE); }
     }
 
     @Test
@@ -160,6 +235,53 @@ class ProxyApiIntegrationTest {
     @Test
     void unknownIdIs400() throws IOException {
         assertEquals(400, post("/api/proxies/nope/start").status);
+    }
+
+    @Test
+    void availableListsFakeEntryAsNotInstalled() throws IOException {
+        Response r = get("/api/proxies/available");
+        assertEquals(200, r.status, r.body);
+        assertTrue(r.body.contains(INSTALL_NAME), r.body);
+        assertTrue(r.body.contains("\"installed\":false") || r.body.contains("\"installed\": false"), r.body);
+    }
+
+    @Test
+    void installKnownNameDownloadsAndRefreshesLiveRegistry() throws IOException {
+        Response install = post("/api/proxies/install", "{\"name\":\"" + INSTALL_NAME + "\"}");
+        assertEquals(200, install.status, install.body);
+        assertTrue(install.body.contains("\"installed\":true") || install.body.contains("\"installed\": true"),
+                install.body);
+        assertTrue(proxyHolder.listProxyIds().contains(INSTALL_NAME), proxyHolder.listProxyIds().toString());
+    }
+
+    @Test
+    void installUnknownNameIs404() throws IOException {
+        Response r = post("/api/proxies/install", "{\"name\":\"nope\"}");
+        assertEquals(404, r.status);
+        assertTrue(r.body.contains("unknown proxy"), r.body);
+    }
+
+    @Test
+    void uninstallInstalledProxyRemovesItAndUnknownIs404() throws IOException {
+        assertEquals(200, post("/api/proxies/install", "{\"name\":\"" + INSTALL_NAME + "\"}").status);
+        assertTrue(proxyHolder.listProxyIds().contains(INSTALL_NAME), proxyHolder.listProxyIds().toString());
+
+        Response uninstall = delete("/api/proxies/" + INSTALL_NAME);
+        assertEquals(200, uninstall.status, uninstall.body);
+        assertTrue(uninstall.body.contains("\"uninstalled\":true") || uninstall.body.contains("\"uninstalled\": true"),
+                uninstall.body);
+        assertFalse(proxyHolder.listProxyIds().contains(INSTALL_NAME), proxyHolder.listProxyIds().toString());
+
+        assertEquals(404, delete("/api/proxies/does-not-exist").status);
+    }
+
+    @Test
+    void modelMapResolvesInstalledProxyProfileAndRejectsUnknownApp() throws IOException {
+        Response installed = get("/api/routing/model-map?app=" + PROXY_ID);
+        assertEquals(200, installed.status, installed.body);
+        assertTrue(installed.body.contains("\"tiers\""), installed.body);
+
+        assertEquals(400, get("/api/routing/model-map?app=nope").status);
     }
 
     /** Test-only proxy plugin whose profile matches this test's own echo-tiers routing profile. */
@@ -204,6 +326,20 @@ class ProxyApiIntegrationTest {
             os.write(new byte[0]);
         }
         return read(c);
+    }
+
+    private Response post(String path, String body) throws IOException {
+        HttpURLConnection c = open(path, "POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("content-type", "application/json");
+        try (OutputStream os = c.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+        return read(c);
+    }
+
+    private Response delete(String path) throws IOException {
+        return read(open(path, "DELETE"));
     }
 
     private HttpURLConnection open(String path, String method) throws IOException {
