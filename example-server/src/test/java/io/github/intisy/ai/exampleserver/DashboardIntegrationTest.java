@@ -110,6 +110,19 @@ class DashboardIntegrationTest {
         assertTrue(get("/").body.contains("id=\"routing-app-select\""), "routing app selector missing");
     }
 
+    @Test
+    void headerHasProviderConsoleTitle() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("AI Java · Provider Console"), "new title missing");
+    }
+
+    @Test
+    void addAccountIsFallbackOnly() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("id=\"add-account-fallback\""), "fallback affordance missing");
+        assertFalse(html.contains("id=\"toggle-add-account-button\""), "manual-add toggle should be removed");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {
