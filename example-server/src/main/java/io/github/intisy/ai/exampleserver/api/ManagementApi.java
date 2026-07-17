@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
+import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -46,6 +47,8 @@ import java.util.function.Supplier;
  * PUT    /api/routing/model-map          {"map":{...}}    -> 200 {"ok":true,"warnings":[...]}
  * GET    /api/providers/{id}/config                       -> 200 {"groups":[...],"values":{...}}
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
+ * POST   /api/providers/{id}/oauth/start                  -> 200 {"authorizeUrl":..,"state":..}
+ * GET    /api/oauth/callback             ?code=&state=    -> 200/400 text/html (login result page)
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -62,7 +65,8 @@ import java.util.function.Supplier;
  * wired in (the 7-arg constructor); callers still on an older constructor get a plain 404 for
  * these paths instead of an NPE. Same story for {@code /quota/refresh} and {@link QuotaAdmin}
  * (the 8-arg constructor), and for {@code /api/providers/{id}/config} and {@link ConfigAdmin}
- * (the 9-arg constructor).
+ * (the 9-arg constructor). Same for the {@code /oauth/*} routes and {@link OAuthAdmin} (the
+ * 10-arg constructor).
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -75,6 +79,7 @@ public final class ManagementApi implements HttpHandler {
     private final RoutingAdmin routing;
     private final QuotaAdmin quota;
     private final ConfigAdmin config;
+    private final OAuthAdmin oauth;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -117,12 +122,23 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: adds the provider-config surface ({@code GET/PUT
-     * /api/providers/{id}/config}) backed by {@code config}.
+     * Adds the provider-config surface ({@code GET/PUT /api/providers/{id}/config}) backed by
+     * {@code config}. No {@link OAuthAdmin} — the {@code /oauth/*} routes 404 (see the full 10-arg
+     * constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, config, null);
+    }
+
+    /**
+     * Full constructor: adds the OAuth-login surface ({@code POST .../oauth/start}, {@code GET
+     * /api/oauth/callback}) backed by {@code oauth}.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -132,6 +148,7 @@ public final class ManagementApi implements HttpHandler {
         this.routing = routing;
         this.quota = quota;
         this.config = config;
+        this.oauth = oauth;
     }
 
     @Override
@@ -220,6 +237,17 @@ public final class ManagementApi implements HttpHandler {
         if ("PUT".equals(method) && seg.length == 4
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "config".equals(seg[3])) {
             handlePutConfig(exchange, decode(seg[2]));
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 5
+                && "api".equals(seg[0]) && "providers".equals(seg[1])
+                && "oauth".equals(seg[3]) && "start".equals(seg[4])) {
+            handleOAuthStart(exchange, decode(seg[2]));
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "oauth".equals(seg[1]) && "callback".equals(seg[2])) {
+            handleOAuthCallback(exchange);
             return;
         }
         handleNotFound(exchange);
@@ -447,6 +475,64 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
+    private void handleOAuthStart(HttpExchange exchange, String providerId) throws IOException {
+        if (oauth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        try {
+            String base = callbackBaseUrl(exchange);
+            respondJson(exchange, 200, oauth.start(providerId, base));
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("error", e.getMessage());
+            respondJson(exchange, 400, error);
+        }
+    }
+
+    private void handleOAuthCallback(HttpExchange exchange) throws IOException {
+        if (oauth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        Map<String, String> query = parseQuery(exchange.getRequestURI().getRawQuery());
+        try {
+            oauth.callback(query.get("code"), query.get("state"));
+            respondHtml(exchange, 200,
+                    "<!doctype html><meta charset=utf-8><title>Signed in</title>"
+                    + "<body style=\"font-family:sans-serif;padding:2rem\">"
+                    + "<h2>Signed in</h2><p>You can close this tab.</p>"
+                    + "<script>try{window.opener&&window.opener.postMessage('oauth-done','*')}catch(e){}"
+                    + "setTimeout(function(){window.close()},500)</script>");
+        } catch (IllegalArgumentException e) {
+            respondHtml(exchange, 400,
+                    "<!doctype html><meta charset=utf-8><title>Sign-in failed</title>"
+                    + "<body style=\"font-family:sans-serif;padding:2rem\">"
+                    + "<h2>Sign-in failed</h2><p>You can close this tab and try again.</p>");
+        }
+    }
+
+    // scheme is http for the loopback example server; Host carries host:port.
+    private static String callbackBaseUrl(HttpExchange exchange) {
+        String host = exchange.getRequestHeaders().getFirst("Host");
+        if (host == null || host.isEmpty()) {
+            host = "127.0.0.1:" + exchange.getLocalAddress().getPort();
+        }
+        return "http://" + host;
+    }
+
+    private static Map<String, String> parseQuery(String rawQuery) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (rawQuery == null || rawQuery.isEmpty()) return out;
+        for (String pair : rawQuery.split("&")) {
+            int eq = pair.indexOf('=');
+            String key = eq >= 0 ? pair.substring(0, eq) : pair;
+            String value = eq >= 0 ? pair.substring(eq + 1) : "";
+            out.put(decode(key), decode(value));
+        }
+        return out;
+    }
+
     private void handleNotFound(HttpExchange exchange) throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", "not found");
@@ -483,6 +569,15 @@ public final class ManagementApi implements HttpHandler {
     private void respondJson(HttpExchange exchange, int status, Object body) throws IOException {
         byte[] bytes = json.stringify(body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("content-type", "application/json");
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
+    }
+
+    private void respondHtml(HttpExchange exchange, int status, String html) throws IOException {
+        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("content-type", "text/html; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

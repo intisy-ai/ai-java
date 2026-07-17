@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
+import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
@@ -64,8 +65,9 @@ public final class ServerMain {
             RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), profile, holder, ai.logger());
             QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ConfigAdmin config = new ConfigAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
+            OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin, ai.clock());
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
-                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config);
+                    new GithubOrgProviderSource(ai.jsonCodec()), providersDir, holder, routing, quota, config, oauth);
             ExampleServer server = ExampleServer.start(router, port, api);
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
@@ -80,6 +82,8 @@ public final class ServerMain {
             System.out.println("  PUT  /api/routing/model-map      {\"map\":{...}}");
             System.out.println("  GET  /api/providers/{id}/config");
             System.out.println("  PUT  /api/providers/{id}/config  {\"values\":{...}}");
+            System.out.println("  POST /api/providers/{id}/oauth/start");
+            System.out.println("  GET  /api/oauth/callback?code=&state=");
             System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
