@@ -15,18 +15,19 @@ import java.util.function.UnaryOperator;
 
 /**
  * JDBC-backed {@link Store}: a SQL blob key/value table for servers running against a real
- * database (H2, MySQL, PostgreSQL) instead of {@link FileStore}'s JSON files. The library
- * itself has no runtime JDBC driver dependency — the caller (server) supplies a configured
- * {@link DataSource}; only {@code javax.sql} types are used here, which are part of the
- * Java 8 platform.
+ * database (H2, MySQL, PostgreSQL, SQLite) instead of {@link FileStore}'s JSON files. The
+ * library itself has no runtime JDBC driver dependency — the caller (server) supplies a
+ * configured {@link DataSource}; only {@code javax.sql} types are used here, which are part of
+ * the Java 8 platform.
  *
  * <p><b>Schema.</b> The table ({@code ai_kv} by default) is auto-created on construction with
- * a portable {@code CREATE TABLE IF NOT EXISTS} (supported by H2, MySQL, and PostgreSQL):
- * {@code (k VARCHAR(512) PRIMARY KEY, v <text-type>)}. The value column's type is chosen from
- * {@link java.sql.DatabaseMetaData#getDatabaseProductName()} because {@code CLOB} is not a
- * native MySQL/PostgreSQL type: H2 gets the literal {@code CLOB}, MySQL/MariaDB get
- * {@code LONGTEXT}, PostgreSQL gets {@code TEXT}. Any other/unrecognized database falls back
- * to {@code CLOB}, the ANSI SQL large-object type.
+ * a portable {@code CREATE TABLE IF NOT EXISTS} (supported by H2, MySQL, PostgreSQL, and
+ * SQLite): {@code (k VARCHAR(512) PRIMARY KEY, v <text-type>)}. The value column's type is
+ * chosen from {@link java.sql.DatabaseMetaData#getDatabaseProductName()} because {@code CLOB}
+ * is not a native MySQL/PostgreSQL type: H2 and SQLite get the literal {@code CLOB} (SQLite's
+ * dynamic typing accepts it fine), MySQL/MariaDB get {@code LONGTEXT}, PostgreSQL gets
+ * {@code TEXT}. Any other/unrecognized database falls back to {@code CLOB}, the ANSI SQL
+ * large-object type.
  *
  * <p><b>Atomic {@code update} — ensure-row-then-lock.</b> {@code SELECT ... FOR UPDATE} only
  * locks a row that already exists; on an absent key it locks nothing, so two concurrent
@@ -36,9 +37,14 @@ import java.util.function.UnaryOperator;
  * first <b>ensures the row exists</b> ({@code INSERT ... (k, v) VALUES (?, NULL)}, swallowing
  * the duplicate-key {@code SQLException} if another transaction just did the same insert —
  * a portable, DB-agnostic "insert-if-absent"), THEN runs
- * {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE}. A real row is now always locked, so a
- * second {@code update} on the same key — whether it started out present or absent — blocks
- * until the first transaction commits, deterministically, with no retry needed for this race.
+ * {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE} — except on SQLite, which has no
+ * {@code FOR UPDATE} syntax at all and doesn't need one: it has no row-level locking, and the
+ * {@code ensureRowExists} INSERT just above already takes SQLite's whole-database write lock
+ * for the rest of the transaction, so the plain {@code SELECT} that follows is just as
+ * serialized (see {@link #supportsRowLocking}). A real row is now always locked (or, on
+ * SQLite, the whole database already is), so a second {@code update} on the same key —
+ * whether it started out present or absent — blocks until the first transaction commits,
+ * deterministically, with no retry needed for this race.
  *
  * <p><b>NULL {@code v} means logically absent.</b> The placeholder row inserted by
  * ensure-row-then-lock has {@code v = NULL}; reading it back must not be mistaken for a real
@@ -70,6 +76,14 @@ import java.util.function.UnaryOperator;
 public class JdbcStore implements Store {
 
     private static final String DEFAULT_TABLE = "ai_kv";
+    // SQLite's own busy-timeout (its default is 0ms - a second writer fails IMMEDIATELY with
+    // SQLITE_BUSY instead of waiting) - since SQLite serializes all writers on one whole-database
+    // lock (see supportsRowLocking), this timeout is what makes concurrent update()/put() calls
+    // wait for each other rather than error out, mirroring what FOR UPDATE gives H2/MySQL/Postgres.
+    private static final int SQLITE_BUSY_TIMEOUT_MS = 30_000;
+    // SQLite's own numeric result code for SQLITE_CONSTRAINT (any constraint violation) - used
+    // by isDuplicateKey; see its javadoc for why this doesn't create a driver dependency.
+    private static final int SQLITE_CONSTRAINT_ERROR_CODE = 19;
     // bounds the retry loop in update() for genuinely transient failures (deadlock /
     // serialization-failure SQLStates); each attempt is a full transaction, so this is not a
     // busy spin. The absent-key race is handled deterministically by ensure-row-then-lock and
@@ -78,6 +92,12 @@ public class JdbcStore implements Store {
 
     private final DataSource dataSource;
     private final String table;
+    // SQLite has no "SELECT ... FOR UPDATE" syntax (it throws a syntax error) and doesn't need
+    // one: unlike H2/MySQL/PostgreSQL it has no row-level locking at all - a writer transaction
+    // already takes SQLite's whole-database RESERVED/EXCLUSIVE lock on its first write statement
+    // (ensureRowExists' INSERT, right before selectForUpdate runs), so omitting the clause loses
+    // no atomicity there. Detected once at construction, same pattern as valueColumnType.
+    private final boolean supportsRowLocking;
 
     public JdbcStore(DataSource dataSource) {
         this(dataSource, DEFAULT_TABLE);
@@ -86,12 +106,25 @@ public class JdbcStore implements Store {
     public JdbcStore(DataSource dataSource, String table) {
         this.dataSource = dataSource;
         this.table = validateTableName(table);
-        createTableIfAbsent();
+        this.supportsRowLocking = createTableIfAbsent();
+    }
+
+    // Central connection acquisition point: on SQLite, applies the busy-timeout PRAGMA (see
+    // SQLITE_BUSY_TIMEOUT_MS) so a connection that finds the database locked by another writer
+    // waits instead of failing immediately. A no-op on every other database.
+    private Connection connect() throws SQLException {
+        Connection conn = dataSource.getConnection();
+        if (!supportsRowLocking) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("PRAGMA busy_timeout = " + SQLITE_BUSY_TIMEOUT_MS);
+            }
+        }
+        return conn;
     }
 
     @Override
     public String get(String key) {
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connect();
              PreparedStatement ps = conn.prepareStatement("SELECT v FROM " + table + " WHERE k = ?")) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
@@ -113,7 +146,7 @@ public class JdbcStore implements Store {
 
     @Override
     public boolean exists(String key) {
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connect();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT 1 FROM " + table + " WHERE k = ? AND v IS NOT NULL")) {
             ps.setString(1, key);
@@ -127,7 +160,7 @@ public class JdbcStore implements Store {
 
     @Override
     public void delete(String key) {
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connect();
              PreparedStatement ps = conn.prepareStatement("DELETE FROM " + table + " WHERE k = ?")) {
             ps.setString(1, key);
             ps.executeUpdate();
@@ -140,7 +173,7 @@ public class JdbcStore implements Store {
     public void update(String key, UnaryOperator<String> mutator) {
         SQLException lastError = null;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            try (Connection conn = dataSource.getConnection()) {
+            try (Connection conn = connect()) {
                 conn.setAutoCommit(false);
                 try {
                     // ensure-row-then-lock: guarantees there is always a real row for the
@@ -185,7 +218,7 @@ public class JdbcStore implements Store {
     @Override
     public List<String> listKeys(String prefix) {
         List<String> keys = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection();
+        try (Connection conn = connect();
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT k FROM " + table + " WHERE k LIKE ? ESCAPE '\\' AND v IS NOT NULL")) {
             ps.setString(1, escapeLikePattern(prefix) + "%");
@@ -214,8 +247,8 @@ public class JdbcStore implements Store {
     }
 
     private String selectForUpdate(Connection conn, String key) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT v FROM " + table + " WHERE k = ? FOR UPDATE")) {
+        String sql = "SELECT v FROM " + table + " WHERE k = ?" + (supportsRowLocking ? " FOR UPDATE" : "");
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, key);
             try (ResultSet rs = ps.executeQuery()) {
                 // getString(...) maps SQL NULL to Java null - our placeholder row's NULL v
@@ -247,7 +280,14 @@ public class JdbcStore implements Store {
     // error-code checks.
     private static boolean isDuplicateKey(SQLException e) {
         String state = e.getSQLState();
-        return state != null && state.startsWith("23");
+        if (state != null && state.startsWith("23")) return true;
+        // SQLite's driver leaves getSQLState() null for constraint violations and reports its
+        // own numeric result code instead (19 = SQLITE_CONSTRAINT, incl. the primary-key/unique
+        // variants) - checked as a plain int, not an org.sqlite.* type, so :jvm still has no
+        // compile-time dependency on the SQLite driver. ensureRowExists's INSERT only ever
+        // touches (k, v) with the sole constraint being k's PRIMARY KEY, so any SQLITE_CONSTRAINT
+        // here can only be that duplicate-key case.
+        return state == null && e.getErrorCode() == SQLITE_CONSTRAINT_ERROR_CODE;
     }
 
     // SQLState class "40" (Transaction Rollback, e.g. 40001 serialization failure / 40P01
@@ -258,27 +298,32 @@ public class JdbcStore implements Store {
         return state != null && (state.startsWith("40") || state.equals("41000"));
     }
 
-    private void createTableIfAbsent() {
+    // Returns whether the underlying database supports SELECT ... FOR UPDATE (see the
+    // supportsRowLocking field javadoc for why SQLite doesn't need it).
+    private boolean createTableIfAbsent() {
         try (Connection conn = dataSource.getConnection()) {
-            String valueType = valueColumnType(conn);
+            String product = conn.getMetaData().getDatabaseProductName();
+            String valueType = valueColumnType(product);
             try (Statement st = conn.createStatement()) {
                 st.execute("CREATE TABLE IF NOT EXISTS " + table
                         + " (k VARCHAR(512) PRIMARY KEY, v " + valueType + ")");
             }
+            return product == null || !product.toLowerCase(Locale.ROOT).contains("sqlite");
         } catch (SQLException e) {
             throw new RuntimeException("failed to create store table " + table, e);
         }
     }
 
     // See class javadoc: CLOB isn't native on MySQL/PostgreSQL, so pick the equivalent
-    // large-text type per database product rather than hardcoding one dialect.
-    private static String valueColumnType(Connection conn) throws SQLException {
-        String product = conn.getMetaData().getDatabaseProductName();
+    // large-text type per database product rather than hardcoding one dialect. SQLite has no
+    // real column typing (types are dynamic/advisory) and accepts CLOB fine, so it falls into
+    // the same default branch as H2.
+    private static String valueColumnType(String product) {
         if (product == null) return "CLOB";
         String p = product.toLowerCase(Locale.ROOT);
         if (p.contains("mysql") || p.contains("mariadb")) return "LONGTEXT";
         if (p.contains("postgresql")) return "TEXT";
-        return "CLOB"; // H2 and other CLOB-native databases
+        return "CLOB"; // H2, SQLite, and other CLOB-tolerant databases
     }
 
     private static String escapeLikePattern(String value) {

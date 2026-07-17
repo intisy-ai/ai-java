@@ -378,7 +378,7 @@ public final class ManagementApi implements HttpHandler {
      * {@code refresh} plus one of {@code email}/{@code id} are required. This only becomes
      * visible to an installed provider when the server runs against a {@code FileStore} shared
      * with that provider ({@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>});
-     * under the default in-memory store it is admin-visible only.
+     * under the default {@code sqlite} store (or {@code memory}) it is admin-visible only.
      */
     private void handleAddAccount(HttpExchange exchange, String providerId) throws IOException {
         Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));

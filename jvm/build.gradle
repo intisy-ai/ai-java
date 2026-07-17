@@ -11,8 +11,11 @@ dependencies {
     githubApi "intisy:simple-logger:1.12.7"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
-    // that the server provides (H2/MySQL/PostgreSQL are all supported at runtime).
+    // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).
     testImplementation "com.h2database:h2:2.2.224"
+    // Test-only: proves JdbcStore's SQLite dialect handling (no FOR UPDATE support) against a
+    // real SQLite file DataSource, same rationale as the H2 dependency above.
+    testImplementation "org.xerial:sqlite-jdbc:3.45.3.0"
 }
 
 // Match docker-java's "standalone" naming for the shaded jar (Shadow's own

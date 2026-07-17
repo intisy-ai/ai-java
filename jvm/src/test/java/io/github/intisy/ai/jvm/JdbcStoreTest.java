@@ -3,8 +3,11 @@ package io.github.intisy.ai.jvm;
 import io.github.intisy.ai.jvm.backend.store.JdbcStore;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.sqlite.SQLiteDataSource;
 
 import javax.sql.DataSource;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -264,5 +267,56 @@ class JdbcStoreTest {
 
         assertFalse(store.exists("boom.json"));
         assertNull(store.get("boom.json"));
+    }
+
+    // SQLite has no "SELECT ... FOR UPDATE" syntax (unlike H2/MySQL/PostgreSQL above), which
+    // used to make every update()/put() call throw a SQLiteException. This regression-tests
+    // JdbcStore's dialect detection (supportsRowLocking) against a real SQLite file DB: the
+    // atomic update path must work the same as it does for H2, including under concurrency,
+    // where correctness now comes from SQLite's own whole-database write lock instead of a
+    // per-row FOR UPDATE lock.
+    @Test
+    void sqliteBackedStoreRoundTripsAndUpdatesAtomically(@TempDir Path dir) throws InterruptedException {
+        SQLiteDataSource ds = new SQLiteDataSource();
+        ds.setUrl("jdbc:sqlite:" + dir.resolve("jdbcstore-test.db"));
+        JdbcStore store = new JdbcStore(ds);
+
+        store.put("accounts.json", "{\"version\":1}");
+        assertEquals("{\"version\":1}", store.get("accounts.json"));
+        assertTrue(store.exists("accounts.json"));
+
+        store.update("counter.json", current -> {
+            assertNull(current);
+            return "{\"n\":0}";
+        });
+
+        int threads = 8;
+        int incrementsPerThread = 10;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch done = new CountDownLatch(threads);
+        AtomicInteger errors = new AtomicInteger();
+        for (int t = 0; t < threads; t++) {
+            pool.submit(() -> {
+                try {
+                    for (int i = 0; i < incrementsPerThread; i++) {
+                        store.update("counter.json", current -> {
+                            int n = Integer.parseInt(current.replaceAll("[^0-9]", ""));
+                            return "{\"n\":" + (n + 1) + "}";
+                        });
+                    }
+                } catch (Exception e) {
+                    errors.incrementAndGet();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+        assertTrue(done.await(60, TimeUnit.SECONDS), "sqlite updates did not finish in time");
+        pool.shutdown();
+
+        assertEquals(0, errors.get());
+        String finalValue = store.get("counter.json");
+        int n = Integer.parseInt(finalValue.replaceAll("[^0-9]", ""));
+        assertEquals(threads * incrementsPerThread, n, "lost update: " + finalValue);
     }
 }

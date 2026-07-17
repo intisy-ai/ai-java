@@ -23,7 +23,7 @@ import java.nio.file.Paths;
 
 /**
  * Boots the example server. Demonstrates "completely customizable backend": the store is chosen
- * from one place ({@code -Dexampleserver.store=memory|file}) and composed into a {@link Backend}
+ * from one place ({@code -Dexampleserver.store=sqlite|memory|file}) and composed into a {@link Backend}
  * the whole server runs on. Provider jars are discovered via {@link ProviderDiscovery} from
  * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task) — startup only ever
  * reads whatever's already on disk, never the network. That registry is held in a
@@ -101,12 +101,31 @@ public final class ServerMain {
         }
     }
 
-    private static Store chooseStore() {
-        String kind = System.getProperty("exampleserver.store", "memory");
-        if ("file".equals(kind)) {
-            return Storage.file(Paths.get(System.getProperty("exampleserver.configDir", "config")));
+    /** Package-private + testable: maps a store kind + location to a concrete {@link Store}. */
+    static Store storeFor(String kind, String location) {
+        switch (kind) {
+            case "memory":
+                return Storage.memory();
+            case "file":
+                return Storage.file(Paths.get(location));
+            case "sqlite": {
+                org.sqlite.SQLiteDataSource ds = new org.sqlite.SQLiteDataSource();
+                ds.setUrl("jdbc:sqlite:" + location);
+                return Storage.jdbc(ds);
+            }
+            default:
+                return Storage.memory();
         }
-        return Storage.memory();
+    }
+
+    private static Store chooseStore() {
+        // DEFAULT is now "sqlite" (persistent) so caching (accounts/quota/models/proxies/routing)
+        // survives restarts out of the box; memory/file/jdbc remain selectable.
+        String kind = System.getProperty("exampleserver.store", "sqlite");
+        String location = "sqlite".equals(kind)
+                ? System.getProperty("exampleserver.dbPath", "ai-java.db")
+                : System.getProperty("exampleserver.configDir", "config");
+        return storeFor(kind, location);
     }
 
     private static Path providersDir() {
