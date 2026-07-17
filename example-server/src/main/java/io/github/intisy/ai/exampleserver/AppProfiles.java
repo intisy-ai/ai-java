@@ -13,11 +13,10 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * The two built-in app {@link RoutingProfile}s the example-server can host a proxy for: the
- * claude-code (Anthropic) profile and the opencode profile. Java ports of the TS
- * {@code anthropicProfile()}/{@code opencodeProfile()} (see {@code libs/claude-code-proxy/src/
- * profiles/anthropic.ts} + {@code libs/opencode-proxy/src/profiles/opencode.ts}) — same tier
- * detection, env naming, defaults, and Anthropic-shaped synthesized 429.
+ * The claude-code (Anthropic) {@link RoutingProfile} the example-server can host a proxy for.
+ * Java port of the TS {@code anthropicProfile()} (see {@code libs/claude-code-proxy/src/
+ * profiles/anthropic.ts}) — same tier detection, env naming, defaults, and Anthropic-shaped
+ * synthesized 429.
  */
 public final class AppProfiles {
     private static final Pattern TIER_REGEX = Pattern.compile("^claude-([a-z]+)-\\d");
@@ -27,27 +26,21 @@ public final class AppProfiles {
     }
 
     public static List<String> apps() {
-        return Arrays.asList("claude-code", "opencode");
+        return Arrays.asList("claude-code");
     }
 
     public static RoutingProfile byApp(String app) {
         if ("claude-code".equals(app)) return anthropic();
-        if ("opencode".equals(app)) return opencode();
         throw new IllegalArgumentException("unknown app: " + app);
     }
 
     public static String profileName(String app) {
         if ("claude-code".equals(app)) return "anthropic";
-        if ("opencode".equals(app)) return "opencode";
         throw new IllegalArgumentException("unknown app: " + app);
     }
 
     public static RoutingProfile anthropic() {
         return base("claude-code-loader.json", "claude-code", "ANTHROPIC");
-    }
-
-    public static RoutingProfile opencode() {
-        return base("opencode-loader.json", "opencode", "OPENCODE");
     }
 
     private static RoutingProfile base(String configFile, String tierSource, String envPrefix) {
@@ -66,7 +59,7 @@ public final class AppProfiles {
         return p;
     }
 
-    // Faithful port of the shared nativeRateLimit in anthropic.ts/opencode.ts: copy an upstream
+    // Faithful port of the shared nativeRateLimit in anthropic.ts: copy an upstream
     // 429's headers, reconcile the reset from anthropic-ratelimit-* headers, recompute retry-after
     // from wall-clock, and emit an Anthropic-shaped rate_limit_error. The absolute-time wording in
     // the message is locale/TZ-dependent (like the TS toLocaleTimeString) and intentionally not

@@ -104,11 +104,10 @@ class ProxyApiIntegrationTest {
     }
 
     @Test
-    void listReturnsBothApps() throws IOException {
+    void listReturnsClaudeCode() throws IOException {
         Response r = get("/api/proxies");
         assertEquals(200, r.status, r.body);
         assertTrue(r.body.contains("claude-code"), r.body);
-        assertTrue(r.body.contains("opencode"), r.body);
     }
 
     @Test

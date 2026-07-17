@@ -30,16 +30,6 @@ class AppProfilesTest {
     }
 
     @Test
-    void opencodeProfileMatchesTs() {
-        RoutingProfile p = AppProfiles.opencode();
-        assertEquals("opencode-loader.json", p.configFile);
-        assertEquals("opencode", p.tierSourceProvider);
-        assertEquals("OPENCODE", p.envPrefix);
-        assertEquals(Arrays.asList("opus", "sonnet", "haiku", "fable"), p.tierOrder);
-        assertTrue(RoutingProfile.isValid(p));
-    }
-
-    @Test
     void nativeRateLimitSynthesizesAnthropicShaped429() {
         RoutingProfile p = AppProfiles.anthropic();
         RoutingProfile.Synth synth = p.nativeRateLimit.build(new RateLimitInfo(0L, null));
@@ -52,9 +42,9 @@ class AppProfilesTest {
 
     @Test
     void byAppAndAppsAndUnknown() {
-        assertEquals(Arrays.asList("claude-code", "opencode"), AppProfiles.apps());
+        assertEquals(Arrays.asList("claude-code"), AppProfiles.apps());
         assertEquals("claude-code", AppProfiles.byApp("claude-code").tierSourceProvider);
-        assertEquals("opencode", AppProfiles.byApp("opencode").tierSourceProvider);
+        assertThrows(IllegalArgumentException.class, () -> AppProfiles.byApp("opencode"));
         assertThrows(IllegalArgumentException.class, () -> AppProfiles.byApp("nope"));
     }
 }

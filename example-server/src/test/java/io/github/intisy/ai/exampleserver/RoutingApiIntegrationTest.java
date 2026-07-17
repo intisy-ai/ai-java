@@ -152,19 +152,21 @@ class RoutingApiIntegrationTest {
 
     @Test
     void modelMapIsAppScoped() throws IOException {
-        // Save a map for claude-code, and a different one for opencode; each reads back its own.
+        // Save a map for claude-code (app-scoped), and a different one for the default/Server
+        // profile (no app param); each reads back its own — app scoping is independent of the
+        // default-profile (Server row) scope.
         assertEquals(200, put("/api/routing/model-map?app=claude-code",
                 "{\"map\":{\"opus\":[{\"provider\":\"echo\",\"model\":\"m-echo-opus\"}]}}").status);
-        assertEquals(200, put("/api/routing/model-map?app=opencode",
+        assertEquals(200, put("/api/routing/model-map",
                 "{\"map\":{\"haiku\":[{\"provider\":\"echo\",\"model\":\"m-echo-haiku\"}]}}").status);
 
         Response cc = get("/api/routing/model-map?app=claude-code");
         assertTrue(cc.body.contains("m-echo-opus"), cc.body);
         assertFalse(cc.body.contains("m-echo-haiku"), cc.body);
 
-        Response oc = get("/api/routing/model-map?app=opencode");
-        assertTrue(oc.body.contains("m-echo-haiku"), oc.body);
-        assertFalse(oc.body.contains("m-echo-opus"), oc.body);
+        Response server = get("/api/routing/model-map");
+        assertTrue(server.body.contains("m-echo-haiku"), server.body);
+        assertFalse(server.body.contains("m-echo-opus"), server.body);
     }
 
     @Test

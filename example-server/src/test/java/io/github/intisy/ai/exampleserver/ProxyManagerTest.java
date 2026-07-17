@@ -58,8 +58,8 @@ class ProxyManagerTest {
 
     @Test
     void setPortPersistsAndListReflects() {
-        mgr.setPort("opencode", 40555);
-        ProxyManager.ProxyStatus s = statusOf("opencode");
+        mgr.setPort("claude-code", 40555);
+        ProxyManager.ProxyStatus s = statusOf("claude-code");
         assertEquals(40555, s.port);
         assertFalse(s.running);
     }
@@ -75,7 +75,6 @@ class ProxyManagerTest {
         ProxyManager.ProxyStatus claudeStatus = statusOf(mgr2, "claude-code");
         assertTrue(claudeStatus.running, claudeStatus.error);
         assertEquals(persistedPort, claudeStatus.port);
-        assertFalse(statusOf(mgr2, "opencode").running);
     }
 
     @Test

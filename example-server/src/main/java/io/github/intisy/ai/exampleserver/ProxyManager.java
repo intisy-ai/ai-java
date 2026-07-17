@@ -27,7 +27,6 @@ public final class ProxyManager {
 
     static {
         DEFAULT_PORTS.put("claude-code", 34567);
-        DEFAULT_PORTS.put("opencode", 34568);
     }
 
     private final AiJava ai;
