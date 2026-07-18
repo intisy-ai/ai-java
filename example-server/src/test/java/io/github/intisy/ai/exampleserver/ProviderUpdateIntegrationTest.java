@@ -68,6 +68,64 @@ class ProviderUpdateIntegrationTest {
         return null; // unreachable
     }
 
+    /** Copies the staged echo-provider jar to {@code targetDir/assetName} (an arbitrary file name)
+     *  so the discovered provider id ({@code "echo"}, read from the jar content, NOT its file name)
+     *  can differ from the repo/asset name -- mirroring real providers like stub-auth (id
+     *  {@code "stub"}, asset {@code "stub-auth-provider.jar"}). */
+    private static Path stageEchoJarAs(Path targetDir, String assetName) throws IOException {
+        String staged = System.getProperty("exampleserver.providersDir");
+        assertTrue(staged != null, "exampleserver.providersDir must be set by the Gradle test task");
+        Path target = targetDir.resolve(assetName);
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+            for (Path jar : stream) {
+                Files.copy(jar, target);
+                return target;
+            }
+        }
+        fail("no staged provider jar found in " + staged);
+        return null; // unreachable
+    }
+
+    /** A fake org source whose {@code Entry} carries a repo {@code name} distinct from the provider
+     *  id, resolving only by its {@code assetName} -- proves the update path maps a provider id to
+     *  its org entry via the installed jar's asset name, not by assuming id == repo name. */
+    private static final class MismatchedNameProviderSource implements ProviderSource {
+        private final Path stagedJarDir;
+        private final String repoName;
+        private final String assetName;
+        private final String version;
+
+        MismatchedNameProviderSource(Path stagedJarDir, String repoName, String assetName, String version) {
+            this.stagedJarDir = stagedJarDir;
+            this.repoName = repoName;
+            this.assetName = assetName;
+            this.version = version;
+        }
+
+        @Override
+        public List<Entry> list() {
+            return Collections.singletonList(new Entry(repoName, assetName, "", version));
+        }
+
+        @Override
+        public Entry find(String name) {
+            return repoName.equals(name) ? new Entry(repoName, assetName, "", version) : null;
+        }
+
+        @Override
+        public Path download(Entry entry, Path dir) throws IOException {
+            Path target = dir.resolve(entry.assetName);
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagedJarDir, "*.jar")) {
+                for (Path p : stream) {
+                    Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
+                    InstalledVersions.write(target, entry.version);
+                    return target;
+                }
+            }
+            throw new IOException("no staged provider jar found in " + stagedJarDir);
+        }
+    }
+
     /** A fake org source that always resolves the single {@code "echo"} entry at {@code
      *  version}, and whose {@code download} mirrors the real {@code GithubOrgScan.download}:
      *  writes the jar AND its {@code .version} sidecar. */
@@ -265,6 +323,41 @@ class ProviderUpdateIntegrationTest {
             Response accounts = get(server, "/api/providers/echo/accounts");
             assertEquals(200, accounts.status, accounts.body);
             assertTrue(accounts.body.contains("acc1"), accounts.body);
+        } finally {
+            server.stop();
+            holder.get().close();
+            ai.close();
+        }
+    }
+
+    @Test
+    void updateResolvesOrgEntryByAssetNameWhenProviderIdDiffersFromRepoName(@TempDir Path providersDir)
+            throws Exception {
+        // Install the echo jar under a repo/asset name that does NOT equal the provider id -- the
+        // real stub-auth (id "stub") / antigravity-auth (id "antigravity") shape. A prior version
+        // resolved the update entry by id == repo name and 404'd here.
+        Path jar = stageEchoJarAs(providersDir, "echo-auth-provider.jar");
+        InstalledVersions.write(jar, "1.0.0");
+
+        AiJava ai = AiJava.builder().storage(Storage.memory()).build();
+        ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        assertTrue(holder.listProviderIds().contains("echo"),
+                "provider id is read from the jar content, not its file name");
+        AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
+        ProviderSource source = new MismatchedNameProviderSource(
+                Path.of(System.getProperty("exampleserver.providersDir")),
+                "echo-auth", "echo-auth-provider.jar", "1.1.0");
+        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(), source, providersDir, holder);
+        ExampleServer server = ExampleServer.start(0, api);
+
+        try {
+            Response update = post(server, "/api/providers/echo/update");
+            assertEquals(200, update.status, update.body);
+            assertTrue(update.body.contains("\"updated\":true") || update.body.contains("\"updated\": true"),
+                    update.body);
+            assertEquals("1.1.0", InstalledVersions.read(jar), "sidecar updated despite id != repo name");
+            assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
         } finally {
             server.stop();
             holder.get().close();

@@ -516,17 +516,28 @@ public final class ManagementApi implements HttpHandler {
             return;
         }
 
-        // Same targeted-find-then-list-scan fallback as handleInstall, so an update still works
-        // even when the cached org-wide scan is rate-limited/empty.
-        ProviderSource.Entry match = source.find(providerId);
-        if (match == null) {
+        // The provider id (e.g. "stub") often differs from its org repo/asset name (e.g.
+        // "stub-auth" / "stub-auth-provider.jar"), so resolve the org entry by the installed jar's
+        // asset name, which install saved under entry.assetName -- NOT by the provider id.
+        Path installedJar = holder.jarFor(providerId);
+        String assetName = installedJar != null ? installedJar.getFileName().toString() : null;
+        ProviderSource.Entry match = null;
+        if (assetName != null) {
             for (ProviderSource.Entry entry : source.list()) {
-                if (entry.name.equals(providerId)) {
+                if (assetName.equals(entry.assetName)) {
                     match = entry;
                     break;
                 }
             }
+            if (match == null) {
+                // Full scan empty/rate-limited: derive the repo name from the "<repo>-provider.jar"
+                // asset convention and do a targeted single-repo lookup.
+                String repo = assetName.replaceAll("-provider\\.jar$", "");
+                if (!repo.equals(assetName)) match = source.find(repo);
+            }
         }
+        // Last resort: id == repo name (e.g. claude-code-auth).
+        if (match == null) match = source.find(providerId);
         if (match == null) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("error", "no update source found for provider: " + providerId);
