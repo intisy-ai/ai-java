@@ -93,4 +93,18 @@ class MessagesAdminTest {
         assertTrue(resp.body.contains("not_found"), resp.body);
         assertTrue(resp.body.contains("does-not-exist"), resp.body);
     }
+
+    // A provider whose handle() throws an Error (not an Exception) -- e.g. a real upstream path
+    // hitting a LinkageError/NoClassDefFoundError -- must still degrade to a readable 502 JSON
+    // error, not propagate out of send() and drop the connection. ThrowingProvider (packaged in
+    // the same staged jar as EchoProvider) always throws NoClassDefFoundError from handle().
+    @Test
+    void sendSurvivesAProviderThrowingAnError() {
+        HttpResponse resp = messages.send("throwing", "{\"model\":\"x\",\"messages\":[]}");
+        assertEquals(502, resp.status);
+        assertTrue(resp.body.contains("\"type\":\"error\""), resp.body);
+        assertTrue(resp.body.contains("api_error"), resp.body);
+        assertTrue(resp.body.contains("NoClassDefFoundError"), resp.body);
+        assertTrue(resp.body.contains("simulated upstream classloader failure"), resp.body);
+    }
 }

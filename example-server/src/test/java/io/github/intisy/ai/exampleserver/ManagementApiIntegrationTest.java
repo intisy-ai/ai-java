@@ -191,6 +191,19 @@ class ManagementApiIntegrationTest {
         assertTrue(r.body.contains("not_found"), r.body);
     }
 
+    // A provider Error (ThrowingProvider always throws NoClassDefFoundError from handle()) must
+    // never drop the HTTP connection: MessagesAdmin.send's own Throwable catch turns it into a
+    // 502 before ManagementApi.handle's outer Throwable catch even gets involved -- this proves
+    // the FULL wire path (a real HttpExchange, not a direct MessagesAdmin.send call) still gets a
+    // readable response instead of the "NetworkError" a dropped connection shows in a browser.
+    @Test
+    void postMessagesSurvivesAProviderThrowingAnErrorInsteadOfDroppingTheConnection() throws IOException {
+        Response r = post("/api/providers/throwing/messages", "{\"model\":\"x\",\"messages\":[]}");
+        assertEquals(502, r.status, r.body);
+        assertTrue(r.body.contains("\"type\":\"error\""), r.body);
+        assertTrue(r.body.contains("NoClassDefFoundError"), r.body);
+    }
+
     @Test
     void healthzStillWorksAlongsideApi() throws IOException {
         Response r = get("/healthz");

@@ -62,8 +62,13 @@ public final class MessagesAdmin {
         HandlerCtx ctx = new HandlerCtx(configDir, store, log, model);
         try {
             return p.handle(req, ctx);
-        } catch (Exception e) {
-            return errorResponse(502, "api_error", "chat failed: " + e.getMessage());
+        } catch (Throwable e) {
+            // Throwable, not Exception: a provider on the real upstream path can throw a
+            // LinkageError/NoClassDefFoundError (e.g. a classloader mismatch), and letting that
+            // escape drops the HTTP connection -- the browser then shows a bare "NetworkError"
+            // with no clue what actually failed. Catching it here turns it into a readable
+            // Anthropic-shaped 502 instead, same as an ordinary provider Exception.
+            return errorResponse(502, "api_error", "chat failed: " + e);
         }
     }
 

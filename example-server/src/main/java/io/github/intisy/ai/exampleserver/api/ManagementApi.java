@@ -239,9 +239,14 @@ public final class ManagementApi implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         try {
             route(exchange);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
+            // Throwable, not RuntimeException: a provider reached through this handler (e.g. the
+            // messages/discover/quota routes) can throw a LinkageError/NoClassDefFoundError, and
+            // letting that escape drops the socket instead of ever writing a response. Catching it
+            // here keeps the connection alive with a plain 500 JSON error carrying the throwable's
+            // own message.
             Map<String, Object> body = new LinkedHashMap<>();
-            body.put("error", "internal server error");
+            body.put("error", "internal server error: " + e);
             respondJson(exchange, 500, body);
         }
     }

@@ -172,11 +172,41 @@ class DashboardIntegrationTest {
     void passthroughProxyIsSelectableWithNeutralHintAndReadOnlyCatalog() throws IOException {
         String html = get("/").body;
         assertFalse(html.contains("native / no routing"), "old alarming passthrough hint text must be gone");
-        assertTrue(html.contains("passthrough — all provider models"), "neutral passthrough hint text missing");
         assertTrue(html.contains("proxy-hint"), "neutral proxy-hint class missing");
         assertTrue(html.contains("function renderPassthroughCatalog("), "passthrough read-only catalog view missing");
-        assertTrue(html.contains("Passthrough — exposes all provider models"), "passthrough view heading missing");
+        assertTrue(html.contains("Passthrough (all provider models)"), "passthrough view heading missing");
         assertTrue(html.contains("row.routing === false"), "selectProxy must branch on routing === false");
+    }
+
+    // A passthrough proxy row (row.routing === false, e.g. opencode) shows a one-word
+    // "passthrough" hint; a routable proxy row (row.routing === true, e.g. claude-code) shows the
+    // matching one-word "routing" hint in the same spot -- both kinds get a label there now.
+    @Test
+    void proxyRowsShowOneWordRoutingHints() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("el(\"span\", \"proxy-hint\", \"passthrough\")"), "one-word passthrough hint missing");
+        assertTrue(html.contains("el(\"span\", \"proxy-hint\", \"routing\")"), "one-word routing hint missing");
+    }
+
+    // "Discover all models" fetches the installed provider list, then discovers each one's
+    // models (non-fatal per provider), and refreshes the chat dropdown + routing view afterward.
+    @Test
+    void discoverAllModelsButtonIteratesInstalledProviders() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("id=\"discover-all-models-button\""), "discover-all-models button missing");
+        assertTrue(html.contains("function discoverAllModels("), "discoverAllModels handler missing");
+        assertTrue(html.contains("discover-all-models-button\").addEventListener(\"click\", discoverAllModels)"),
+                "discover-all-models button must be wired to discoverAllModels");
+        assertTrue(html.contains("jsonFetch(\"/api/providers\")"), "discoverAllModels must fetch installed providers");
+        assertTrue(html.contains("\"/models/discover\""), "discoverAllModels must POST .../models/discover per provider");
+        assertTrue(html.contains("Promise.all([loadModels(), loadRouting()])"),
+                "discoverAllModels must refresh both loadModels() and loadRouting() afterward");
+    }
+
+    @Test
+    void dashboardHasNoEmDashes() throws IOException {
+        String html = get("/").body;
+        assertFalse(html.contains("—"), "dashboard HTML must not contain an em dash");
     }
 
     @Test

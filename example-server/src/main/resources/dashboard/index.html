@@ -380,6 +380,7 @@
         <span class="hint">installed &amp; available from the org</span>
         <span id="providers-scan-error" class="proxy-error" style="display:none"></span>
         <button class="small" id="refresh-providers-button" type="button">Refresh</button>
+        <button class="small" id="discover-all-models-button" type="button">Discover all models</button>
       </div>
     </div>
     <div id="providers-toast" class="toast hidden"></div>
@@ -395,7 +396,7 @@
     <div class="card-head">
       <h2>Proxies</h2>
       <div class="card-head-actions">
-        <span class="hint">installed &amp; available &mdash; click a routable row for its routing</span>
+        <span class="hint">installed &amp; available, click a routable row for its routing</span>
         <span id="proxies-scan-error" class="proxy-error" style="display:none"></span>
         <button class="small" id="refresh-proxies-button" type="button">Refresh</button>
       </div>
@@ -507,7 +508,7 @@
     <div class="card-body">
       <div class="chat-layout">
         <div class="chat-messages" id="chat-messages">
-          <div class="chat-empty" id="chat-empty">No messages yet &mdash; pick a model and say something.</div>
+          <div class="chat-empty" id="chat-empty">No messages yet, pick a model and say something.</div>
         </div>
         <div class="chat-controls">
           <div class="model-row">
@@ -554,7 +555,7 @@
     });
   }
 
-  // Like jsonFetch, but a 404 resolves to null instead of throwing — used for the routing
+  // Like jsonFetch, but a 404 resolves to null instead of throwing - used for the routing
   // endpoints, which 404 as a group when the server was built without a RoutingAdmin wired in.
   function fetchOrNull404(url) {
     return fetch(url).then(function (res) {
@@ -573,7 +574,7 @@
     });
   }
 
-  // Like fetchOrNull404, but POSTs — used by the quota-refresh endpoint, which 404s as a whole
+  // Like fetchOrNull404, but POSTs - used by the quota-refresh endpoint, which 404s as a whole
   // when the server was built without a QuotaAdmin wired in (degrade to no quota UI, don't throw).
   function postOrNull404(url) {
     return fetch(url, { method: "POST" }).then(function (res) {
@@ -788,6 +789,37 @@
     });
   }
 
+  // Discovers models for every INSTALLED provider at once: fetches the installed list (GET
+  // /api/providers), then POSTs .../models/discover for each id -- each call wrapped in its own
+  // catch so one provider's failure never aborts the rest -- and finally refreshes the chat
+  // dropdown + routing view once every discover call has settled.
+  function discoverAllModels() {
+    var btn = document.getElementById("discover-all-models-button");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.textContent = "Discovering…";
+    hideProvidersToast();
+
+    jsonFetch("/api/providers").then(function (providers) {
+      var ids = (providers || []).map(function (p) { return p.id; });
+      return Promise.all(ids.map(function (id) {
+        return jsonFetch("/api/providers/" + encodeURIComponent(id) + "/models/discover", { method: "POST" })
+          .catch(function () { /* non-fatal: one provider's discover failure must not abort the rest */ });
+      })).then(function () {
+        return Promise.all([loadModels(), loadRouting()]);
+      }).then(function () {
+        showProvidersToast(
+          "Discovered models for " + ids.length + (ids.length === 1 ? " provider." : " providers."), true);
+      });
+    }).catch(function (err) {
+      showProvidersToast("Discover all failed: " + err.message, false);
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    });
+  }
+
   function installProvider(name, button) {
     hideProvidersToast();
     button.disabled = true;
@@ -931,7 +963,7 @@
   function renderPassthroughCatalog(catalog) {
     var body = document.getElementById("routing-body");
     body.innerHTML = "";
-    body.appendChild(el("h3", "config-group-title", "Passthrough — exposes all provider models"));
+    body.appendChild(el("h3", "config-group-title", "Passthrough (all provider models)"));
     var any = false;
     Object.keys(catalog).forEach(function (providerId) {
       var models = (catalog[providerId] && catalog[providerId].models) || {};
@@ -949,7 +981,7 @@
     body.innerHTML = "";
 
     if (!routingTiers.length) {
-      body.appendChild(el("div", "empty-state", "No tiers detected yet — discover a provider's models first."));
+      body.appendChild(el("div", "empty-state", "No tiers detected yet, discover a provider's models first."));
       return;
     }
 
@@ -1224,7 +1256,10 @@
       line.addEventListener("click", function () { selectProxy(row.id); });
     }
     if (isPassthrough) {
-      line.appendChild(el("span", "proxy-hint", "passthrough — all provider models"));
+      line.appendChild(el("span", "proxy-hint", "passthrough"));
+    }
+    if (canRoute) {
+      line.appendChild(el("span", "proxy-hint", "routing"));
     }
 
     var port = el("input", "proxy-port");
@@ -1316,7 +1351,7 @@
     var match = installedProxies.filter(function (p) { return p.id === app; })[0];
     var routing = !(match && match.routing === false);
     selectedProxyRouting = routing;
-    document.getElementById("proxy-settings-title").textContent = (routing ? "Routing — " : "Passthrough — ") + label;
+    document.getElementById("proxy-settings-title").textContent = (routing ? "Routing: " : "Passthrough: ") + label;
     document.getElementById("proxy-settings").style.display = "";
     markSelectedProxyRow();
     if (routing) {
@@ -1503,7 +1538,7 @@
       });
   }
 
-  // Builds a `.qbars` fragment (label + track/fill bar + reset line, per entry.quota[]) — shared by
+  // Builds a `.qbars` fragment (label + track/fill bar + reset line, per entry.quota[]) - shared by
   // the account detail panel; `entry` is one element of the quota-refresh response's `accounts[]`.
   function buildQuotaBars(entry) {
     var qbars = el("div", "qbars");
@@ -1515,7 +1550,7 @@
     } else {
       entry.quota.forEach(function (q) {
         var usedPct = Math.round((1 - q.remainingFraction) * 100);
-        qbars.appendChild(el("div", "qbar-label", q.label + " — " + usedPct + "% used"));
+        qbars.appendChild(el("div", "qbar-label", q.label + ": " + usedPct + "% used"));
         var track = el("div", "qbar-track");
         var fill = el("div", "qbar-fill");
         fill.style.width = usedPct + "%";
@@ -1534,7 +1569,7 @@
     var qbars = el("div", "qbars");
     pools.forEach(function (pool) {
       var usedPct = Math.round((1 - pool.remainingFraction) * 100);
-      qbars.appendChild(el("div", "qbar-label", pool.label + " — " + usedPct + "% used"));
+      qbars.appendChild(el("div", "qbar-label", pool.label + ": " + usedPct + "% used"));
       var track = el("div", "qbar-track");
       var fill = el("div", "qbar-fill");
       fill.style.width = usedPct + "%";
@@ -1545,8 +1580,8 @@
   }
 
   // Idempotent. No longer injects per-account sub-rows into the table (quota moved to the account
-  // detail panel + the combined summary): refreshes `#provider-quota` from `quotaCombined`, and — if
-  // a detail panel is currently open — refreshes its quota section from `quotaByAccountId`.
+  // detail panel + the combined summary): refreshes `#provider-quota` from `quotaCombined`, and, if
+  // a detail panel is currently open, refreshes its quota section from `quotaByAccountId`.
   function renderQuota() {
     var panel = document.getElementById("provider-quota");
     var pools = quotaAvailable && quotaCombined && quotaCombined.pools ? quotaCombined.pools : null;
@@ -1603,7 +1638,7 @@
     panel.style.display = "";
 
     document.getElementById("account-detail-identity").textContent =
-      account.id + (account.email ? " — " + account.email : "");
+      account.id + (account.email ? " (" + account.email + ")" : "");
 
     var statusSlot = document.getElementById("account-detail-status");
     statusSlot.innerHTML = "";
@@ -1841,7 +1876,7 @@
 
   function accountActionFailed(err) {
     document.getElementById("accounts-hint").textContent =
-      selectedProviderId + " — action failed: " + err.message;
+      selectedProviderId + ": action failed: " + err.message;
   }
 
   function setAccountEnabled(accountId, enabled) {
@@ -1975,6 +2010,7 @@
     if (event.key === "Enter") sendChat();
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
+  document.getElementById("discover-all-models-button").addEventListener("click", discoverAllModels);
   document.getElementById("refresh-routing-button").addEventListener("click", function () {
     if (selectedProxyRouting) loadRouting(); else loadPassthroughCatalog();
   });
