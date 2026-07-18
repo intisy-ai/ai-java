@@ -104,6 +104,18 @@ class ManagementApiIntegrationTest {
         assertTrue(r.body.contains("\"accounts\":2") || r.body.contains("\"accounts\": 2"), r.body);
     }
 
+    // The dashboard joins /api/providers to /api/providers/available by asset name (the id "echo"
+    // can differ from the org repo/asset name in general, e.g. stub/antigravity) -- this asserts
+    // the server actually reports the on-disk jar's file name per installed provider, which is
+    // the field that join relies on.
+    @Test
+    void listsProvidersWithTheirAssetName() throws IOException {
+        Response r = get("/api/providers");
+        assertEquals(200, r.status);
+        assertTrue(r.body.contains("\"assetName\""), r.body);
+        assertTrue(r.body.contains(".jar\""), "assetName should be the staged jar's file name: " + r.body);
+    }
+
     @Test
     void listsSeededAccountsForProvider() throws IOException {
         Response r = get("/api/providers/echo/accounts");

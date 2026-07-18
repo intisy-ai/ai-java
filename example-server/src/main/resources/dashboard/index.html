@@ -612,25 +612,27 @@
   var availableProviders = [];
 
   // Merges the two provider sources into one flat row list. Installed-list identity ("id") and
-  // available-list identity ("name") are different id spaces (a repo/asset name vs. the
-  // provider's registered id) in general, but by convention a provider's org repo is named to
-  // match its registered id -- handleAvailable relies on the same convention to mark an entry
-  // installed. That convention is used HERE too, to thread each installed row's name/version/
-  // installedVersion/updateAvailable/assetName over from its matching available entry (looked up
-  // by name === id), so the version badge + Update button below have something to render.
+  // available-list identity ("name") are different id spaces in general (a provider's registered
+  // id, e.g. "stub", can differ from its org repo/asset name, e.g. "stub-auth-provider.jar") -- so
+  // the join key that actually works for every provider is the ASSET NAME (the jar on disk), which
+  // /api/providers now reports per installed row and /api/providers/available already reports per
+  // org entry. Threading name/version/installedVersion/updateAvailable/assetName over from the
+  // matching available entry (looked up by assetName) is what gives the version badge + Update
+  // button below something to render, for providers whose id != repo name too.
   // Entries from available with installed=true are skipped to avoid duplicating already-installed rows.
   function mergeProviderRows(installed, available) {
     var rows = [];
-    var availableByName = {};
-    (available || []).forEach(function (item) { availableByName[item.name] = item; });
+    var availableByAsset = {};
+    (available || []).forEach(function (item) { availableByAsset[item.assetName] = item; });
 
     (installed || []).forEach(function (p) {
-      var match = availableByName[p.id];
+      var match = availableByAsset[p.assetName];
       rows.push({
         kind: "installed",
         id: p.id,
         accounts: p.accounts,
-        assetName: match ? match.assetName : null,
+        assetName: p.assetName,
+        name: match ? match.name : p.id, // repo name for display; fall back to the bare id
         installed: true,
         version: match ? match.version : null,
         installedVersion: match ? match.installedVersion : null,
@@ -639,7 +641,7 @@
     });
     (available || []).forEach(function (item) {
       if (item.installed === true) return; // Skip; already represented as an installed row above
-      rows.push({ kind: "available", id: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
+      rows.push({ kind: "available", id: item.name, name: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
     });
     return rows;
   }
@@ -664,7 +666,7 @@
       }
 
       var tdName = el("td");
-      tdName.appendChild(el("div", "prov-name", row.id));
+      tdName.appendChild(el("div", "prov-name", row.name || row.id));
       if (row.assetName) tdName.appendChild(el("div", "prov-asset", row.assetName));
       tr.appendChild(tdName);
 

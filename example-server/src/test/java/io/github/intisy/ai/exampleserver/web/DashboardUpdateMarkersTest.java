@@ -54,4 +54,26 @@ class DashboardUpdateMarkersTest {
         String html = loadDashboardHtml();
         assertTrue(!html.contains("—"), "no em dashes allowed anywhere in the dashboard");
     }
+
+    // E-K: the installed<->available join must be by asset name (the jar on disk), not by
+    // assuming a provider's registered id matches its org repo name -- that assumption breaks for
+    // stub/antigravity (id "stub"/"antigravity" vs. repo "stub-auth"/"antigravity-auth").
+    @Test
+    void mergeProviderRowsJoinsByAssetNameNotById() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("availableByAsset"), "the available index must be keyed by assetName");
+        assertTrue(html.contains("availableByAsset[p.assetName]"),
+                "installed rows must be looked up by their own assetName");
+        assertTrue(!html.contains("availableByName[p.id]"),
+                "the old id-based join must be gone");
+    }
+
+    // The name line must show the REPO name (e.g. "stub-auth"), falling back to the bare id only
+    // when no available-list match exists.
+    @Test
+    void nameLineRendersTheRepoNameFallingBackToId() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("el(\"div\", \"prov-name\", row.name || row.id)"),
+                "the name line must prefer the repo name over the bare id");
+    }
 }

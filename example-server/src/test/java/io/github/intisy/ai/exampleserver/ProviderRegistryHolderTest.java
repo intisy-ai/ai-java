@@ -53,10 +53,40 @@ class ProviderRegistryHolderTest {
         assertFalse(holder.listProviderIds().isEmpty());
         assertTrue(holder.listProviderIds().contains("echo"));
 
-        // refresh() deliberately never closes the registry it swaps out (see the holder's
-        // javadoc), so the current one -- whose URLClassLoader now holds the jar in @TempDir
-        // open -- must be closed here, or @TempDir's own cleanup fails on Windows (file still
-        // in use), exactly like ProviderRegistryTest's fromDirectory tests already document.
+        // refresh() now closes the registry it swaps OUT (see the holder's javadoc), but the
+        // NEW current registry's URLClassLoader still holds the jar in @TempDir open -- it must
+        // be closed here too, or @TempDir's own cleanup fails on Windows (file still in use),
+        // exactly like ProviderRegistryTest's fromDirectory tests already document.
+        holder.get().close();
+    }
+
+    @Test
+    void refreshClosesThePreviousRegistrySoItsJarCanBeDeletedAfterward(@TempDir Path dir, @TempDir Path otherDir)
+            throws Exception {
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+
+        String staged = System.getProperty("exampleserver.providersDir");
+        Path srcJar = null;
+        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+            if (p.getFileName().toString().endsWith(".jar")) { srcJar = p; break; }
+        }
+        Path jar = dir.resolve(srcJar.getFileName());
+        Files.copy(srcJar, jar);
+
+        holder.refresh(dir); // builds a registry (call it R1) whose URLClassLoader opens `jar`
+        assertTrue(holder.listProviderIds().contains("echo"));
+
+        // Refresh again from a DIFFERENT, jar-free directory: the new current registry (R2) opens
+        // nothing, so it cannot itself be blocking a delete of `jar`. If refresh() closes R1 (the
+        // one it swaps out) as it now must, R1's hold on `jar` is released here.
+        holder.refresh(otherDir);
+        assertTrue(holder.listProviderIds().isEmpty());
+
+        // If R1 were still open (the old, leak-forever behavior), this delete would fail on
+        // Windows with a sharing violation -- proving refresh() actually closes the registry it
+        // replaces, not just the registry uninstall()/update() close explicitly themselves.
+        assertTrue(Files.deleteIfExists(jar), "jar should be deletable once the prior registry closed");
+
         holder.get().close();
     }
 

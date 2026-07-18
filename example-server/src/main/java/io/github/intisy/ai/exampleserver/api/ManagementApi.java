@@ -400,6 +400,11 @@ public final class ManagementApi implements HttpHandler {
                 Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("id", id);
                 entry.put("accounts", admin.list(id).size());
+                // The on-disk jar's file name, the reliable join key against /api/providers/available
+                // (which is keyed by asset name, not id -- a provider's registered id can differ from
+                // its repo/asset name, e.g. "stub" vs. "stub-auth-provider.jar").
+                Path jar = holder != null ? holder.jarFor(id) : null;
+                entry.put("assetName", jar != null ? jar.getFileName().toString() : null);
                 body.add(entry);
             }
         }
@@ -484,11 +489,21 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /** Uninstalls a provider: deletes its jar (Windows-safe close-before-delete, see
-     *  {@link ProviderRegistryHolder#uninstall}) and rebuilds the live registry without it. */
+     *  {@link ProviderRegistryHolder#uninstall}) and rebuilds the live registry without it.
+     *  A 404 means {@code providerId} was never installed; a 500 means it WAS installed but the
+     *  jar is still present on disk after the delete attempt (e.g. a Windows sharing violation
+     *  that the holder's close-then-retry couldn't clear) -- either way the caller must not treat
+     *  this endpoint as having silently succeeded. */
     private void handleUninstall(HttpExchange exchange, String providerId) throws IOException {
+        if (!holder.listProviderIds().contains(providerId)) {
+            handleNotFound(exchange);
+            return;
+        }
         boolean ok = holder.uninstall(providerId, providersDir);
         if (!ok) {
-            handleNotFound(exchange);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "uninstall failed: jar still locked");
+            respondJson(exchange, 500, body);
             return;
         }
         Map<String, Object> body = new LinkedHashMap<>();
