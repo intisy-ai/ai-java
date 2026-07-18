@@ -506,6 +506,12 @@ public final class ManagementApi implements HttpHandler {
             respondJson(exchange, 500, body);
             return;
         }
+        // Purge the stored catalog entry so a later reinstall discovers fresh instead of showing
+        // stale cached models (handleCatalog's read-side filter covers the response regardless,
+        // but this keeps models.json itself clean).
+        if (routing != null) {
+            routing.removeFromCatalog(providerId);
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("uninstalled", true);
         body.put("providers", holder.listProviderIds());
@@ -646,7 +652,26 @@ public final class ManagementApi implements HttpHandler {
             handleNotFound(exchange);
             return;
         }
-        respondJson(exchange, 200, json.parse(routing.catalogJson()));
+        respondJson(exchange, 200, filterToInstalledProviders(json.parse(routing.catalogJson())));
+    }
+
+    // Drops any catalog entry whose key is not a currently-installed provider id -- fixes the
+    // chat dropdown / routing UI showing stale models after an uninstall even for a models.json
+    // that already has stale entries, with no re-discover required. Filters a fresh copy; the
+    // stored models.json itself is untouched here (see RoutingAdmin#removeFromCatalog for the
+    // on-disk purge done at uninstall time). Shape stays {providerId:{models,ranking}}.
+    private Map<String, Object> filterToInstalledProviders(Object parsedCatalog) {
+        Map<String, Object> filtered = new LinkedHashMap<>();
+        if (!(parsedCatalog instanceof Map)) {
+            return filtered;
+        }
+        List<String> installedIds = holder.listProviderIds();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) parsedCatalog).entrySet()) {
+            if (e.getKey() instanceof String && installedIds.contains(e.getKey())) {
+                filtered.put((String) e.getKey(), e.getValue());
+            }
+        }
+        return filtered;
     }
 
     private void handleModelMapGet(HttpExchange exchange) throws IOException {

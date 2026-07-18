@@ -93,6 +93,28 @@ class RoutingAdminTest {
     }
 
     @Test
+    void removeFromCatalogRemovesGivenIdAndLeavesOthers() {
+        Map<String, Object> before = asMap(json.parse(store.get("models.json")));
+        assertTrue(before.containsKey("echo"));
+        assertTrue(before.containsKey("ratelimited"));
+
+        routing.removeFromCatalog("echo");
+
+        Map<String, Object> after = asMap(json.parse(store.get("models.json")));
+        assertFalse(after.containsKey("echo"));
+        assertTrue(after.containsKey("ratelimited"));
+    }
+
+    @Test
+    void removeFromCatalogIsNoOpWhenProviderIdIsAbsent() {
+        String before = store.get("models.json");
+
+        routing.removeFromCatalog("does-not-exist");
+
+        assertEquals(before, store.get("models.json"));
+    }
+
+    @Test
     void discoverUnknownProviderThrows() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> routing.discover("does-not-exist"));

@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
+import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -51,12 +52,13 @@ class ProviderInstallIntegrationTest {
     private ProviderRegistryHolder holder;
     private Path providersDir;
     private JsonCodec json;
+    private Store store;
 
     @BeforeEach
     void setUp(@TempDir Path providersDir) {
         this.providersDir = providersDir;
         ai = AiJava.builder().storage(Storage.memory()).build();
-        Store store = ai.store();
+        store = ai.store();
         json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
@@ -69,9 +71,10 @@ class ProviderInstallIntegrationTest {
         String stagedDir = System.getProperty("exampleserver.providersDir");
         ProviderSource fakeSource = new FakeProviderSource(Path.of(stagedDir));
         MessagesAdmin messages = new MessagesAdmin(store, json, holder, ai.logger());
+        RoutingAdmin routing = new RoutingAdmin(store, json, holder, ai.logger());
 
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json,
-                fakeSource, providersDir, holder, null, null, null, null, null, null, null, null, messages);
+                fakeSource, providersDir, holder, routing, null, null, null, null, null, null, null, messages);
 
         server = ExampleServer.start(0, api); // ephemeral port
     }
@@ -160,6 +163,22 @@ class ProviderInstallIntegrationTest {
         assertEquals(404, r.status);
     }
 
+    // ServerSeeds.seedEcho seeds a models.json entry for "echo" up front (mirrors a provider
+    // whose models were discovered before it gets uninstalled here); a successful uninstall must
+    // purge that entry so a later reinstall discovers fresh instead of showing stale cached models.
+    @Test
+    void uninstallPurgesTheProviderFromTheStoredCatalog() throws IOException {
+        Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
+        assertEquals(200, install.status, install.body);
+        assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+        assertTrue(asMap(json.parse(store.get("models.json"))).containsKey("echo"), store.get("models.json"));
+
+        Response uninstall = delete("/api/providers/echo");
+        assertEquals(200, uninstall.status, uninstall.body);
+
+        assertFalse(asMap(json.parse(store.get("models.json"))).containsKey("echo"), store.get("models.json"));
+    }
+
     @Test
     void availableMarksEntryInstalledWhenNameMatchesInstalledIdEvenWithoutItsOwnAssetFile() throws IOException {
         Response install = post("/api/providers/install", "{\"name\":\"echo-demo\"}");
@@ -186,6 +205,11 @@ class ProviderInstallIntegrationTest {
             }
         }
         throw new AssertionError("no /api/providers/available entry named \"" + name + "\": " + rawAvailableJson);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMap(Object o) {
+        return (Map<String, Object>) o;
     }
 
     /** Simulates a real download with no network: copies the already-staged example-provider jar

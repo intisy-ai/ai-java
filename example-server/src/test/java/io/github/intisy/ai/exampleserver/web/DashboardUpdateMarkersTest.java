@@ -76,4 +76,14 @@ class DashboardUpdateMarkersTest {
         assertTrue(html.contains("el(\"div\", \"prov-name\", row.name || row.id)"),
                 "the name line must prefer the repo name over the bare id");
     }
+
+    // E-L: an empty provider list gave no reason -- an anonymous org scan hits GitHub's 60
+    // req/hour limit and returns empty with no explanation. The empty-state row must now hint at
+    // the fix (GITHUB_TOKEN/GH_TOKEN) instead of just saying nothing was found.
+    @Test
+    void emptyProviderListHintsAtTheGithubTokenCause() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("GITHUB_TOKEN"), "the empty-state row must mention GITHUB_TOKEN");
+        assertTrue(html.contains("No providers found."), "the empty-state row must still read as a clear empty state");
+    }
 }

@@ -112,6 +112,18 @@ public class RoutingAdmin {
     }
 
     /**
+     * Removes {@code providerId}'s entry from the stored catalog ({@code models.json}), no-op if
+     * absent. Called after a successful uninstall so a later reinstall discovers a fresh catalog
+     * instead of reading back whatever the old install last cached.
+     */
+    public void removeFromCatalog(String providerId) {
+        Map<String, Object> catalog = readCatalog();
+        if (catalog.remove(providerId) != null) {
+            store.put(CATALOG_KEY, json.stringify(catalog));
+        }
+    }
+
+    /**
      * {@code {tiers: <declared union detected tier names>, map: <raw stored tier map>}} for the
      * given profile's config file.
      */

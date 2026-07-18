@@ -651,7 +651,7 @@
     tbody.innerHTML = "";
     if (!rows || !rows.length) {
       var tr0 = el("tr");
-      var td0 = el("td", "loading-row", "No providers discovered yet.");
+      var td0 = el("td", "loading-row", "No providers found. If you expect some, ensure GITHUB_TOKEN (or GH_TOKEN) is set before starting the server - GitHub rate-limits anonymous org scans.");
       td0.colSpan = 3;
       tr0.appendChild(td0);
       tbody.appendChild(tr0);

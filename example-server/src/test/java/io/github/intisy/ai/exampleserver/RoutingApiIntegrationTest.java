@@ -28,6 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -63,6 +66,8 @@ class RoutingApiIntegrationTest {
     private ExampleServer server;
     private ProviderRegistryHolder holder;
     private ProxyRegistryHolder proxyHolder;
+    private Store store;
+    private JsonCodec json;
 
     @BeforeEach
     void setUp(@TempDir Path providersDir, @TempDir Path proxiesDir) throws IOException {
@@ -71,8 +76,8 @@ class RoutingApiIntegrationTest {
         stageProxyJar(proxiesDir, SecondAppFixtureProxyPlugin.class, "opencode-fixture-proxy.jar");
 
         ai = AiJava.builder().storage(Storage.memory()).build();
-        Store store = ai.store();
-        JsonCodec json = ai.jsonCodec();
+        store = ai.store();
+        json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
@@ -180,6 +185,33 @@ class RoutingApiIntegrationTest {
         assertEquals(200, r.status, r.body);
         assertTrue(r.body.contains("echo"), r.body);
         assertTrue(r.body.contains("ratelimited"), r.body);
+    }
+
+    // Simulates a provider that was discovered, then uninstalled, without needing a full
+    // install/uninstall round trip: hand-write a stale entry for an id "holder" never installed
+    // (only "echo"/"ratelimited" are, via the staged jar) directly into the store, and confirm the
+    // served catalog drops it while keeping the real installed entries -- the read-side filter
+    // this task adds to handleCatalog, primary fix for stale state that already exists.
+    @Test
+    @SuppressWarnings("unchecked")
+    void getCatalogFiltersOutEntriesForProvidersNoLongerInstalled() throws IOException {
+        assertFalse(holder.listProviderIds().contains("uninstalled-ghost"), holder.listProviderIds().toString());
+
+        Map<String, Object> catalog = new LinkedHashMap<>((Map<String, Object>) json.parse(store.get("models.json")));
+        Map<String, Object> ghostModels = new LinkedHashMap<>();
+        ghostModels.put("m-ghost", Collections.singletonMap("name", "Ghost Model"));
+        Map<String, Object> ghostEntry = new LinkedHashMap<>();
+        ghostEntry.put("models", ghostModels);
+        ghostEntry.put("ranking", Collections.singletonList("m-ghost"));
+        catalog.put("uninstalled-ghost", ghostEntry);
+        store.put("models.json", json.stringify(catalog));
+
+        Response r = get("/api/routing/catalog");
+        assertEquals(200, r.status, r.body);
+        assertTrue(r.body.contains("echo"), r.body);
+        assertTrue(r.body.contains("ratelimited"), r.body);
+        assertFalse(r.body.contains("uninstalled-ghost"), r.body);
+        assertFalse(r.body.contains("m-ghost"), r.body);
     }
 
     @Test
