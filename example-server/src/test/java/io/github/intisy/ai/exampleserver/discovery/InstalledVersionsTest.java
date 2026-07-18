@@ -54,12 +54,14 @@ class InstalledVersionsTest {
     }
 
     @Test
-    void updateAvailableIsTrueOnlyWhenInstalledAndBothVersionsKnownAndDiffer() {
+    void updateAvailableWhenInstalledAndLatestKnownAndVersionDiffersOrUnknown() {
         assertTrue(InstalledVersions.updateAvailable(true, "1.5.0", "1.5.1"));
+        assertTrue(InstalledVersions.updateAvailable(true, null, "1.5.1"),
+                "legacy install (unknown version) is offered the update so it can be brought current");
         assertFalse(InstalledVersions.updateAvailable(true, "1.5.1", "1.5.1"), "equal versions -> no update");
         assertFalse(InstalledVersions.updateAvailable(true, "v1.5.1", "1.5.1"), "same version, just v-prefixed");
-        assertFalse(InstalledVersions.updateAvailable(true, null, "1.5.1"), "legacy install, sidecar absent");
         assertFalse(InstalledVersions.updateAvailable(true, "1.5.0", null), "latest version unknown");
         assertFalse(InstalledVersions.updateAvailable(false, "1.5.0", "1.5.1"), "not installed at all");
+        assertFalse(InstalledVersions.updateAvailable(false, null, "1.5.1"), "not installed, unknown version");
     }
 }

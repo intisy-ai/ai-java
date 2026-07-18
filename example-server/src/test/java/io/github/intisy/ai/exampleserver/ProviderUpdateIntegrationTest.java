@@ -226,7 +226,7 @@ class ProviderUpdateIntegrationTest {
     }
 
     @Test
-    void availableReportsNoUpdateWhenSidecarIsAbsent(@TempDir Path providersDir) throws Exception {
+    void availableOffersUpdateWhenSidecarIsAbsentSoLegacyInstallsCanBeBroughtCurrent(@TempDir Path providersDir) throws Exception {
         stageEchoJar(providersDir); // no sidecar written -- a legacy install predating this feature
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
@@ -244,7 +244,9 @@ class ProviderUpdateIntegrationTest {
             Map<String, Object> entry = availableEntry(ai.jsonCodec(), r.body, "echo");
             assertEquals(Boolean.TRUE, entry.get("installed"), r.body);
             assertNull(entry.get("installedVersion"), r.body);
-            assertEquals(Boolean.FALSE, entry.get("updateAvailable"), r.body);
+            // Unknown installed version + a known latest -> offer the update (updating writes the
+            // sidecar, so later checks compare precisely).
+            assertEquals(Boolean.TRUE, entry.get("updateAvailable"), r.body);
         } finally {
             server.stop();
             holder.get().close();
