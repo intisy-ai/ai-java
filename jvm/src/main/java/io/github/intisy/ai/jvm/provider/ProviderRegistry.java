@@ -13,7 +13,9 @@ import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.stream.Collectors;
 
@@ -47,10 +49,12 @@ public final class ProviderRegistry implements Closeable {
 
     private final List<Provider> providers;
     private final URLClassLoader classLoader; // null when no provider jars were found
+    private final Map<String, Path> jars; // provider id -> the jar file that registers it
 
-    private ProviderRegistry(List<Provider> providers, URLClassLoader classLoader) {
+    private ProviderRegistry(List<Provider> providers, URLClassLoader classLoader, Map<String, Path> jars) {
         this.providers = providers;
         this.classLoader = classLoader;
+        this.jars = jars;
     }
 
     /**
@@ -61,19 +65,22 @@ public final class ProviderRegistry implements Closeable {
      */
     public static ProviderRegistry fromDirectory(Path providersDir) {
         File dir = providersDir.toFile();
-        File[] jars = dir.isDirectory() ? dir.listFiles((d, name) -> name.endsWith(".jar")) : null;
-        if (jars == null || jars.length == 0) {
-            return new ProviderRegistry(Collections.emptyList(), null);
+        File[] jarFiles = dir.isDirectory() ? dir.listFiles((d, name) -> name.endsWith(".jar")) : null;
+        if (jarFiles == null || jarFiles.length == 0) {
+            return new ProviderRegistry(Collections.emptyList(), null, Collections.emptyMap());
         }
 
-        URL[] urls = new URL[jars.length];
-        for (int i = 0; i < jars.length; i++) {
+        URL[] urls = new URL[jarFiles.length];
+        for (int i = 0; i < jarFiles.length; i++) {
             try {
-                urls[i] = jars[i].toURI().toURL();
+                urls[i] = jarFiles[i].toURI().toURL();
             } catch (MalformedURLException e) {
-                throw new IllegalStateException("unreadable provider jar path: " + jars[i], e);
+                throw new IllegalStateException("unreadable provider jar path: " + jarFiles[i], e);
             }
         }
+
+        Map<String, Path> jarById = probeJarsForProviderIds(jarFiles, urls);
+
         // Parent = this class's own loader (not the system/bootstrap loader), so a jar's
         // Provider implementation resolves the shared Provider/ProxyHandler/HandlerCtx classes
         // to the SAME classes this host already has loaded, rather than a second, incompatible
@@ -88,12 +95,36 @@ public final class ProviderRegistry implements Closeable {
         for (Provider provider : ServiceLoader.load(Provider.class, classLoader)) {
             loaded.add(provider);
         }
-        return new ProviderRegistry(loaded, classLoader);
+        return new ProviderRegistry(loaded, classLoader, jarById);
+    }
+
+    /**
+     * Attributes each discovered provider id to the single jar file that registers it. A combined
+     * {@code ServiceLoader} over all jars at once (as {@link #fromDirectory} builds for actual
+     * serving, right below) can't tell WHICH jar produced a given id — so, per jar, a short-lived
+     * child {@link URLClassLoader} (parented to the host, same as the real combined loader) is
+     * opened over just that ONE jar's URL, {@code ServiceLoader.load(Provider.class, probe)} is
+     * run, and every id it yields is recorded against that jar before the probe loader is closed.
+     * This never touches the real, long-lived combined registry built afterward — the probe
+     * providers are throwaway, used only for their {@code id()}.
+     */
+    private static Map<String, Path> probeJarsForProviderIds(File[] jarFiles, URL[] urls) {
+        Map<String, Path> jarById = new HashMap<>();
+        for (int i = 0; i < jarFiles.length; i++) {
+            try (URLClassLoader probe = new URLClassLoader(new URL[] {urls[i]}, ProviderRegistry.class.getClassLoader())) {
+                for (Provider provider : ServiceLoader.load(Provider.class, probe)) {
+                    jarById.put(provider.id(), jarFiles[i].toPath());
+                }
+            } catch (IOException e) {
+                throw new IllegalStateException("failed to probe provider jar: " + jarFiles[i], e);
+            }
+        }
+        return jarById;
     }
 
     /** No providers directory configured (or none found yet) — a valid, zero-provider state. */
     public static ProviderRegistry empty() {
-        return new ProviderRegistry(Collections.emptyList(), null);
+        return new ProviderRegistry(Collections.emptyList(), null, Collections.emptyMap());
     }
 
     /** Adapts the discovered providers into a {@link HandlerResolver} via {@code fromProviders}. */
@@ -104,6 +135,19 @@ public final class ProviderRegistry implements Closeable {
     /** The ids of every discovered provider, in discovery order. */
     public List<String> listProviderIds() {
         return providers.stream().map(Provider::id).collect(Collectors.toList());
+    }
+
+    /** The discovered {@link Provider} whose {@link Provider#id()} equals {@code id}, or {@code null}. */
+    public Provider get(String id) {
+        for (Provider provider : providers) {
+            if (provider.id().equals(id)) return provider;
+        }
+        return null;
+    }
+
+    /** The jar file that registers {@code providerId}, or {@code null} if no such provider is loaded. */
+    public Path jarFor(String providerId) {
+        return jars.get(providerId);
     }
 
     /**

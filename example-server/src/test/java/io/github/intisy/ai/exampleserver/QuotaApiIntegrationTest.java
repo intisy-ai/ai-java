@@ -8,7 +8,6 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -63,15 +62,12 @@ class QuotaApiIntegrationTest {
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        RoutingAdmin routing = new RoutingAdmin(store, json, profile, holder, ai.logger());
+        RoutingAdmin routing = new RoutingAdmin(store, json, holder, ai.logger());
         QuotaAdmin quota = new QuotaAdmin(store, json, holder, ai.logger());
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
                 routing, quota);
 
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach
@@ -101,11 +97,14 @@ class QuotaApiIntegrationTest {
         assertTrue(r.body.contains("5-hour"), r.body);
     }
 
+    // "ratelimited" (AlwaysRateLimitedProvider) implements Provider only, no QuotaProvider --
+    // refresh answers an empty accounts array rather than an error (the dashboard shows nothing
+    // rather than erroring for a provider with no quota surface at all).
     @Test
-    void refreshNon2xxIs400() throws IOException {
+    void refreshOfBareProviderIs200WithEmptyAccounts() throws IOException {
         Response r = post("/api/providers/ratelimited/quota/refresh");
-        assertEquals(400, r.status, r.body);
-        assertTrue(r.body.contains("429"), r.body);
+        assertEquals(200, r.status, r.body);
+        assertTrue(r.body.contains("\"accounts\":[]"), r.body);
     }
 
     @Test

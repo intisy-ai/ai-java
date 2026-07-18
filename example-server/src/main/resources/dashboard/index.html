@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ai-java example server</title>
+<title>AI Java · Provider Console</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -70,8 +70,8 @@
   .topbar {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.9rem 1.5rem;
+    gap: 0.85rem;
+    padding: 0.85rem 1.5rem;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
     position: sticky;
@@ -89,14 +89,22 @@
     justify-content: center;
   }
   .topbar .mark svg { width: 18px; height: 18px; display: block; }
+  .topbar .titles {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.15rem;
+  }
   .topbar .titles h1 {
     margin: 0;
+    line-height: 1.2;
     font-size: 1.05rem;
     font-weight: 650;
     letter-spacing: -0.01em;
   }
   .topbar .titles p {
-    margin: 0.05rem 0 0;
+    margin: 0;
+    line-height: 1.2;
     font-size: 0.8rem;
     color: var(--muted);
   }
@@ -106,7 +114,8 @@
     color: var(--muted);
     border: 1px solid var(--border);
     border-radius: 999px;
-    padding: 0.25rem 0.65rem;
+    padding: 0.3rem 0.7rem;
+    line-height: 1;
   }
 
   main {
@@ -178,9 +187,9 @@
   th, td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--border-soft); }
   th { color: var(--muted); font-weight: 550; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
   tbody tr:last-child td { border-bottom: none; }
-  tr.selectable { cursor: pointer; transition: background-color 120ms ease; }
-  tr.selectable:hover { background: var(--panel-2); }
-  tr.selectable.active { background: var(--info-bg); }
+  .selectable { cursor: pointer; transition: background-color 120ms ease; }
+  .selectable:hover { background: var(--panel-2); }
+  .selectable.active { background: var(--info-bg); }
   td.actions { text-align: right; white-space: nowrap; }
 
   .badge {
@@ -225,9 +234,11 @@
   button + button { margin-left: 0.35rem; }
 
   .card-head-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .card-head-actions select { width: auto; }
   .prov-name { font-weight: 600; font-size: 0.88rem; }
   .prov-asset { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; margin-top: 0.1rem; }
   .prov-count { color: var(--muted); font-size: 0.76rem; margin-top: 0.2rem; }
+  .prov-version { color: var(--muted); font-size: 0.76rem; margin-top: 0.2rem; }
   .badge-installed { color: var(--ok); background: var(--ok-bg); }
   .badge-available { color: var(--info); background: var(--info-bg); }
 
@@ -237,13 +248,24 @@
   .add-account-form .row .field { flex: 1; }
   .add-account-form .actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
 
-  /* -- per-account quota bars (sub-row under an accounts-table entry) -- */
-  .qrow td { padding-top: 0.3rem; padding-bottom: 0.65rem; border-bottom: 1px solid var(--border-soft); }
+  /* -- quota bars, shared by the provider-wide summary and the account detail panel -- */
   .qbars { display: flex; flex-direction: column; gap: 0.35rem; }
   .qbar-label { font-size: 0.74rem; color: var(--muted); }
   .qbar-track { height: 8px; border-radius: 4px; background: var(--grey-bg); overflow: hidden; }
   .qbar-fill { height: 100%; background: var(--accent); }
   .qbar-reset { font-size: 0.7rem; color: var(--muted); }
+
+  /* -- combined provider-wide quota summary, top of #accounts-card -- */
+  .qbars-panel { margin-bottom: 0.9rem; padding: 0.75rem 0.85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .qbars-panel-title { font-size: 0.78rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .subtle-caption { font-weight: 400; color: var(--muted); }
+
+  /* -- account detail panel (identity/status/expiry/quota/actions for one selected account) -- */
+  .detail-panel { margin-top: 0.9rem; padding: 0.85rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+  .detail-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .detail-identity { font-weight: 600; font-size: 0.88rem; overflow-wrap: anywhere; }
+  .detail-expiry { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.6rem; }
+  .detail-panel .actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.7rem; }
 
   .discover-inline { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: 0.35rem; }
   .discover-result { font-size: 0.76rem; color: var(--muted); }
@@ -268,6 +290,15 @@
   .add-chain-row { display: flex; gap: 0.4rem; align-items: center; }
   .add-chain-row select { width: auto; flex: 1; }
   .routing-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.6rem; margin-top: 0.85rem; }
+
+  .proxy-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-soft); }
+  .proxy-row:last-child { border-bottom: none; }
+  .proxy-app { flex: 1; font-weight: 600; font-size: 0.85rem; }
+  .proxy-port { width: 6.5rem; flex: none; }
+  .proxy-error { color: var(--danger); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .proxy-hint { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .config-group-title { margin: 0.9rem 0 0.4rem; font-size: 0.78rem; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .config-group-title:first-child { margin-top: 0; }
 
   select, input[type="text"], input[type="password"], textarea {
     width: 100%;
@@ -335,20 +366,43 @@
     </svg>
   </div>
   <div class="titles">
-    <h1>ai-java example server</h1>
-    <p>Providers, accounts, on-demand installs, and a live chat console.</p>
+    <h1>AI Java · Provider Console</h1>
+    <p>Manage providers, accounts, quota, and routing for JVM-hosted AI proxies.</p>
   </div>
   <div class="spacer"></div>
   <div class="pill">local dashboard</div>
 </div>
 
 <main>
+  <section class="card" id="github-card">
+    <div class="card-head">
+      <h2>GitHub</h2>
+      <div class="card-head-actions">
+        <span class="hint">authenticates the org scan so it isn't rate-limited</span>
+      </div>
+    </div>
+    <div id="github-toast" class="toast hidden"></div>
+    <div class="card-body">
+      <div class="hint" id="github-status">Loading connection status&hellip;</div>
+      <div class="row" style="margin-top:0.6rem">
+        <button class="small" id="github-detect-button" type="button">Detect from gh CLI</button>
+        <button class="subtle small" id="github-disconnect-button" type="button" style="display:none">Disconnect</button>
+      </div>
+      <div class="row" style="margin-top:0.6rem;align-items:flex-end">
+        <div class="field"><label for="github-token-input">Personal access token</label><input type="password" id="github-token-input" autocomplete="off"></div>
+        <button class="primary small" id="github-save-token-button" type="button">Save</button>
+      </div>
+    </div>
+  </section>
+
   <section class="card" id="providers-card">
     <div class="card-head">
       <h2>Providers</h2>
       <div class="card-head-actions">
         <span class="hint">installed &amp; available from the org</span>
+        <span id="providers-scan-error" class="proxy-error" style="display:none"></span>
         <button class="small" id="refresh-providers-button" type="button">Refresh</button>
+        <button class="small" id="discover-all-models-button" type="button">Discover all models</button>
       </div>
     </div>
     <div id="providers-toast" class="toast hidden"></div>
@@ -360,18 +414,29 @@
     </div>
   </section>
 
-  <section class="card" id="routing-card">
+  <section class="card" id="proxies-card">
     <div class="card-head">
-      <h2>Routing</h2>
+      <h2>Proxies</h2>
       <div class="card-head-actions">
-        <span class="hint">tier &rarr; provider/model chains</span>
-        <button class="small" id="refresh-routing-button" type="button">Refresh</button>
+        <span class="hint">installed &amp; available, click a routable row for its routing</span>
+        <span id="proxies-scan-error" class="proxy-error" style="display:none"></span>
+        <button class="small" id="refresh-proxies-button" type="button">Refresh</button>
       </div>
     </div>
-    <div id="routing-toast" class="toast hidden"></div>
+    <div id="proxies-toast" class="toast hidden"></div>
     <div class="card-body">
-      <div id="routing-body">
+      <div id="proxies-body">
         <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+      </div>
+      <div id="proxy-settings" style="display:none;margin-top:1rem;padding-top:0.85rem;border-top:1px solid var(--border-soft);">
+        <div class="card-head-actions">
+          <strong id="proxy-settings-title">Routing</strong>
+          <button class="small" id="refresh-routing-button" type="button">Refresh</button>
+        </div>
+        <div id="routing-toast" class="toast hidden"></div>
+        <div id="routing-body">
+          <div class="loading-row"><span class="spinner"></span>loading&hellip;</div>
+        </div>
       </div>
     </div>
   </section>
@@ -382,7 +447,6 @@
       <div class="card-head-actions">
         <span class="hint" id="accounts-hint">select a provider</span>
         <button class="small" id="refresh-quota-button" type="button" style="display:none">Refresh quota</button>
-        <button class="small" id="toggle-add-account-button" type="button" style="display:none">Add account</button>
         <button class="small" id="oauth-login-button" type="button" style="display:none">Log in</button>
       </div>
     </div>
@@ -402,12 +466,43 @@
         <button class="primary small" id="submit-add-account-button" type="submit">Add</button>
       </div>
     </form>
+    <div class="add-account-form" id="oauth-paste-row" style="display:none">
+      <div class="field">
+        <label for="oauth-code-input">Paste the code (or <code>code#state</code>) from the provider</label>
+        <input type="text" id="oauth-code-input" autocomplete="off">
+      </div>
+      <div class="actions">
+        <button class="subtle small" id="oauth-cancel-button" type="button">Cancel</button>
+        <button class="primary small" id="oauth-complete-button" type="button">Complete login</button>
+      </div>
+    </div>
     <div class="card-body">
       <div class="empty-state" id="accounts-empty">Select a provider to view its accounts.</div>
+      <div id="provider-quota" class="qbars-panel" style="display:none">
+        <div class="qbars-panel-title">Provider quota <span id="provider-quota-caption" class="subtle-caption"></span></div>
+        <div class="qbars" id="provider-quota-bars"></div>
+      </div>
+      <button class="subtle small" id="add-account-fallback" type="button" style="display:none">Add account manually</button>
       <table id="accounts-table" style="display:none">
         <thead><tr><th>Id</th><th>Email</th><th>Status</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
+      <div id="account-detail" class="detail-panel" style="display:none">
+        <div class="detail-panel-head">
+          <div>
+            <div id="account-detail-identity" class="detail-identity"></div>
+            <span id="account-detail-status"></span>
+          </div>
+          <button class="subtle small" id="account-detail-close" type="button">Close</button>
+        </div>
+        <div id="account-detail-expiry" class="detail-expiry"></div>
+        <div class="qbars-panel-title">Quota</div>
+        <div id="account-detail-quota" class="qbars"></div>
+        <div class="actions">
+          <button class="small" id="account-detail-toggle" type="button">Disable</button>
+          <button class="danger small" id="account-detail-remove" type="button">Remove</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -435,7 +530,7 @@
     <div class="card-body">
       <div class="chat-layout">
         <div class="chat-messages" id="chat-messages">
-          <div class="chat-empty" id="chat-empty">No messages yet &mdash; pick a model and say something.</div>
+          <div class="chat-empty" id="chat-empty">No messages yet, pick a model and say something.</div>
         </div>
         <div class="chat-controls">
           <div class="model-row">
@@ -456,7 +551,12 @@
 (function () {
   "use strict";
 
+  // Anthropic's /v1/messages requires max_tokens -- a real provider forwards it verbatim and
+  // 400s without it. Demo default, not a model-specific value.
+  var CHAT_MAX_TOKENS = 1024;
+
   var selectedProviderId = null;
+  var selectedAccountId = null;
 
   // -- tiny helpers --
 
@@ -477,7 +577,7 @@
     });
   }
 
-  // Like jsonFetch, but a 404 resolves to null instead of throwing — used for the routing
+  // Like jsonFetch, but a 404 resolves to null instead of throwing - used for the routing
   // endpoints, which 404 as a group when the server was built without a RoutingAdmin wired in.
   function fetchOrNull404(url) {
     return fetch(url).then(function (res) {
@@ -496,7 +596,7 @@
     });
   }
 
-  // Like fetchOrNull404, but POSTs — used by the quota-refresh endpoint, which 404s as a whole
+  // Like fetchOrNull404, but POSTs - used by the quota-refresh endpoint, which 404s as a whole
   // when the server was built without a QuotaAdmin wired in (degrade to no quota UI, don't throw).
   function postOrNull404(url) {
     return fetch(url, { method: "POST" }).then(function (res) {
@@ -532,19 +632,37 @@
   var installedProviders = [];
   var availableProviders = [];
 
-  // Merges the two provider sources into one flat row list. Installed-list identity ("id")
-  // and available-list identity ("name") are different id spaces (a repo/asset name vs. the
-  // provider's registered id), so rows are NOT cross-matched by name; each source contributes
-  // its own rows and the "installed" flag on each is trusted as authoritative for that row.
+  // Merges the two provider sources into one flat row list. Installed-list identity ("id") and
+  // available-list identity ("name") are different id spaces in general (a provider's registered
+  // id, e.g. "stub", can differ from its org repo/asset name, e.g. "stub-auth-provider.jar") -- so
+  // the join key that actually works for every provider is the ASSET NAME (the jar on disk), which
+  // /api/providers now reports per installed row and /api/providers/available already reports per
+  // org entry. Threading name/version/installedVersion/updateAvailable/assetName over from the
+  // matching available entry (looked up by assetName) is what gives the version badge + Update
+  // button below something to render, for providers whose id != repo name too.
   // Entries from available with installed=true are skipped to avoid duplicating already-installed rows.
   function mergeProviderRows(installed, available) {
     var rows = [];
+    var availableByAsset = {};
+    (available || []).forEach(function (item) { availableByAsset[item.assetName] = item; });
+
     (installed || []).forEach(function (p) {
-      rows.push({ kind: "installed", id: p.id, accounts: p.accounts, assetName: null, installed: true });
+      var match = availableByAsset[p.assetName];
+      rows.push({
+        kind: "installed",
+        id: p.id,
+        accounts: p.accounts,
+        assetName: p.assetName,
+        name: match ? match.name : p.id, // repo name for display; fall back to the bare id
+        installed: true,
+        version: match ? match.version : null,
+        installedVersion: match ? match.installedVersion : null,
+        updateAvailable: !!(match && match.updateAvailable)
+      });
     });
     (available || []).forEach(function (item) {
-      if (item.installed === true) return; // Skip; already in installed list
-      rows.push({ kind: "available", id: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
+      if (item.installed === true) return; // Skip; already represented as an installed row above
+      rows.push({ kind: "available", id: item.name, name: item.name, accounts: null, assetName: item.assetName, installed: !!item.installed });
     });
     return rows;
   }
@@ -554,7 +672,7 @@
     tbody.innerHTML = "";
     if (!rows || !rows.length) {
       var tr0 = el("tr");
-      var td0 = el("td", "loading-row", "No providers discovered yet.");
+      var td0 = el("td", "loading-row", "No providers found. If you expect some, ensure GITHUB_TOKEN (or GH_TOKEN) is set before starting the server - GitHub rate-limits anonymous org scans.");
       td0.colSpan = 3;
       tr0.appendChild(td0);
       tbody.appendChild(tr0);
@@ -569,12 +687,15 @@
       }
 
       var tdName = el("td");
-      tdName.appendChild(el("div", "prov-name", row.id));
+      tdName.appendChild(el("div", "prov-name", row.name || row.id));
       if (row.assetName) tdName.appendChild(el("div", "prov-asset", row.assetName));
       tr.appendChild(tdName);
 
       var tdStatus = el("td");
       tdStatus.appendChild(badge(row.installed ? "installed" : "available"));
+      if (row.kind === "installed" && row.installedVersion) {
+        tdStatus.appendChild(el("div", "prov-version", "v" + row.installedVersion));
+      }
       if (row.kind === "installed" && row.accounts !== null && row.accounts !== undefined) {
         tdStatus.appendChild(el("div", "prov-count", row.accounts + (row.accounts === 1 ? " account" : " accounts")));
       }
@@ -590,6 +711,15 @@
         });
         tdAction.appendChild(installBtn);
       }
+      if (row.kind === "installed" && row.updateAvailable) {
+        var updateBtn = el("button", "primary small", "Update to v" + row.version);
+        updateBtn.type = "button";
+        updateBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          updateProvider(row.id, updateBtn);
+        });
+        tdAction.appendChild(updateBtn);
+      }
       if (row.kind === "installed") {
         var discoverWrap = el("span", "discover-inline");
         var discoverBtn = el("button", "small", "Discover models");
@@ -602,6 +732,14 @@
         discoverWrap.appendChild(discoverBtn);
         discoverWrap.appendChild(discoverResult);
         tdAction.appendChild(discoverWrap);
+
+        var uninstallBtn = el("button", "danger small", "Uninstall");
+        uninstallBtn.type = "button";
+        uninstallBtn.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          uninstallProvider(row.id);
+        });
+        tdAction.appendChild(uninstallBtn);
       }
       tr.appendChild(tdAction);
 
@@ -613,18 +751,42 @@
     renderProviderRows(mergeProviderRows(installedProviders, availableProviders));
   }
 
-  // Fetches BOTH provider sources (the available fetch re-scans the GitHub org and can take
-  // a few seconds) and re-renders the unified list. Used by the initial load, the Refresh
-  // button, and after a successful install.
-  function fetchAndRenderProviders() {
-    return Promise.all([
-      jsonFetch("/api/providers"),
-      jsonFetch("/api/providers/available")
-    ]).then(function (results) {
-      installedProviders = results[0] || [];
-      availableProviders = results[1] || [];
+  function showProvidersScanError(message) {
+    var span = document.getElementById("providers-scan-error");
+    span.textContent = message;
+    span.style.display = "";
+  }
+
+  function hideProvidersScanError() {
+    var span = document.getElementById("providers-scan-error");
+    span.style.display = "none";
+    span.textContent = "";
+  }
+
+  // Renders the installed list as soon as it resolves -- independent of the available fetch below.
+  function fetchInstalledProviders() {
+    return jsonFetch("/api/providers").then(function (result) {
+      installedProviders = result || [];
       renderMergedProviders();
     });
+  }
+
+  // The available fetch re-scans the GitHub org and can be slow or fail; it never rejects the
+  // caller and never touches installedProviders, so a bad scan can't blank the installed rows.
+  function fetchAvailableProviders() {
+    return jsonFetch("/api/providers/available").then(function (result) {
+      availableProviders = result || [];
+      hideProvidersScanError();
+      renderMergedProviders();
+    }).catch(function (err) {
+      showProvidersScanError("Scan failed: " + err.message);
+    });
+  }
+
+  // Used by the initial load, the Refresh button, and after a successful install. The two
+  // sources are fetched/rendered independently (see above) -- this just waits for both.
+  function fetchAndRenderProviders() {
+    return Promise.all([fetchInstalledProviders(), fetchAvailableProviders()]);
   }
 
   function loadProvidersInitial() {
@@ -649,6 +811,106 @@
     document.getElementById("providers-toast").className = "toast hidden";
   }
 
+  // -- GitHub connect (console-driven token for the org scan) --
+  //
+  // The server never returns the token value in any response -- these functions only ever read
+  // connected/source/login/rateLimitRemaining off /api/github, and only ever SEND a token (never
+  // display one back).
+
+  function showGithubToast(message, ok) {
+    var toast = document.getElementById("github-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  function hideGithubToast() {
+    document.getElementById("github-toast").className = "toast hidden";
+  }
+
+  function renderGithubStatus(status) {
+    var line = document.getElementById("github-status");
+    if (status && status.connected) {
+      line.textContent = "Connected as " + status.login + " (via " + status.source + ")";
+    } else {
+      line.textContent = "Not connected (anonymous scans are rate-limited)";
+    }
+    var disconnectBtn = document.getElementById("github-disconnect-button");
+    disconnectBtn.style.display = status && status.source !== "none" ? "" : "none";
+  }
+
+  function loadGithubStatus() {
+    return jsonFetch("/api/github").then(function (status) {
+      renderGithubStatus(status);
+    }).catch(function (err) {
+      document.getElementById("github-status").textContent = "Failed to load GitHub status: " + err.message;
+    });
+  }
+
+  function detectGithub() {
+    hideGithubToast();
+    var btn = document.getElementById("github-detect-button");
+    btn.disabled = true;
+    jsonFetch("/api/github/detect", { method: "POST" }).then(function (status) {
+      renderGithubStatus(status);
+      showGithubToast(
+          status.detected ? "Detected a token from the gh CLI." : "No gh CLI token found.",
+          status.detected);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Detect failed: " + err.message, false);
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
+  function saveGithubToken() {
+    var input = document.getElementById("github-token-input");
+    var token = input.value;
+    if (!token) {
+      showGithubToast("Enter a token first.", false);
+      return;
+    }
+    hideGithubToast();
+    jsonFetch("/api/github/token", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: token })
+    }).then(function (status) {
+      input.value = "";
+      renderGithubStatus(status);
+      showGithubToast(
+          status.connected ? "Connected as " + status.login + "." : "Token saved but could not be validated.",
+          status.connected);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Save failed: " + err.message, false);
+    });
+  }
+
+  function disconnectGithub() {
+    hideGithubToast();
+    jsonFetch("/api/github", { method: "DELETE" }).then(function (status) {
+      renderGithubStatus(status);
+      showGithubToast("Disconnected.", true);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Disconnect failed: " + err.message, false);
+    });
+  }
+
+  // Deletes an installed provider's jar and rebuilds the live registry without it (DELETE
+  // /api/providers/{id}, no trailing slash -- the route matches on an exact 3-segment path).
+  function uninstallProvider(id) {
+    if (!window.confirm("Uninstall provider \"" + id + "\"? Its jar will be deleted.")) return;
+    hideProvidersToast();
+    jsonFetch("/api/providers/" + encodeURIComponent(id), { method: "DELETE" }).then(function () {
+      showProvidersToast("Uninstalled \"" + id + "\".", true);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showProvidersToast("Uninstall failed: " + err.message, false);
+    });
+  }
+
   function refreshProviders() {
     var btn = document.getElementById("refresh-providers-button");
     if (btn.disabled) return;
@@ -657,11 +919,43 @@
     btn.appendChild(el("span", "spinner"));
     btn.appendChild(document.createTextNode("Refreshing…"));
     hideProvidersToast();
+    hideProvidersScanError();
     fetchAndRenderProviders().catch(function (err) {
       showProvidersToast("Refresh failed: " + err.message, false);
     }).then(function () {
       btn.disabled = false;
       btn.textContent = "Refresh";
+    });
+  }
+
+  // Discovers models for every INSTALLED provider at once: fetches the installed list (GET
+  // /api/providers), then POSTs .../models/discover for each id -- each call wrapped in its own
+  // catch so one provider's failure never aborts the rest -- and finally refreshes the chat
+  // dropdown + routing view once every discover call has settled.
+  function discoverAllModels() {
+    var btn = document.getElementById("discover-all-models-button");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.textContent = "Discovering…";
+    hideProvidersToast();
+
+    jsonFetch("/api/providers").then(function (providers) {
+      var ids = (providers || []).map(function (p) { return p.id; });
+      return Promise.all(ids.map(function (id) {
+        return jsonFetch("/api/providers/" + encodeURIComponent(id) + "/models/discover", { method: "POST" })
+          .catch(function () { /* non-fatal: one provider's discover failure must not abort the rest */ });
+      })).then(function () {
+        return Promise.all([loadModels(), loadRouting()]);
+      }).then(function () {
+        showProvidersToast(
+          "Discovered models for " + ids.length + (ids.length === 1 ? " provider." : " providers."), true);
+      });
+    }).catch(function (err) {
+      showProvidersToast("Discover all failed: " + err.message, false);
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = originalText;
     });
   }
 
@@ -684,6 +978,27 @@
     });
   }
 
+  // Updates an installed provider to the latest org version (POST /api/providers/{id}/update).
+  // The server closes the live registry before overwriting the jar (Windows-safe), rewrites the
+  // .version sidecar, then refreshes -- so a full re-render + model/routing reload afterward
+  // picks up whatever changed (new models, new config, etc.). Accounts are untouched (they live
+  // in the Store, not the jar).
+  function updateProvider(id, button) {
+    hideProvidersToast();
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "Updating…";
+    jsonFetch("/api/providers/" + encodeURIComponent(id) + "/update", { method: "POST" }).then(function (result) {
+      var version = result && result.version ? result.version : "";
+      showProvidersToast("Updated \"" + id + "\"" + (version ? " to v" + version : "") + ".", true);
+      return Promise.all([fetchAndRenderProviders(), loadModels(), loadRouting()]);
+    }).catch(function (err) {
+      button.disabled = false;
+      button.textContent = originalText;
+      showProvidersToast("Update failed: " + err.message, false);
+    });
+  }
+
   // Discovers an installed provider's live model catalog (POST .../models/discover), shows the
   // result inline next to the button, then refreshes the routing catalog so its add-controls
   // pick up the new models.
@@ -698,7 +1013,7 @@
       .then(function (payload) {
         var count = (payload && payload.models && payload.models.length) || 0;
         resultEl.textContent = count + (count === 1 ? " model" : " models");
-        return loadRouting();
+        return Promise.all([loadModels(), loadRouting()]);
       })
       .catch(function (err) {
         resultEl.classList.add("err");
@@ -710,12 +1025,26 @@
       });
   }
 
+  // Discovers providerId's model catalog then refreshes the chat model dropdown + routing view;
+  // non-fatal (a provider may not support discovery, e.g. no ModelCatalogProvider capability, or
+  // may have no account yet) so a plain login/account-add still succeeds either way. Shared by
+  // account-add (paste-token) and OAuth-completion so a fresh account's models appear without a
+  // manual page refresh.
+  function autoDiscoverAndRefresh(providerId) {
+    return jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/models/discover", { method: "POST" })
+      .catch(function () { /* discovery unsupported/failed -- non-fatal */ })
+      .then(function () {
+        return Promise.all([loadModels(), loadRouting()]);
+      });
+  }
+
   // -- routing (tier -> ordered provider/model chains) --
 
   var routingAvailable = false;
   var routingCatalog = {}; // provider -> {models:{id:{name,..}}, ranking:[..]}
   var routingTiers = [];
   var routingMap = {};     // tier -> [{provider,model},..] -- the editable working copy
+  var selectedProxyApp = null; // null until a proxy row is clicked; else the selected proxy's app id
 
   // A stored slot is either a single {provider,model} object (legacy) or an ordered chain
   // (array of them); normalize both shapes to an array so the UI only ever deals with one.
@@ -735,10 +1064,17 @@
     document.getElementById("routing-toast").className = "toast hidden";
   }
 
+  // Builds the "?app=..." query suffix for /api/routing/model-map calls from the currently
+  // selected INSTALLED proxy row -- routing is per-proxy only, so this is only ever called once a
+  // real proxy is selected (selectProxy is never wired to a default/"Server" row anymore).
+  function routingAppSuffix() {
+    return selectedProxyApp ? ("?app=" + encodeURIComponent(selectedProxyApp)) : "";
+  }
+
   function loadRouting() {
     hideRoutingToast();
     return Promise.all([
-      fetchOrNull404("/api/routing/model-map"),
+      fetchOrNull404("/api/routing/model-map" + routingAppSuffix()),
       fetchOrNull404("/api/routing/catalog")
     ]).then(function (results) {
       var mapView = results[0];
@@ -768,12 +1104,44 @@
     body.appendChild(el("div", "empty-state", message || "Routing management unavailable on this server."));
   }
 
+  // Read-only view for a passthrough proxy (row.routing === false): flattens the routing catalog
+  // into "provider / model (name)" rows instead of the tier editor -- there's nothing to add,
+  // remove, or save since the proxy exposes every provider's models as-is.
+  function loadPassthroughCatalog() {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+    body.appendChild(el("div", "loading-row", "loading…"));
+    fetchOrNull404("/api/routing/catalog").then(function (catalog) {
+      if (selectedProxyRouting) return; // stale: selection moved to a routable proxy meanwhile
+      renderPassthroughCatalog(catalog || {});
+    }).catch(function (err) {
+      if (selectedProxyRouting) return;
+      renderRoutingUnavailable("Failed to load models: " + err.message);
+    });
+  }
+
+  function renderPassthroughCatalog(catalog) {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+    body.appendChild(el("h3", "config-group-title", "Passthrough (all provider models)"));
+    var any = false;
+    Object.keys(catalog).forEach(function (providerId) {
+      var models = (catalog[providerId] && catalog[providerId].models) || {};
+      Object.keys(models).forEach(function (modelId) {
+        any = true;
+        var name = (models[modelId] && models[modelId].name) || modelId;
+        body.appendChild(el("div", "chain-empty", providerId + " / " + modelId + " (" + name + ")"));
+      });
+    });
+    if (!any) body.appendChild(el("div", "empty-state", "No models discovered yet."));
+  }
+
   function renderRouting() {
     var body = document.getElementById("routing-body");
     body.innerHTML = "";
 
     if (!routingTiers.length) {
-      body.appendChild(el("div", "empty-state", "No tiers detected yet — discover a provider's models first."));
+      body.appendChild(el("div", "empty-state", "No tiers detected yet, discover a provider's models first."));
       return;
     }
 
@@ -912,7 +1280,7 @@
     saveBtn.disabled = true;
     hideRoutingToast();
 
-    jsonFetch("/api/routing/model-map", {
+    jsonFetch("/api/routing/model-map" + routingAppSuffix(), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ map: routingMap })
@@ -927,6 +1295,267 @@
     });
   }
 
+  // -- proxies (installed + available like the providers card; server row is always first) --
+
+  var installedProxies = [];
+  var availableProxies = [];
+
+  function showProxiesToast(message, ok) {
+    var toast = document.getElementById("proxies-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  function hideProxiesToast() {
+    document.getElementById("proxies-toast").className = "toast hidden";
+  }
+
+  function showProxiesScanError(message) {
+    var span = document.getElementById("proxies-scan-error");
+    span.textContent = message;
+    span.style.display = "";
+  }
+
+  function hideProxiesScanError() {
+    var span = document.getElementById("proxies-scan-error");
+    span.style.display = "none";
+    span.textContent = "";
+  }
+
+  // Strips a single trailing "-proxy" from a repo name so an available row's label matches the
+  // stable id an installed row shows for the same plugin (e.g. "claude-code-proxy" -> "claude-code");
+  // anything else is left untouched.
+  function stripProxySuffix(name) {
+    return name && name.slice(-6) === "-proxy" ? name.slice(0, -6) : name;
+  }
+
+  // Merges the two proxy sources into one row list, same convention as mergeProviderRows:
+  // available entries already installed (installed:true) are skipped to avoid duplicate rows.
+  function mergeProxyRows(installed, available) {
+    var rows = [];
+    (installed || []).forEach(function (p) {
+      rows.push({
+        kind: "installed", id: p.id, port: p.port,
+        running: p.running, routing: p.routing, error: p.error
+      });
+    });
+    (available || []).forEach(function (item) {
+      if (item.installed === true) return;
+      rows.push({ kind: "available", id: item.name, label: stripProxySuffix(item.name), assetName: item.assetName });
+    });
+    return rows;
+  }
+
+  function renderMergedProxies() {
+    renderProxies(mergeProxyRows(installedProxies, availableProxies));
+  }
+
+  // Renders the installed list as soon as it resolves. Hides the whole card on 404 (older
+  // server built without a ProxyAdmin wired in) -- independent of the available fetch below.
+  function fetchInstalledProxies() {
+    return fetchOrNull404("/api/proxies").then(function (rows) {
+      if (rows === null) { document.getElementById("proxies-card").style.display = "none"; return; }
+      installedProxies = rows;
+      renderMergedProxies();
+    });
+  }
+
+  // The available fetch re-scans the GitHub org and can be slow or fail; it never rejects the
+  // caller and never touches installedProxies, so a bad scan can't blank the installed rows.
+  function fetchAvailableProxies() {
+    return jsonFetch("/api/proxies/available").then(function (result) {
+      availableProxies = result || [];
+      hideProxiesScanError();
+      renderMergedProxies();
+    }).catch(function (err) {
+      showProxiesScanError("Scan failed: " + err.message);
+    });
+  }
+
+  // Used by the initial load, the Refresh button, and after install/uninstall. The two sources
+  // are fetched/rendered independently (see above) -- this just waits for both.
+  function loadProxies() {
+    return Promise.all([fetchInstalledProxies(), fetchAvailableProxies()]).catch(function (err) {
+      var body = document.getElementById("proxies-body");
+      body.innerHTML = "";
+      body.appendChild(el("div", "loading-row", "Failed to load proxies: " + err.message));
+    });
+  }
+
+  // Renders one row per merged entry: installed rows get port/save/start-stop/uninstall and are
+  // always selectable -- a routable proxy (row.routing === true) opens the tier editor, a
+  // passthrough proxy (row.routing === false, e.g. opencode) opens a read-only model catalog
+  // instead; available rows get an Install button. There is no "Server" row (the built-in console
+  // has no router of its own -- it reaches providers directly) -- routing is per-INSTALLED-PROXY
+  // only.
+  function renderProxies(rows) {
+    var body = document.getElementById("proxies-body");
+    body.innerHTML = "";
+
+    rows.forEach(function (row) {
+      body.appendChild(row.kind === "installed" ? buildInstalledProxyRow(row) : buildAvailableProxyRow(row));
+    });
+
+    // If the previously selected proxy disappeared (e.g. uninstalled), close its settings panel
+    // rather than leaving it open on a target that no longer exists.
+    var stillPresent = rows.some(function (row) { return row.kind === "installed" && row.id === selectedProxyApp; });
+    if (selectedProxyApp && !stillPresent) {
+      selectedProxyApp = null;
+      document.getElementById("proxy-settings").style.display = "none";
+    }
+    markSelectedProxyRow();
+  }
+
+  function buildInstalledProxyRow(row) {
+    var canRoute = row.routing === true;
+    var isPassthrough = row.routing === false;
+    var line = el("div", "proxy-row" + ((canRoute || isPassthrough) ? " selectable" : ""));
+    line.dataset.app = row.id;
+    line.appendChild(el("span", "proxy-app", row.id));
+    if (canRoute || isPassthrough) {
+      line.addEventListener("click", function () { selectProxy(row.id); });
+    }
+    if (isPassthrough) {
+      line.appendChild(el("span", "proxy-hint", "passthrough"));
+    }
+    if (canRoute) {
+      line.appendChild(el("span", "proxy-hint", "routing"));
+    }
+
+    var port = el("input", "proxy-port");
+    port.type = "number";
+    port.value = row.port;
+    port.id = "proxy-port-" + row.id;
+    line.appendChild(port);
+
+    line.appendChild(badge(row.running ? "ready" : "disabled"));
+    if (row.error) line.appendChild(el("span", "proxy-error", row.error));
+
+    var save = el("button", "small", "Save port");
+    save.type = "button";
+    save.addEventListener("click", function (evt) { evt.stopPropagation(); saveProxyPort(row.id); });
+    line.appendChild(save);
+
+    var toggle = el("button", "small", row.running ? "Stop" : "Start");
+    toggle.type = "button";
+    toggle.addEventListener("click", function (evt) { evt.stopPropagation(); toggleProxy(row.id, !row.running); });
+    line.appendChild(toggle);
+
+    var uninstallBtn = el("button", "danger small", "Uninstall");
+    uninstallBtn.type = "button";
+    uninstallBtn.addEventListener("click", function (evt) { evt.stopPropagation(); uninstallProxy(row.id); });
+    line.appendChild(uninstallBtn);
+
+    return line;
+  }
+
+  function buildAvailableProxyRow(row) {
+    var line = el("div", "proxy-row");
+    line.appendChild(el("span", "proxy-app", row.label || row.id));
+    if (row.assetName) line.appendChild(el("span", "prov-asset", row.assetName));
+    line.appendChild(badge("available"));
+
+    var installBtn = el("button", "primary small", "Install");
+    installBtn.type = "button";
+    installBtn.addEventListener("click", function (evt) {
+      evt.stopPropagation();
+      installProxy(row.id, installBtn);
+    });
+    line.appendChild(installBtn);
+    return line;
+  }
+
+  // Installs a proxy plugin by its org name (POST /api/proxies/install {name}), mirroring
+  // installProvider, then refreshes the merged list.
+  function installProxy(name, button) {
+    hideProxiesToast();
+    button.disabled = true;
+    var originalText = button.textContent;
+    button.textContent = "Installing…";
+    jsonFetch("/api/proxies/install", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: name })
+    }).then(function () {
+      showProxiesToast("Installed \"" + name + "\".", true);
+      return loadProxies();
+    }).catch(function (err) {
+      button.disabled = false;
+      button.textContent = originalText;
+      showProxiesToast("Install failed: " + err.message, false);
+    });
+  }
+
+  // Deletes an installed proxy (DELETE /api/proxies/{id}), mirroring uninstallProvider.
+  function uninstallProxy(id) {
+    if (!window.confirm("Uninstall proxy \"" + id + "\"?")) return;
+    hideProxiesToast();
+    jsonFetch("/api/proxies/" + encodeURIComponent(id), { method: "DELETE" }).then(function () {
+      showProxiesToast("Uninstalled \"" + id + "\".", true);
+      return loadProxies();
+    }).catch(function (err) {
+      showProxiesToast("Uninstall failed: " + err.message, false);
+    });
+  }
+
+  // Tracks whether the open proxy-settings panel is the routable tier editor (true) or a
+  // passthrough proxy's read-only model catalog (false); the Refresh button branches on it.
+  var selectedProxyRouting = true;
+
+  // Opens the settings panel for the given INSTALLED proxy id. A routing === false proxy
+  // (passthrough, e.g. opencode) gets the read-only catalog view instead of the tier editor --
+  // there is nothing to route since it exposes every model as-is.
+  function selectProxy(app) {
+    selectedProxyApp = app;
+    var label = app;
+    var match = installedProxies.filter(function (p) { return p.id === app; })[0];
+    var routing = !(match && match.routing === false);
+    selectedProxyRouting = routing;
+    document.getElementById("proxy-settings-title").textContent = (routing ? "Routing: " : "Passthrough: ") + label;
+    document.getElementById("proxy-settings").style.display = "";
+    markSelectedProxyRow();
+    if (routing) {
+      loadRouting();
+    } else {
+      loadPassthroughCatalog();
+    }
+  }
+
+  // Highlights whichever proxy row matches the current selectedProxyApp, if any.
+  function markSelectedProxyRow() {
+    if (selectedProxyApp === null) return;
+    var rows = document.querySelectorAll("#proxies-body .proxy-row");
+    rows.forEach(function (row) {
+      row.classList.toggle("active", row.dataset.app === selectedProxyApp);
+    });
+  }
+
+  function saveProxyPort(app) {
+    var input = document.getElementById("proxy-port-" + app);
+    var port = Number(input.value);
+    jsonFetch("/api/proxies/" + encodeURIComponent(app), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ port: port })
+    }).then(function () { showProxiesToast("Saved port for " + app + ".", true); loadProxies(); })
+      .catch(function (err) { showProxiesToast("Save failed: " + err.message, false); });
+  }
+
+  // A start that comes back with running:false + an error (e.g. port already in use) must
+  // surface that error, not be reported as a success.
+  function toggleProxy(app, start) {
+    jsonFetch("/api/proxies/" + encodeURIComponent(app) + (start ? "/start" : "/stop"), { method: "POST" })
+      .then(function (status) {
+        if (start && status && status.running === false && status.error) {
+          showProxiesToast(app + " failed to start: " + status.error, false);
+        } else {
+          showProxiesToast(app + (start ? " started." : " stopped."), true);
+        }
+        loadProxies();
+      })
+      .catch(function (err) { showProxiesToast((start ? "Start" : "Stop") + " failed: " + err.message, false); });
+  }
+
   // -- accounts --
 
   function selectProvider(id) {
@@ -934,10 +1563,13 @@
     document.getElementById("accounts-hint").textContent = id;
     document.getElementById("accounts-empty").style.display = "none";
     document.getElementById("accounts-table").style.display = "";
-    document.getElementById("toggle-add-account-button").style.display = "";
     document.getElementById("refresh-quota-button").style.display = "";
     document.getElementById("oauth-login-button").style.display = "";
+    document.getElementById("add-account-fallback").style.display = "none";
     hideAddAccountForm();
+    hideOauthPasteRow();
+    document.getElementById("provider-quota").style.display = "none";
+    closeAccountDetail();
     renderMergedProviders();
     loadAccounts();
     loadConfig(id);
@@ -969,7 +1601,10 @@
       });
   }
 
+  var currentAccounts = []; // last-rendered accounts list for the selected provider, keyed by id in selectAccount
+
   function renderAccounts(accounts) {
+    currentAccounts = accounts || [];
     var tbody = document.querySelector("#accounts-table tbody");
     tbody.innerHTML = "";
     if (!accounts || !accounts.length) {
@@ -982,8 +1617,10 @@
     }
     accounts.forEach(function (a) {
       var enabled = a.status !== "disabled" && a.enabled !== false;
-      var tr = el("tr");
+      var tr = el("tr", "selectable");
       tr.dataset.accountId = a.id;
+      if (a.id === selectedAccountId) tr.classList.add("active");
+      tr.addEventListener("click", function () { selectAccount(a.id); });
       tr.appendChild(el("td", null, a.id));
       tr.appendChild(el("td", null, a.email || ""));
 
@@ -994,22 +1631,31 @@
       var actionsTd = el("td", "actions");
       var toggleBtn = el("button", "small", enabled ? "Disable" : "Enable");
       toggleBtn.type = "button";
-      toggleBtn.addEventListener("click", function () { setAccountEnabled(a.id, !enabled); });
+      toggleBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        setAccountEnabled(a.id, !enabled);
+      });
       actionsTd.appendChild(toggleBtn);
 
       var removeBtn = el("button", "danger small", "Remove");
       removeBtn.type = "button";
-      removeBtn.addEventListener("click", function () { removeAccount(a.id); });
+      removeBtn.addEventListener("click", function (evt) {
+        evt.stopPropagation();
+        removeAccount(a.id);
+      });
       actionsTd.appendChild(removeBtn);
 
       tr.appendChild(actionsTd);
       tbody.appendChild(tr);
     });
+
+    if (selectedAccountId) renderAccountDetail(); // keep an open detail panel in sync with fresh data
   }
 
-  // -- per-account quota bars --
+  // -- quota: per-account (detail panel) + combined provider-wide summary --
 
   var quotaByAccountId = {};   // account id -> {status, quota:[{label,remainingFraction,resetTime}]}
+  var quotaCombined = null;    // {pools:[{label,remainingFraction,accounts}], accountCount} or null
   var quotaAvailable = false;  // false until a quota/refresh call for the current provider succeeds
   var quotaRequestSeq = 0;     // monotonic id so a stale in-flight request can't clobber a newer one
 
@@ -1017,8 +1663,9 @@
     return new Date(epochMs).toLocaleString();
   }
 
-  // Fetches quota for every account of `providerId` and re-renders. 404 (no QuotaAdmin on this
-  // server) degrades silently to no quota UI at all, same for any other failure; never throws.
+  // Fetches quota for every account of `providerId` (plus the provider-wide combined summary) and
+  // re-renders. 404 (no QuotaAdmin on this server) degrades silently to no quota UI, same for any
+  // other failure; never throws.
   function loadQuota(providerId) {
     if (!providerId) return;
     var requestId = ++quotaRequestSeq;
@@ -1031,8 +1678,10 @@
         quotaByAccountId = {};
         if (resp && resp.accounts) {
           resp.accounts.forEach(function (a) { quotaByAccountId[a.id] = a; });
+          quotaCombined = resp.combined || null;
           quotaAvailable = true;
         } else {
+          quotaCombined = null;
           quotaAvailable = false; // 404 -> feature not wired in on this server
         }
         renderQuota();
@@ -1040,6 +1689,7 @@
       .catch(function () {
         if (requestId !== quotaRequestSeq || providerId !== selectedProviderId) return; // stale
         quotaByAccountId = {};
+        quotaCombined = null;
         quotaAvailable = false;
         renderQuota();
       })
@@ -1048,10 +1698,9 @@
       });
   }
 
-  function buildQuotaRow(entry) {
-    var qrow = el("tr", "qrow");
-    var td = el("td");
-    td.colSpan = 4;
+  // Builds a `.qbars` fragment (label + track/fill bar + reset line, per entry.quota[]) - shared by
+  // the account detail panel; `entry` is one element of the quota-refresh response's `accounts[]`.
+  function buildQuotaBars(entry) {
     var qbars = el("div", "qbars");
 
     if (entry && entry.status === "error") {
@@ -1061,7 +1710,7 @@
     } else {
       entry.quota.forEach(function (q) {
         var usedPct = Math.round((1 - q.remainingFraction) * 100);
-        qbars.appendChild(el("div", "qbar-label", q.label + " — " + usedPct + "% used"));
+        qbars.appendChild(el("div", "qbar-label", q.label + ": " + usedPct + "% used"));
         var track = el("div", "qbar-track");
         var fill = el("div", "qbar-fill");
         fill.style.width = usedPct + "%";
@@ -1072,28 +1721,104 @@
         }
       });
     }
-
-    td.appendChild(qbars);
-    qrow.appendChild(td);
-    return qrow;
+    return qbars;
   }
 
-  // Idempotent: drops any prior .qrow sub-rows, then (if the last quota fetch succeeded) inserts
-  // one fresh .qrow after each account row, keyed by the data-account-id set in renderAccounts.
-  function renderQuota() {
-    var existingRows = document.querySelectorAll("#accounts-table tbody tr.qrow");
-    for (var i = 0; i < existingRows.length; i++) {
-      existingRows[i].parentNode.removeChild(existingRows[i]);
-    }
-    if (!quotaAvailable) return;
+  // Renders `combined.pools` (provider-wide, cross-account) into `#provider-quota-bars`.
+  function buildProviderQuotaBars(pools) {
+    var qbars = el("div", "qbars");
+    pools.forEach(function (pool) {
+      var usedPct = Math.round((1 - pool.remainingFraction) * 100);
+      qbars.appendChild(el("div", "qbar-label", pool.label + ": " + usedPct + "% used"));
+      var track = el("div", "qbar-track");
+      var fill = el("div", "qbar-fill");
+      fill.style.width = usedPct + "%";
+      track.appendChild(fill);
+      qbars.appendChild(track);
+    });
+    return qbars;
+  }
 
-    var accountRows = document.querySelectorAll("#accounts-table tbody tr[data-account-id]");
-    for (var j = 0; j < accountRows.length; j++) {
-      var tr = accountRows[j];
-      var accountId = tr.getAttribute("data-account-id");
-      var qrow = buildQuotaRow(quotaByAccountId[accountId]);
-      tr.parentNode.insertBefore(qrow, tr.nextSibling);
+  // Idempotent. No longer injects per-account sub-rows into the table (quota moved to the account
+  // detail panel + the combined summary): refreshes `#provider-quota` from `quotaCombined`, and, if
+  // a detail panel is currently open, refreshes its quota section from `quotaByAccountId`.
+  function renderQuota() {
+    var panel = document.getElementById("provider-quota");
+    var pools = quotaAvailable && quotaCombined && quotaCombined.pools ? quotaCombined.pools : null;
+    if (pools && pools.length) {
+      var barsContainer = document.getElementById("provider-quota-bars");
+      barsContainer.innerHTML = "";
+      barsContainer.appendChild(buildProviderQuotaBars(pools));
+      document.getElementById("provider-quota-caption").textContent =
+        "(" + quotaCombined.accountCount + " accounts)";
+      panel.style.display = "";
+    } else {
+      panel.style.display = "none";
     }
+
+    if (selectedAccountId) renderAccountDetail();
+  }
+
+  // -- account detail panel (identity, status, expiry, that account's quota, enable/disable/remove) --
+
+  // Relative + absolute rendering of an account's token expiry; null/undefined means no expiry.
+  function formatExpiry(ms) {
+    if (ms === null || ms === undefined) return "no expiry";
+    var deltaMs = ms - Date.now();
+    var absolute = new Date(ms).toLocaleString();
+    if (deltaMs <= 0) return "expired (" + absolute + ")";
+    var deltaMin = Math.round(deltaMs / 60000);
+    var relative = deltaMin < 60 ? "in " + deltaMin + " min"
+      : deltaMin < 1440 ? "in " + Math.round(deltaMin / 60) + " hr"
+      : "in " + Math.round(deltaMin / 1440) + " d";
+    return relative + " (" + absolute + ")";
+  }
+
+  function selectAccount(id) {
+    selectedAccountId = id;
+    renderAccounts(currentAccounts); // re-render for the .active highlight; also opens the detail panel
+  }
+
+  function closeAccountDetail() {
+    selectedAccountId = null;
+    document.getElementById("account-detail").style.display = "none";
+  }
+
+  // Re-renders #account-detail for `selectedAccountId` from `currentAccounts`/`quotaByAccountId`.
+  // If the account is no longer present (e.g. just removed), closes the panel instead.
+  function renderAccountDetail() {
+    var account = null;
+    for (var i = 0; i < currentAccounts.length; i++) {
+      if (currentAccounts[i].id === selectedAccountId) { account = currentAccounts[i]; break; }
+    }
+    if (!account) { closeAccountDetail(); return; }
+
+    var enabled = account.status !== "disabled" && account.enabled !== false;
+    var panel = document.getElementById("account-detail");
+    panel.style.display = "";
+
+    document.getElementById("account-detail-identity").textContent =
+      account.id + (account.email ? " (" + account.email + ")" : "");
+
+    var statusSlot = document.getElementById("account-detail-status");
+    statusSlot.innerHTML = "";
+    statusSlot.appendChild(badge(account.status || (enabled ? "ready" : "disabled")));
+
+    document.getElementById("account-detail-expiry").textContent =
+      "Token expiry: " + formatExpiry(account.expires);
+
+    var quotaSlot = document.getElementById("account-detail-quota");
+    quotaSlot.innerHTML = "";
+    if (quotaAvailable) {
+      quotaSlot.appendChild(buildQuotaBars(quotaByAccountId[account.id]));
+    } else {
+      quotaSlot.appendChild(el("div", "qbar-reset", "quota unavailable"));
+    }
+
+    var toggleBtn = document.getElementById("account-detail-toggle");
+    toggleBtn.textContent = enabled ? "Disable" : "Enable";
+    toggleBtn.onclick = function () { setAccountEnabled(account.id, !enabled); };
+    document.getElementById("account-detail-remove").onclick = function () { removeAccount(account.id); };
   }
 
   // -- provider config (schema-driven /v1/config) --
@@ -1124,18 +1849,23 @@
       });
   }
 
+  // Renders {groups:[{title,fields}], values} grouped, like the loader's config editor. An older
+  // flat {fields:[...]} payload (no groups) becomes one implicit, unheaded group so it still
+  // renders instead of breaking; a single group that itself carries no title also skips the
+  // header, since there's nothing to label.
   function renderConfig(resp) {
     var body = document.getElementById("config-body");
     body.innerHTML = "";
     configFields = [];
-    var groups = (resp && resp.groups) || [];
     var values = (resp && resp.values) || {};
+    var groups = (resp && resp.groups) || (resp && resp.fields ? [{ title: null, fields: resp.fields }] : []);
     if (!groups.length) {
       body.appendChild(el("div", "empty-state", "This provider has no configurable settings."));
       return;
     }
+    var singleUnnamed = groups.length === 1 && !groups[0].title;
     groups.forEach(function (group) {
-      body.appendChild(el("h3", "config-group-title", group.title || ""));
+      if (!singleUnnamed) body.appendChild(el("h3", "config-group-title", group.title || ""));
       (group.fields || []).forEach(function (field) {
         configFields.push({ key: field.key, type: field.type });
         var wrap = el("div", "field");
@@ -1152,7 +1882,7 @@
       input = el("input");
       input.type = "checkbox";
       input.checked = value === true;
-    } else if (field.type === "enum") {
+    } else if (field.type === "select") {
       input = el("select");
       (field.options || []).forEach(function (opt) {
         var o = el("option", null, opt);
@@ -1194,41 +1924,59 @@
     });
   }
 
-  // -- oauth login (full browser flow) --
+  // -- oauth login (provider-authorize + paste-the-code completion) --
 
+  function hideOauthPasteRow() {
+    document.getElementById("oauth-paste-row").style.display = "none";
+  }
+
+  // Asks the server for a fresh authorize URL, opens it in a popup, and (for providers that
+  // can't run a server-side callback) reveals a box for the operator to paste back the code.
   function startOAuthLogin() {
     if (!selectedProviderId) return;
-    var providerId = selectedProviderId;
     var btn = document.getElementById("oauth-login-button");
     btn.disabled = true;
-    jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/oauth/start", { method: "POST" })
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/oauth/authorize", { method: "POST" })
       .then(function (resp) {
-        var popup = window.open(resp.authorizeUrl, "oauth-login", "width=520,height=680");
-        // The callback page posts 'oauth-done' when the exchange completes; refresh accounts then.
-        // Only accept it from our own origin -- the callback page is same-origin, so any other
-        // origin posting this message is not the real callback and must be ignored.
-        var onMessage = function (ev) {
-          if (ev.origin === window.location.origin && ev.data === "oauth-done") {
-            window.removeEventListener("message", onMessage);
-            if (providerId === selectedProviderId) loadAccounts();
-          }
-        };
-        window.addEventListener("message", onMessage);
-        // Fallback: if the popup is closed without a message, refresh once anyway.
-        var poll = setInterval(function () {
-          if (popup && popup.closed) {
-            clearInterval(poll);
-            window.removeEventListener("message", onMessage);
-            if (providerId === selectedProviderId) loadAccounts();
-          }
-        }, 1000);
+        window.open(resp.authorizeUrl, "oauth-login", "width=520,height=720");
+        if (resp.completion === "paste") {
+          document.getElementById("oauth-paste-row").style.display = "";
+          document.getElementById("oauth-code-input").value = "";
+          document.getElementById("oauth-code-input").focus();
+        } else {
+          showAddAccountToast("This provider needs loopback login (not supported yet in this build).", false);
+        }
       })
       .catch(function (err) {
         showAddAccountToast("Login failed: " + err.message, false);
+        document.getElementById("add-account-fallback").style.display = "";
       })
-      .then(function () {
-        btn.disabled = false;
-      });
+      .then(function () { btn.disabled = false; });
+  }
+
+  // Splits the pasted "code#state" (a bare code sends state="") and completes the exchange.
+  function completeOAuthLogin() {
+    if (!selectedProviderId) return;
+    var raw = document.getElementById("oauth-code-input").value.trim();
+    if (!raw) return;
+    var hash = raw.indexOf("#");
+    var code = hash >= 0 ? raw.slice(0, hash) : raw;
+    var state = hash >= 0 ? raw.slice(hash + 1) : "";
+    var btn = document.getElementById("oauth-complete-button");
+    btn.disabled = true;
+    jsonFetch("/api/providers/" + encodeURIComponent(selectedProviderId) + "/oauth/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: code, state: state })
+    }).then(function () {
+      hideOauthPasteRow();
+      showAddAccountToast("Logged in.", true);
+      loadAccounts();
+      autoDiscoverAndRefresh(selectedProviderId);
+    }).catch(function (err) {
+      showAddAccountToast("Login failed: " + err.message, false);
+      document.getElementById("add-account-fallback").style.display = "";
+    }).then(function () { btn.disabled = false; });
   }
 
   // -- add account (paste-token seed) --
@@ -1278,6 +2026,7 @@
       hideAddAccountForm();
       loadAccounts();
       fetchAndRenderProviders();
+      autoDiscoverAndRefresh(selectedProviderId);
     }).catch(function (err) {
       showAddAccountToast("Add account failed: " + err.message, false);
     }).then(function () {
@@ -1287,7 +2036,7 @@
 
   function accountActionFailed(err) {
     document.getElementById("accounts-hint").textContent =
-      selectedProviderId + " — action failed: " + err.message;
+      selectedProviderId + ": action failed: " + err.message;
   }
 
   function setAccountEnabled(accountId, enabled) {
@@ -1313,24 +2062,38 @@
     }).catch(accountActionFailed);
   }
 
-  // -- chat --
+  // -- chat: console = DIRECT provider access, never through a router --
 
+  // Sources the chat model dropdown from the routing catalog (provider-keyed
+  // {provider:{models:{id:{name}},ranking:[...]}}) instead of a router's /v1/models -- the console
+  // has no router of its own. Each option's value is the model id and `dataset.provider` records
+  // which provider serves it, since sendChat posts straight to that provider's own
+  // /api/providers/{id}/messages.
   function loadModels() {
     var select = document.getElementById("model-select");
-    return jsonFetch("/v1/models").then(function (payload) {
-      var models = (payload && payload.data) || [];
+    return jsonFetch("/api/routing/catalog").then(function (catalog) {
       var previous = select.value;
       select.innerHTML = "";
-      if (!models.length) {
+      var any = false;
+      Object.keys(catalog || {}).forEach(function (providerId) {
+        var entry = catalog[providerId] || {};
+        var models = entry.models || {};
+        var ranking = entry.ranking || Object.keys(models);
+        ranking.forEach(function (modelId) {
+          var model = models[modelId] || {};
+          var opt = el("option", null, providerId + " / " + (model.name || modelId));
+          opt.value = modelId;
+          opt.dataset.provider = providerId;
+          select.appendChild(opt);
+          any = true;
+        });
+      });
+      if (!any) {
         select.appendChild(el("option", null, "no models available")).value = "";
         return;
       }
-      models.forEach(function (m) {
-        var opt = el("option", null, m.id);
-        opt.value = m.id;
-        select.appendChild(opt);
-      });
-      if (previous && models.some(function (m) { return m.id === previous; })) {
+      var stillPresent = Array.prototype.some.call(select.options, function (o) { return o.value === previous; });
+      if (previous && stillPresent) {
         select.value = previous;
       }
     }).catch(function (err) {
@@ -1360,9 +2123,11 @@
     var sendButton = document.getElementById("send-button");
     var status = document.getElementById("chat-status");
 
+    var selectedOption = modelSelect.options[modelSelect.selectedIndex];
     var model = modelSelect.value;
+    var provider = selectedOption ? selectedOption.dataset.provider : null;
     var prompt = promptInput.value.trim();
-    if (!model) { status.textContent = "Select a model first."; return; }
+    if (!model || !provider) { status.textContent = "Select a model first."; return; }
     if (!prompt) { status.textContent = "Enter a prompt first."; return; }
 
     status.textContent = "";
@@ -1372,11 +2137,13 @@
     sendButton.textContent = "…";
     var pendingBubble = appendBubble("assistant", "…", "pending");
 
-    jsonFetch("/v1/messages", {
+    // Console chat = a DIRECT call to the selected model's own provider, never through a router.
+    jsonFetch("/api/providers/" + encodeURIComponent(provider) + "/messages", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model: model,
+        max_tokens: CHAT_MAX_TOKENS,
         messages: [{ role: "user", content: prompt }]
       })
     }).then(function (payload) {
@@ -1403,19 +2170,30 @@
     if (event.key === "Enter") sendChat();
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
-  document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
+  document.getElementById("discover-all-models-button").addEventListener("click", discoverAllModels);
+  document.getElementById("refresh-routing-button").addEventListener("click", function () {
+    if (selectedProxyRouting) loadRouting(); else loadPassthroughCatalog();
+  });
+  document.getElementById("refresh-proxies-button").addEventListener("click", loadProxies);
   document.getElementById("refresh-quota-button").addEventListener("click", function () {
     loadQuota(selectedProviderId);
   });
-  document.getElementById("toggle-add-account-button").addEventListener("click", showAddAccountForm);
+  document.getElementById("add-account-fallback").addEventListener("click", showAddAccountForm);
   document.getElementById("cancel-add-account-button").addEventListener("click", hideAddAccountForm);
   document.getElementById("add-account-form").addEventListener("submit", submitAddAccount);
   document.getElementById("save-config-button").addEventListener("click", saveConfig);
   document.getElementById("oauth-login-button").addEventListener("click", startOAuthLogin);
+  document.getElementById("oauth-complete-button").addEventListener("click", completeOAuthLogin);
+  document.getElementById("oauth-cancel-button").addEventListener("click", hideOauthPasteRow);
+  document.getElementById("account-detail-close").addEventListener("click", closeAccountDetail);
+  document.getElementById("github-detect-button").addEventListener("click", detectGithub);
+  document.getElementById("github-save-token-button").addEventListener("click", saveGithubToken);
+  document.getElementById("github-disconnect-button").addEventListener("click", disconnectGithub);
 
+  loadGithubStatus();
   loadProvidersInitial();
   loadModels();
-  loadRouting();
+  loadProxies();
 })();
 </script>
 </body>

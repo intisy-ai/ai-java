@@ -46,6 +46,7 @@ class ConfigAdminTest {
         stageProviderJar(providersDir);
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+        assertTrue(holder.listProviderIds().contains("ratelimited"), holder.listProviderIds().toString());
 
         config = new ConfigAdmin(store, json, holder, msg -> { });
     }
@@ -96,5 +97,19 @@ class ConfigAdminTest {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> config.getConfig("nope"));
         assertTrue(e.getMessage().contains("unknown provider: nope"), e.getMessage());
+    }
+
+    // -- absent-capability: "ratelimited" (AlwaysRateLimitedProvider) implements Provider only --
+
+    @Test
+    void getConfigOfBareProviderReturnsNull() {
+        assertEquals(null, config.getConfig("ratelimited"));
+    }
+
+    @Test
+    void putConfigOfBareProviderThrows() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> config.putConfig("ratelimited", new LinkedHashMap<>()));
+        assertTrue(e.getMessage().contains("provider has no config surface: ratelimited"), e.getMessage());
     }
 }

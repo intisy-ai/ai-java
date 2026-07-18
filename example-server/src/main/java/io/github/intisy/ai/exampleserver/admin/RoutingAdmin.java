@@ -4,13 +4,13 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.shared.logic.ModelMap;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.ProxyHandler;
+import io.github.intisy.ai.shared.routing.ModelCatalogProvider;
+import io.github.intisy.ai.shared.routing.ModelInfo;
+import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Logger;
 import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,65 +21,63 @@ import java.util.Map;
 /**
  * UI-safe routing administration: discovers an installed provider's live model catalog into the
  * shared {@code models.json} cache, and reads/writes the tier -&gt; {provider,model} chain map
- * stored under the {@link RoutingProfile#configFile}. Mirrors {@link AccountAdmin}'s shape
- * (encapsulates the {@link Store}; {@link io.github.intisy.ai.exampleserver.api.ManagementApi}
- * never sees it directly).
+ * stored under a caller-supplied {@link RoutingProfile#configFile}. Routing is per-INSTALLED-PROXY
+ * only (there is no built-in default profile -- the {@code ExampleServer} console reaches providers
+ * directly, never through a router; see the per-proxy {@code ProxyServer}), so every model-map
+ * method here takes its {@link RoutingProfile} as an explicit argument rather than a ctor default.
+ * Mirrors {@link AccountAdmin}'s shape (encapsulates the {@link Store}; {@link
+ * io.github.intisy.ai.exampleserver.api.ManagementApi} never sees it directly).
  */
 public class RoutingAdmin {
     private static final String CATALOG_KEY = "models.json";
 
     private final Store store;
     private final JsonCodec json;
-    private final RoutingProfile profile;
     private final ProviderRegistryHolder holder;
     private final Logger log;
     private final String configDir;
 
-    public RoutingAdmin(Store store, JsonCodec json, RoutingProfile profile,
-                         ProviderRegistryHolder holder, Logger log) {
+    public RoutingAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.store = store;
         this.json = json;
-        this.profile = profile;
         this.holder = holder;
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
     }
 
     /**
-     * Calls the provider's own {@code GET /v1/models} branch and merges the result into
+     * Calls the provider's typed {@link ModelCatalogProvider#models} and merges the result into
      * {@code models.json} under {@code providerId}, preserving every other provider's entry.
      *
-     * @throws IllegalArgumentException if the provider id is unknown, the call throws, or the
-     *                                   provider responds with a non-2xx status (its message is
-     *                                   carried through so the caller sees why, e.g. no account)
+     * @throws IllegalArgumentException if the provider id is unknown, or the provider does not
+     *                                   implement {@link ModelCatalogProvider} (discover is an
+     *                                   explicit user action; erroring is fine)
      */
     public Map<String, Object> discover(String providerId) {
-        ProxyHandler handler = holder.asHandlerResolver().resolve(providerId);
-        if (handler == null) {
+        Provider p = holder.get(providerId);
+        if (p == null) {
             throw new IllegalArgumentException("unknown provider: " + providerId);
         }
-
-        HttpRequest request = new HttpRequest();
-        request.method = "GET";
-        request.url = "/v1/models";
-        request.headers = new LinkedHashMap<>();
-        HandlerCtx ctx = new HandlerCtx(configDir, log, null);
-
-        HttpResponse response;
-        try {
-            response = handler.handle(request, ctx);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("discovery failed: " + e.getMessage());
-        }
-        if (response.status / 100 != 2) {
-            throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
+        if (!(p instanceof ModelCatalogProvider)) {
+            throw new IllegalArgumentException("provider has no model catalog: " + providerId);
         }
 
-        Map<String, Object> parsed = asMap(json.parse(response.body));
-        Map<String, Object> models = parsed != null ? asMap(parsed.get("models")) : null;
-        if (models == null) models = new LinkedHashMap<>();
-        List<String> ranking = parsed != null ? asStringList(parsed.get("ranking")) : null;
-        if (ranking == null) ranking = new ArrayList<>(models.keySet());
+        HandlerCtx ctx = new HandlerCtx(configDir, store, log, null);
+        List<ModelInfo> modelInfos = ((ModelCatalogProvider) p).models(ctx);
+        if (modelInfos == null) modelInfos = new ArrayList<>();
+
+        Map<String, Object> models = new LinkedHashMap<>();
+        List<String> ranking = new ArrayList<>();
+        for (ModelInfo m : modelInfos) {
+            Map<String, Object> modelEntry = new LinkedHashMap<>();
+            modelEntry.put("name", m.name);
+            Map<String, Object> limit = new LinkedHashMap<>();
+            limit.put("context", m.context);
+            limit.put("output", m.output);
+            modelEntry.put("limit", limit);
+            models.put(m.id, modelEntry);
+            ranking.add(m.id);
+        }
 
         Map<String, Object> catalog = readCatalog();
         Map<String, Object> entry = new LinkedHashMap<>();
@@ -113,21 +111,55 @@ public class RoutingAdmin {
         return raw != null ? raw : "{}";
     }
 
-    /** {@code {tiers: <detected tier names>, map: <raw stored tier map>}}. */
-    public Map<String, Object> modelMapView() {
+    /**
+     * Removes {@code providerId}'s entry from the stored catalog ({@code models.json}), no-op if
+     * absent. Called after a successful uninstall so a later reinstall discovers a fresh catalog
+     * instead of reading back whatever the old install last cached.
+     */
+    public void removeFromCatalog(String providerId) {
+        Map<String, Object> catalog = readCatalog();
+        if (catalog.remove(providerId) != null) {
+            store.put(CATALOG_KEY, json.stringify(catalog));
+        }
+    }
+
+    /**
+     * {@code {tiers: <declared union detected tier names>, map: <raw stored tier map>}} for the
+     * given profile's config file.
+     */
+    public Map<String, Object> modelMapView(RoutingProfile profile) {
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("tiers", ModelMap.resolveTiers(store, json, profile));
+        view.put("tiers", unionTiers(profile));
         view.put("map", ModelMap.readModelMap(store, json, profile));
         return view;
     }
 
     /**
-     * Validates and persists a full tier -&gt; chain map. Every {@code provider} must be one of
-     * {@link ProviderRegistryHolder#listProviderIds()} (unknown -&gt; throws); an unknown
-     * {@code model} for an otherwise-known provider is not fatal (the router self-heals it) but
-     * is surfaced back as a warning.
+     * Union of the tiers actually DETECTED in the discovered catalog ({@link ModelMap#resolveTiers},
+     * unchanged/still detection-based for the live router) with every slot the profile DECLARES
+     * via {@link RoutingProfile#tierOrder} -- so an operator can pre-configure a not-yet-discovered
+     * slot (e.g. {@code fable}) before its first model ever shows up in the catalog. Declared order
+     * first, any detected-but-undeclared tier appended after (in detected order); de-duped.
      */
-    public Map<String, Object> putModelMap(Map<String, Object> map) {
+    private List<String> unionTiers(RoutingProfile profile) {
+        List<String> detected = ModelMap.resolveTiers(store, json, profile);
+        List<String> union = new ArrayList<>();
+        for (String tier : profile.tierOrder) {
+            if (!union.contains(tier)) union.add(tier);
+        }
+        for (String tier : detected) {
+            if (!union.contains(tier)) union.add(tier);
+        }
+        return union;
+    }
+
+    /**
+     * Validates and persists a full tier -&gt; chain map into the given profile's config file.
+     * Every {@code provider} must be one of {@link ProviderRegistryHolder#listProviderIds()}
+     * (unknown -&gt; throws); an unknown {@code model} for an otherwise-known provider is not
+     * fatal (the router self-heals it) but is surfaced back as a warning.
+     */
+    public Map<String, Object> putModelMap(RoutingProfile profile, Map<String, Object> map) {
         List<String> providerIds = holder.listProviderIds();
         Map<String, Object> catalog = readCatalog();
         List<String> warnings = new ArrayList<>();
@@ -179,15 +211,6 @@ public class RoutingAdmin {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;
-    }
-
-    private static List<String> asStringList(Object o) {
-        if (!(o instanceof List)) return null;
-        List<String> out = new ArrayList<>();
-        for (Object item : (List<?>) o) {
-            if (item instanceof String) out.add((String) item);
-        }
-        return out;
     }
 
     private static String stringOf(Object o) {

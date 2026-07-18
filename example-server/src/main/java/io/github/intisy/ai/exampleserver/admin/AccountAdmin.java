@@ -66,7 +66,7 @@ public class AccountAdmin {
      * and project ids in {@code account.meta}. Note this only becomes visible to an installed
      * provider when the server runs with a {@code FileStore} backing the same {@code accounts.json}
      * (i.e. {@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>}); under the default
-     * in-memory store the seeded account is admin-visible only.
+     * {@code sqlite} store (or {@code memory}) the seeded account is admin-visible only.
      *
      * @throws IllegalArgumentException if {@code refresh} is blank, or both {@code email} and
      *                                   {@code id} are blank
@@ -126,6 +126,7 @@ public class AccountAdmin {
         view.email = account.email;
         view.enabled = account.enabled != null ? account.enabled : true;
         view.status = deriveStatus(account, now, view.enabled);
+        view.expires = account.expires; // non-secret access-token expiry (epoch ms); null when absent
         return view;
     }
 
@@ -159,5 +160,6 @@ public class AccountAdmin {
         public String email;
         public String status;
         public boolean enabled;
+        public Long expires; // non-secret access-token expiry, epoch ms; null when the account carries none
     }
 }

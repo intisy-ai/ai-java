@@ -1,13 +1,13 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -27,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -40,33 +39,26 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Phase 7 (part 1) e2e: proves the {@code install-from-org -> discover -> classload -> route}
- * chain works with the REAL, out-of-band-built {@code antigravity-provider.jar}/{@code
+ * Phase 7 (part 1) e2e: proves the {@code install-from-org -> discover -> classload -> DIRECT
+ * invoke} chain works with the REAL, out-of-band-built {@code antigravity-provider.jar}/{@code
  * claude-provider.jar} (staged at {@code exampleserver.orgProvidersDir}, default
  * {@code build/orgProviders} -- see {@code example-server/build.gradle}), mirroring {@link
  * ProviderInstallIntegrationTest} but with a real jar's own {@code Provider} discovered through a
  * dedicated {@link java.net.URLClassLoader} instead of the in-repo echo fixture.
  *
- * <p>Deterministic and network-free by design (see {@code .superpowers/sdd/phase-7-brief.md}): the
- * model map/catalog is seeded so {@code /v1/messages} routes to the installed provider, but NO
- * account is ever seeded for the routing tests, so each provider's own orchestrator takes its
- * no-account branch and returns a hardcoded synthetic response WITHOUT attempting any network
- * call. That response is provider-specific and asserted against directly -- it is what proves the
- * request reached the INSTALLED provider, as opposed to the {@link
- * io.github.intisy.ai.shared.logic.Router}'s own "no chain matched" 503
- * ({@code {"type":"error","error":{"type":"loader_proxy_error","message":"No provider/model
- * assigned for this tier. ..."}}}}, read directly from {@code Router.route}/{@code
- * Router#errorResponse} -- never {@code invalid_request_error}, never {@code x-hub-chat-error},
- * never the text "No available antigravity account"). Each provider test additionally asserts the
- * ABSENCE of the router's own shape, so the "reached provider" claim is not just plausible but
- * actively discriminated from a routing miss.
+ * <p>Deterministic and network-free by design (see {@code .superpowers/sdd/phase-7-brief.md}): each
+ * test posts straight to the just-installed provider's own {@code /api/providers/{id}/messages}
+ * (console chat = a DIRECT {@link MessagesAdmin#send} call, never a router match -- there is no
+ * model-&gt;provider resolution to seed here at all). NO account is ever seeded, so each provider's
+ * own orchestrator takes its no-account branch and returns a hardcoded synthetic response WITHOUT
+ * attempting any network call. That response is provider-specific and asserted against directly --
+ * it is what proves the request reached the INSTALLED provider.
  *
  * <p>Skips (via {@link Assumptions}) when the two jars aren't staged -- e.g. in CI, where ai-java
  * cannot build the provider repos itself (see the interface map's §6 cross-repo constraint).
  */
 class ProviderOrgInstallServeE2ETest {
 
-    private static final String CONFIG_FILE = "provider-org-install-e2e-routing.json";
     private static final String CLAUDE_MODEL = "claude-e2e";
     private static final String ANTIGRAVITY_MODEL = "antigravity-e2e";
 
@@ -91,28 +83,25 @@ class ProviderOrgInstallServeE2ETest {
                         && Files.exists(antigravityJar) && Files.exists(claudeJar),
                 "org provider jars not staged at exampleserver.orgProvidersDir (" + orgProvidersDir + ")");
 
-        // FILE store so the router derives HandlerCtx.configDir == configDir -- the installed
-        // provider's own ClaudeBackend/AntigravityBackend.forConfigDir(ctx.configDir) opens a
-        // FileStore at the SAME directory, converging on one accounts.json on disk (map §4b).
+        // FILE store so HandlerCtx.configDir == configDir -- the installed provider's own
+        // ClaudeBackend/AntigravityBackend.forConfigDir(ctx.configDir) opens a FileStore at the
+        // SAME directory, converging on one accounts.json on disk (map §4b).
         ai = AiJava.builder().storage(Storage.file(configDir)).build();
         store = ai.store();
         json = ai.jsonCodec();
-        seedModelMapAndCatalog(store, json, CONFIG_FILE);
 
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().isEmpty(), "must start with zero providers loaded");
 
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
+        MessagesAdmin messages = new MessagesAdmin(store, json, holder, ai.logger());
 
         ProviderSource orgSource = new FakeOrgProviderSource(Paths.get(orgProvidersDir));
-        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, orgSource, providersDir, holder);
+        ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, orgSource, providersDir, holder,
+                null, null, null, null, null, null, null, null, messages);
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach
@@ -145,18 +134,13 @@ class ProviderOrgInstallServeE2ETest {
         // No account seeded for claude -> zero enabled accounts -> the claude orchestrator's OWN
         // no-account synthetic (ClaudeHandleOrchestratorTest/ClaudeProviderTest:
         // noAccountConfigured_returnsSyntheticInvalidRequestError): 400, x-hub-chat-error: 1,
-        // an invalid_request_error body -- proving the request reached the INSTALLED provider.
+        // an invalid_request_error body -- proving the DIRECT call reached the INSTALLED provider
+        // (console chat, POST /api/providers/{id}/messages, never a router match).
         String body = "{\"model\":\"" + CLAUDE_MODEL + "\",\"messages\":[]}";
-        Response messages = post("/v1/messages", body);
+        Response messages = post("/api/providers/claude/messages", body);
         assertEquals(400, messages.status, messages.body);
         assertEquals("1", messages.headers.get("x-hub-chat-error"), messages.body);
         assertTrue(messages.body.contains("invalid_request_error"), messages.body);
-
-        // Discriminate from the router's OWN no-route 503 shape (Router#errorResponse):
-        // {"type":"error","error":{"type":"loader_proxy_error",...}} never carries this header
-        // or error type, so a false-positive "reached provider" from an actual routing miss is
-        // ruled out.
-        assertFalse(messages.body.contains("loader_proxy_error"), messages.body);
     }
 
     @Test
@@ -182,16 +166,12 @@ class ProviderOrgInstallServeE2ETest {
         // (AntigravityProviderTest.handle_noAccountConfigured_returnsClearErrorWithoutNetworkCall):
         // synthesized 503 (isRateLimitStatus(503) == true, so AntigravityProvider re-wraps it as a
         // rate_limit_error), body mentioning "No available antigravity account" -- the provider's
-        // OWN wording, proving the request reached the INSTALLED provider.
+        // OWN wording, proving the DIRECT call reached the INSTALLED provider (console chat, POST
+        // /api/providers/{id}/messages, never a router match).
         String body = "{\"model\":\"" + ANTIGRAVITY_MODEL + "\",\"messages\":[]}";
-        Response messages = post("/v1/messages", body);
+        Response messages = post("/api/providers/antigravity/messages", body);
         assertEquals(503, messages.status, messages.body);
         assertTrue(messages.body.contains("No available antigravity account"), messages.body);
-
-        // Discriminate from the router's OWN no-route 503 (same status code by coincidence, but a
-        // different body/type): Router#errorResponse's "loader_proxy_error" message never mentions
-        // the provider by name, so this body match rules out a false-positive routing miss.
-        assertFalse(messages.body.contains("loader_proxy_error"), messages.body);
         assertNull(messages.headers.get("x-hub-chat-error"), messages.body);
     }
 
@@ -243,48 +223,6 @@ class ProviderOrgInstallServeE2ETest {
         return (Map<String, Object>) accounts.get(0);
     }
 
-    /**
-     * Seeds the two store keys the {@link io.github.intisy.ai.shared.logic.Router} needs to reach
-     * an installed provider (map §3: neither install nor {@code holder.refresh} writes any
-     * catalog/model-map -- that's core-auth's login job, never run here). Mirrors {@link
-     * ServerSeeds#seedEcho} but with the exact posted body.model id in each chain, so the Router's
-     * EXACT-ID match (checked before tier-keyword classification) fires regardless of tier.
-     */
-    private static void seedModelMapAndCatalog(Store store, JsonCodec json, String configFile) {
-        Map<String, Object> catalog = new LinkedHashMap<>();
-        catalog.put("claude", providerCatalog(CLAUDE_MODEL, "Claude E2E"));
-        catalog.put("antigravity", providerCatalog(ANTIGRAVITY_MODEL, "AG E2E"));
-        store.put("models.json", json.stringify(catalog));
-
-        Map<String, Object> modelMap = new LinkedHashMap<>();
-        modelMap.put("opus", Collections.singletonList(assignment("claude", CLAUDE_MODEL)));
-        modelMap.put("sonnet", Collections.singletonList(assignment("antigravity", ANTIGRAVITY_MODEL)));
-        Map<String, Object> doc = new LinkedHashMap<>();
-        doc.put("modelMap", modelMap);
-        store.put(configFile, json.stringify(doc));
-    }
-
-    private static Map<String, Object> assignment(String provider, String model) {
-        Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("provider", provider);
-        entry.put("model", model);
-        return entry;
-    }
-
-    private static Map<String, Object> providerCatalog(String modelId, String displayName) {
-        Map<String, Object> limit = new LinkedHashMap<>();
-        limit.put("context", 200000);
-        limit.put("output", 64000);
-        Map<String, Object> model = new LinkedHashMap<>();
-        model.put("name", displayName);
-        model.put("limit", limit);
-        Map<String, Object> modelsById = new LinkedHashMap<>();
-        modelsById.put(modelId, model);
-        Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("models", modelsById);
-        entry.put("ranking", Collections.singletonList(modelId));
-        return entry;
-    }
 
     /** Simulates a real org download with no network: copies whichever of the two REAL,
      *  pre-built provider jars (staged at {@code exampleserver.orgProvidersDir}) matches the
@@ -299,8 +237,16 @@ class ProviderOrgInstallServeE2ETest {
         @Override
         public List<Entry> list() {
             return Arrays.asList(
-                    new Entry("claude", "claude-provider.jar", ""),
-                    new Entry("antigravity", "antigravity-provider.jar", ""));
+                    new Entry("claude", "claude-provider.jar", "", "1.0.0"),
+                    new Entry("antigravity", "antigravity-provider.jar", "", "1.0.0"));
+        }
+
+        @Override
+        public Entry find(String name) {
+            for (Entry entry : list()) {
+                if (entry.name.equals(name)) return entry;
+            }
+            return null;
         }
 
         @Override

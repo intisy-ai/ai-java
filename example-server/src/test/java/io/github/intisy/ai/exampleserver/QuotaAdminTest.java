@@ -77,9 +77,27 @@ class QuotaAdminTest {
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
-        assertEquals(1, accounts.size());
+        assertEquals(3, accounts.size());
         assertEquals("a1", accounts.get(0).get("id"));
         assertNotNull(accounts.get(0).get("quota"));
+    }
+
+    @Test
+    void refreshKeepsTheErroredBarlessAccountInTheAccountsArray() {
+        // a3 is an errored account with an EMPTY bars list (not a missing account) -- this is
+        // exactly why the SPI carries AccountQuota per-account rather than flattening every bar
+        // into one account-keyed list: an account with no bars must still survive to the wire.
+        Map<String, Object> result = quota.refresh("echo");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        Map<String, Object> a3 = accounts.stream()
+                .filter(a -> "a3".equals(a.get("id")))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(a3, "the errored barless account a3 must still appear: " + accounts);
+        assertEquals("error", a3.get("status"));
+        assertEquals(java.util.Collections.emptyList(), a3.get("quota"));
     }
 
     @Test
@@ -89,11 +107,38 @@ class QuotaAdminTest {
         assertTrue(e.getMessage().contains("unknown provider: nope"), e.getMessage());
     }
 
+    // -- absent-capability: "ratelimited" (AlwaysRateLimitedProvider) implements Provider only --
+
     @Test
-    void refreshNon2xxThrowsWithProviderMessage() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> quota.refresh("ratelimited"));
-        assertTrue(e.getMessage().contains("provider returned 429"), e.getMessage());
-        assertTrue(e.getMessage().contains("rate_limit_error"), e.getMessage());
+    void refreshOfBareProviderReturnsEmptyAccounts() {
+        Map<String, Object> result = quota.refresh("ratelimited");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        assertTrue(accounts.isEmpty(), accounts.toString());
+    }
+
+    @Test
+    void combinedAggregatesMeanRemainingFractionPerLabelAndCountsErrorAccounts() {
+        // Echo's canned /v1/quota (EchoProvider.quotaResponse): a1+a2 share "5-hour"
+        // (0.8, 0.4 -> mean 0.6), a3 is an errored account with no quota at all.
+        Map<String, Object> result = quota.combined("echo");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        assertEquals(3, accounts.size(), "raw accounts array must still be present, unchanged");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> combined = (Map<String, Object>) result.get("combined");
+        assertNotNull(combined);
+        assertEquals(3, combined.get("accountCount"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> pools = (List<Map<String, Object>>) combined.get("pools");
+        assertEquals(1, pools.size());
+        Map<String, Object> fiveHour = pools.get(0);
+        assertEquals("5-hour", fiveHour.get("label"));
+        assertEquals(0.6, (double) (Number) fiveHour.get("remainingFraction"), 1e-9);
+        assertEquals(2, fiveHour.get("accounts"));
     }
 }

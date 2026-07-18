@@ -39,6 +39,22 @@ class AccountAdminTest {
     }
 
     @Test
+    void exposesNonSecretAccessExpiryAsEpochMsNullWhenAbsent() {
+        AccountStore store = new AccountStore(new InMemoryStore(), new GsonJsonCodec());
+        Account withExpiry = acct("a@x", true);
+        withExpiry.expires = 999_000L;
+        Account withoutExpiry = acct("b@x", true);
+        store.add("echo", withExpiry);
+        store.add("echo", withoutExpiry);
+
+        AccountAdmin admin = new AccountAdmin(store, () -> 5_000L);
+        List<AccountAdmin.AccountView> views = admin.list("echo");
+
+        assertEquals(999_000L, views.stream().filter(v -> v.id.equals("a@x")).findFirst().get().expires);
+        assertNull(views.stream().filter(v -> v.id.equals("b@x")).findFirst().get().expires);
+    }
+
+    @Test
     void addTokenSeedsFlagCAccountShapeAndReturnsSecretFreeView() {
         AccountStore store = new AccountStore(new InMemoryStore(), new GsonJsonCodec());
         AccountAdmin admin = new AccountAdmin(store, () -> 42_000L);

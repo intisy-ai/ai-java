@@ -132,6 +132,32 @@ class ProviderRegistryTest {
     }
 
     @Test
+    void get_returnsTheDiscoveredProviderInstanceById_orNullWhenUnknown(@TempDir Path tmp) throws IOException {
+        Path providersDir = tmp.resolve("providers");
+        Files.createDirectory(providersDir);
+        writeStubProviderJar(providersDir.resolve("stub-provider.jar"));
+
+        try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
+            Provider found = registry.get("stub");
+            assertEquals("stub", found.id());
+            assertEquals(null, registry.get("nope"));
+        }
+    }
+
+    @Test
+    void jarFor_attributesDiscoveredProviderToItsOwnJarFile(@TempDir Path tmp) throws IOException {
+        Path providersDir = tmp.resolve("providers");
+        Files.createDirectory(providersDir);
+        Path jarPath = providersDir.resolve("stub-provider.jar");
+        writeStubProviderJar(jarPath);
+
+        try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
+            assertEquals(jarPath, registry.jarFor("stub"));
+            assertEquals(null, registry.jarFor("nope"));
+        }
+    }
+
+    @Test
     void emptyOrMissingDirectory_yieldsNoProviders_notAnError(@TempDir Path tmp) {
         assertTrue(ProviderRegistry.fromDirectory(tmp.resolve("does-not-exist")).listProviderIds().isEmpty());
         assertTrue(ProviderRegistry.empty().listProviderIds().isEmpty());

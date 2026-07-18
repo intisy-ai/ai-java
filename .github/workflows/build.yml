@@ -2,7 +2,7 @@ name: Build And Upload
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 permissions:
   contents: write
 jobs:

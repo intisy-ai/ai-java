@@ -10,7 +10,6 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -24,12 +23,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -38,11 +36,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Boots {@link ExampleServer} with the OAuth-login surface wired in (the full 10-arg {@link
- * ManagementApi} constructor) and drives {@code POST /api/providers/{id}/oauth/start} +
- * {@code GET /api/oauth/callback} over loopback, mirroring {@link QuotaApiIntegrationTest}'s
- * harness style. Because {@code start} returns an authorize URL pointing at the echo fixture's
- * fake {@code https://echo.example/authorize} (not reachable), this drives the callback directly
- * with the {@code state} extracted from the {@code start} response instead of opening a browser.
+ * ManagementApi} constructor) and drives {@code POST /api/providers/{id}/oauth/authorize} +
+ * {@code POST /api/providers/{id}/oauth/complete} over loopback, mirroring {@link
+ * QuotaApiIntegrationTest}'s harness style (provider-authorize model: the installed provider
+ * builds its own authorize URL; the server only relays {@code complete} to the provider's
+ * exchange and seeds the returned account).
  */
 class OAuthApiIntegrationTest {
 
@@ -67,17 +65,14 @@ class OAuthApiIntegrationTest {
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        RoutingAdmin routing = new RoutingAdmin(store, json, profile, holder, ai.logger());
+        RoutingAdmin routing = new RoutingAdmin(store, json, holder, ai.logger());
         QuotaAdmin quota = new QuotaAdmin(store, json, holder, ai.logger());
         ConfigAdmin config = new ConfigAdmin(store, json, holder, ai.logger());
-        OAuthAdmin oauth = new OAuthAdmin(store, json, holder, ai.logger(), admin, ai.clock());
+        OAuthAdmin oauth = new OAuthAdmin(store, json, holder, ai.logger(), admin);
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
                 routing, quota, config, oauth);
 
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach
@@ -100,37 +95,24 @@ class OAuthApiIntegrationTest {
     }
 
     @Test
-    void startReturnsAuthorizeUrl() throws IOException {
-        Response r = post("/api/providers/echo/oauth/start");
+    void authorizeReturnsUrl() throws IOException {
+        Response r = post("/api/providers/echo/oauth/authorize");
         assertEquals(200, r.status, r.body);
         assertTrue(r.body.contains("echo-client-id"), r.body);
-        assertTrue(r.body.contains("code_challenge_method=S256"), r.body);
-        assertTrue(r.body.contains("\"state\""), r.body);
+        assertTrue(r.body.contains("\"completion\":\"paste\""), r.body);
     }
 
     @Test
-    void callbackWithValidStateSeedsAccountAndReturnsHtml() throws IOException {
-        Response start = post("/api/providers/echo/oauth/start");
-        String state = extractJsonString(start.body, "state");
-        assertNotNull(state);
-
-        Response cb = get("/api/oauth/callback?code=abc123&state=" + java.net.URLEncoder.encode(state, "UTF-8"));
-        assertEquals(200, cb.status, cb.body);
-        assertTrue(cb.body.toLowerCase().contains("close"), cb.body); // "you can close this tab"
-
+    void completeSeedsAccount() throws IOException {
+        Response r = postBody("/api/providers/echo/oauth/complete", "{\"code\":\"abc123\",\"state\":\"echo-state\"}");
+        assertEquals(200, r.status, r.body);
         Response accounts = get("/api/providers/echo/accounts");
         assertTrue(accounts.body.contains("echo-oauth-user"), accounts.body);
     }
 
     @Test
-    void callbackWithUnknownStateIs400() throws IOException {
-        Response cb = get("/api/oauth/callback?code=abc&state=bogus");
-        assertEquals(400, cb.status, cb.body);
-    }
-
-    private static String extractJsonString(String json, String key) {
-        Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"").matcher(json);
-        return m.find() ? m.group(1) : null;
+    void unknownProviderAuthorizeIs400() throws IOException {
+        assertEquals(400, post("/api/providers/nope/oauth/authorize").status);
     }
 
     // -- tiny loopback HTTP client (test-only; mirrors QuotaApiIntegrationTest's helper) --
@@ -140,6 +122,16 @@ class OAuthApiIntegrationTest {
         c.setDoOutput(true);
         try (OutputStream os = c.getOutputStream()) {
             os.write(new byte[0]);
+        }
+        return read(c);
+    }
+
+    private Response postBody(String path, String body) throws IOException {
+        HttpURLConnection c = open(path, "POST");
+        c.setDoOutput(true);
+        c.setRequestProperty("content-type", "application/json");
+        try (OutputStream os = c.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
         }
         return read(c);
     }

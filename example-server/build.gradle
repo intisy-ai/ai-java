@@ -8,6 +8,9 @@ dependencies {
     implementation project(":jvm")
     // Deliberately NO project(":examples-provider") dependency — the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
+    // Default store backend: a real JDBC driver so ServerMain's default `sqlite` store (via
+    // Storage.jdbc) persists across restarts. Must be on the runtime classpath, not just test.
+    implementation "org.xerial:sqlite-jdbc:3.45.3.0"
 }
 
 application {
@@ -30,9 +33,11 @@ def stageProviders = tasks.register("stageProviders", Copy) {
 }
 
 def runProvidersDir = layout.buildDirectory.dir("run-providers")
+def runProxiesDir = layout.buildDirectory.dir("run-proxies")
 
 tasks.named("run") {
     systemProperty("exampleserver.providersDir", runProvidersDir.get().asFile.absolutePath)
+    systemProperty("exampleserver.proxiesDir", runProxiesDir.get().asFile.absolutePath)
 }
 
 tasks.named("test") {

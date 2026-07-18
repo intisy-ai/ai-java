@@ -51,8 +51,8 @@ view — the refresh token is never echoed back or logged.
 This endpoint only shares state with an installed provider when the server runs against a
 `FileStore` the provider also reads — i.e. started with `-Dexampleserver.store=file
 -Dexampleserver.configDir=<dir>`, so both sides read/write the same `<dir>/accounts.json`. Under
-the default in-memory store (no store flags), a seeded account is visible to the admin API/
-dashboard but not to a routed request, since the provider process never sees that memory.
+the default `sqlite` store (or `memory`), a seeded account is visible to the admin API/dashboard
+but not to a routed request, since the provider process never reads that database/memory.
 
 ## Discovery
 
@@ -78,8 +78,13 @@ one on request and hot-swaps it into the live registry via `ProviderRegistryHold
 
 Other flags:
 
-- `-Dexampleserver.store=memory|file` — the backing `Store` (default `memory`); `file` persists
-  under `-Dexampleserver.configDir=...` (default `config`).
+- `-Dexampleserver.store=sqlite|memory|file` — the backing `Store` (default `sqlite`, so caching —
+  accounts, quota, `models.json`/`proxies.json`, routing — survives a restart out of the box);
+  `sqlite` persists to a `Storage.jdbc(SQLiteDataSource)` at `-Dexampleserver.dbPath=...` (default
+  `ai-java.db`); `file` persists under `-Dexampleserver.configDir=...` (default `config`); `memory`
+  is ephemeral. ai-java itself forces NO storage format — the `Store` SPI stays consumer-injected
+  and `memory`/`file`/`jdbc` remain fully selectable; `sqlite` is only this example-server's chosen
+  default, wired via `ServerMain.storeFor` reusing ai-java's existing `Storage.jdbc(DataSource)`.
 - `-Dexampleserver.port=...` — the HTTP port (default `8787`; `0` picks an ephemeral port).
 
 ## What it demonstrates
