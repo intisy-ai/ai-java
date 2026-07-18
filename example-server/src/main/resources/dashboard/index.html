@@ -528,6 +528,10 @@
 (function () {
   "use strict";
 
+  // Anthropic's /v1/messages requires max_tokens -- a real provider forwards it verbatim and
+  // 400s without it. Demo default, not a model-specific value.
+  var CHAT_MAX_TOKENS = 1024;
+
   var selectedProviderId = null;
   var selectedAccountId = null;
 
@@ -817,7 +821,7 @@
       .then(function (payload) {
         var count = (payload && payload.models && payload.models.length) || 0;
         resultEl.textContent = count + (count === 1 ? " model" : " models");
-        return loadRouting();
+        return Promise.all([loadModels(), loadRouting()]);
       })
       .catch(function (err) {
         resultEl.classList.add("err");
@@ -826,6 +830,19 @@
       .then(function () {
         button.disabled = false;
         button.textContent = originalText;
+      });
+  }
+
+  // Discovers providerId's model catalog then refreshes the chat model dropdown + routing view;
+  // non-fatal (a provider may not support discovery, e.g. no ModelCatalogProvider capability, or
+  // may have no account yet) so a plain login/account-add still succeeds either way. Shared by
+  // account-add (paste-token) and OAuth-completion so a fresh account's models appear without a
+  // manual page refresh.
+  function autoDiscoverAndRefresh(providerId) {
+    return jsonFetch("/api/providers/" + encodeURIComponent(providerId) + "/models/discover", { method: "POST" })
+      .catch(function () { /* discovery unsupported/failed -- non-fatal */ })
+      .then(function () {
+        return Promise.all([loadModels(), loadRouting()]);
       });
   }
 
@@ -1770,6 +1787,7 @@
       hideOauthPasteRow();
       showAddAccountToast("Logged in.", true);
       loadAccounts();
+      autoDiscoverAndRefresh(selectedProviderId);
     }).catch(function (err) {
       showAddAccountToast("Login failed: " + err.message, false);
       document.getElementById("add-account-fallback").style.display = "";
@@ -1823,6 +1841,7 @@
       hideAddAccountForm();
       loadAccounts();
       fetchAndRenderProviders();
+      autoDiscoverAndRefresh(selectedProviderId);
     }).catch(function (err) {
       showAddAccountToast("Add account failed: " + err.message, false);
     }).then(function () {
@@ -1922,6 +1941,7 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         model: model,
+        max_tokens: CHAT_MAX_TOKENS,
         messages: [{ role: "user", content: prompt }]
       })
     }).then(function (payload) {

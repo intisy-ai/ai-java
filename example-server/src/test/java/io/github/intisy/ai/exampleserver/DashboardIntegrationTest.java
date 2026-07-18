@@ -204,6 +204,43 @@ class DashboardIntegrationTest {
         assertTrue(html.contains("id=\"proxies-scan-error\""), "proxies scan-error hook missing");
     }
 
+    @Test
+    void sendChatPayloadIncludesMaxTokens() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("CHAT_MAX_TOKENS"), "CHAT_MAX_TOKENS constant missing");
+        assertTrue(html.contains("max_tokens: CHAT_MAX_TOKENS"), "send payload must include max_tokens");
+    }
+
+    @Test
+    void accountAddAndOauthCompleteAutoDiscoverAndRefreshModels() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("function autoDiscoverAndRefresh("), "autoDiscoverAndRefresh helper missing");
+        assertTrue(html.contains("autoDiscoverAndRefresh(selectedProviderId)"),
+                "autoDiscoverAndRefresh must be wired into account-add / OAuth-complete");
+    }
+
+    @Test
+    void manualDiscoverRefreshesChatModelDropdown() throws IOException {
+        String html = get("/").body;
+        // discoverModels' success handler must refresh both the routing view and the chat
+        // model dropdown (previously only loadRouting() ran, leaving chat stale until refresh).
+        assertTrue(html.contains("Promise.all([loadModels(), loadRouting()])"),
+                "manual discover path must call loadModels() alongside loadRouting()");
+    }
+
+    @Test
+    void bannerDoesNotHardcodeAModelName() throws IOException {
+        // ServerMain.main() blocks forever (joins the running thread), so this is a source-grep
+        // rather than an exercised-output assertion; Gradle's test task workingDir defaults to
+        // this module's projectDir, so the relative path resolves under `gradlew :example-server:test`.
+        String source = new String(java.nio.file.Files.readAllBytes(
+                Paths.get("src/main/java/io/github/intisy/ai/exampleserver/ServerMain.java")),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertFalse(source.contains("claude-haiku-4"),
+                "ServerMain banner must not hardcode a real model name");
+        assertTrue(source.contains("<model-id>"), "banner should use a generic placeholder");
+    }
+
     // -- tiny loopback HTTP client (test-only; newer JDK APIs allowed in tests) --
 
     private Response get(String path) throws IOException {

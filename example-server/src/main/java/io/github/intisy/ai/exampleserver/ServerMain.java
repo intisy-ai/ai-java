@@ -106,7 +106,7 @@ public final class ServerMain {
             System.out.println("  DELETE /api/proxies/{id}");
             System.out.println("  PUT  /api/proxies/{id}          {\"port\":N}");
             System.out.println("  POST /api/proxies/{id}/start | /stop");
-            System.out.println("  POST /v1/messages  {\"model\":\"claude-haiku-4\",\"messages\":[]}");
+            System.out.println("  POST /v1/messages  {\"model\":\"<model-id>\",\"max_tokens\":1024,\"messages\":[...]}");
             System.out.println("  GET  /v1/models");
             System.out.println("  GET  /healthz");
 

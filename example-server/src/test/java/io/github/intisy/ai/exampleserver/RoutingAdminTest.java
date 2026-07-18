@@ -119,6 +119,46 @@ class RoutingAdminTest {
         assertTrue(map.containsKey("sonnet"));
     }
 
+    // Union: a declared-but-not-yet-discovered slot (fable) must appear (an operator can
+    // pre-configure it before its first model is ever discovered), AND a detected-but-undeclared
+    // tier (extra, from the catalog) must be appended after -- declared order first, de-duped.
+    @Test
+    void modelMapViewUnionsDeclaredTierOrderWithDetectedCatalogTiersInclFable() {
+        String unionConfigFile = "routing-admin-test-union-routing.json";
+        Store unionStore = new InMemoryStore();
+        JsonCodec unionJson = new GsonJsonCodec();
+
+        Map<String, Object> models = new LinkedHashMap<>();
+        models.put("claude-opus-4", modelEntry("Opus"));
+        models.put("claude-extra-1", modelEntry("Extra"));
+        Map<String, Object> providerEntry = new LinkedHashMap<>();
+        providerEntry.put("models", models);
+        providerEntry.put("ranking", Arrays.asList("claude-opus-4", "claude-extra-1"));
+        Map<String, Object> catalog = new LinkedHashMap<>();
+        catalog.put("echo", providerEntry);
+        unionStore.put("models.json", unionJson.stringify(catalog));
+
+        RoutingProfile profile = ServerProfile.echoTiers(unionConfigFile);
+        // "fable" is declared (tierOrder) but has no model in the catalog above -- it must still
+        // surface as a pre-configurable slot.
+        profile.tierOrder = Arrays.asList("opus", "sonnet", "haiku", "fable");
+
+        RoutingAdmin unionRouting = new RoutingAdmin(unionStore, unionJson, profile, holder, msg -> { });
+        Map<String, Object> view = unionRouting.modelMapView(profile);
+
+        assertEquals(Arrays.asList("opus", "sonnet", "haiku", "fable", "extra"), view.get("tiers"));
+    }
+
+    private static Map<String, Object> modelEntry(String displayName) {
+        Map<String, Object> limit = new LinkedHashMap<>();
+        limit.put("context", 200000);
+        limit.put("output", 64000);
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("name", displayName);
+        entry.put("limit", limit);
+        return entry;
+    }
+
     @Test
     void putModelMapRoundTripsThroughModelMapReadModelMap() {
         Map<String, Object> map = new LinkedHashMap<>();

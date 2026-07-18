@@ -111,12 +111,34 @@ public class RoutingAdmin {
         return raw != null ? raw : "{}";
     }
 
-    /** {@code {tiers: <detected tier names>, map: <raw stored tier map>}} for the given profile's config file. */
+    /**
+     * {@code {tiers: <declared union detected tier names>, map: <raw stored tier map>}} for the
+     * given profile's config file.
+     */
     public Map<String, Object> modelMapView(RoutingProfile profile) {
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("tiers", ModelMap.resolveTiers(store, json, profile));
+        view.put("tiers", unionTiers(profile));
         view.put("map", ModelMap.readModelMap(store, json, profile));
         return view;
+    }
+
+    /**
+     * Union of the tiers actually DETECTED in the discovered catalog ({@link ModelMap#resolveTiers},
+     * unchanged/still detection-based for the live router) with every slot the profile DECLARES
+     * via {@link RoutingProfile#tierOrder} -- so an operator can pre-configure a not-yet-discovered
+     * slot (e.g. {@code fable}) before its first model ever shows up in the catalog. Declared order
+     * first, any detected-but-undeclared tier appended after (in detected order); de-duped.
+     */
+    private List<String> unionTiers(RoutingProfile profile) {
+        List<String> detected = ModelMap.resolveTiers(store, json, profile);
+        List<String> union = new ArrayList<>();
+        for (String tier : profile.tierOrder) {
+            if (!union.contains(tier)) union.add(tier);
+        }
+        for (String tier : detected) {
+            if (!union.contains(tier)) union.add(tier);
+        }
+        return union;
     }
 
     /** {@code {tiers, map}} for the ctor's default profile (back-compat). */
