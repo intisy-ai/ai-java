@@ -8,7 +8,6 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -63,15 +62,12 @@ class QuotaApiIntegrationTest {
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        RoutingAdmin routing = new RoutingAdmin(store, json, profile, holder, ai.logger());
+        RoutingAdmin routing = new RoutingAdmin(store, json, holder, ai.logger());
         QuotaAdmin quota = new QuotaAdmin(store, json, holder, ai.logger());
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, null, null, holder,
                 routing, quota);
 
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach

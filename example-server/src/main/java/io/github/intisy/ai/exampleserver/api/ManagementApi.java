@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
+import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
@@ -14,6 +15,7 @@ import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxySource;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
+import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -49,11 +51,13 @@ import java.util.function.Supplier;
  * DELETE /api/providers/{id}/accounts/{accId}            -> 204
  * POST   /api/providers/{id}/models/discover              -> 200 {"provider":..,"models":[...]}
  * POST   /api/providers/{id}/quota/refresh                -> 200 {"accounts":[...]}
+ * POST   /api/providers/{id}/messages    {model,...}       -> &lt;provider's HttpResponse, verbatim&gt;
  * GET    /api/routing/catalog                            -> 200 <models.json>
  * GET    /api/routing/model-map          ?app=<app>       -> 200 {"tiers":[...],"map":{...}}
  * PUT    /api/routing/model-map          ?app=<app>       -> 200 {"ok":true,"warnings":[...]}
  *                                        {"map":{...}}
- * (app is optional; missing/blank -> the server's default routing profile, for back-compat)
+ * (app is REQUIRED -- routing is per-installed-proxy only, there is no default/built-in profile;
+ * a missing/blank/unknown ?app= 400s with "select a proxy for routing")
  * GET    /api/providers/{id}/config                       -> 200 {"groups":[...],"values":{...}}
  * PUT    /api/providers/{id}/config      {"values":{...}} -> 200 {"values":{...}}
  * POST   /api/providers/{id}/oauth/authorize              -> 200 {"authorizeUrl":..,"completion":..}
@@ -89,7 +93,9 @@ import java.util.function.Supplier;
  * {@code ?app=} in {@code /api/routing/model-map} against an INSTALLED PROXY (rather than the
  * previously hardcoded per-app table), additionally require {@link ProxySource}/{@link
  * ProxyRegistryHolder} (the full constructor); without them those three routes 404 and an
- * {@code ?app=} query 400s with "unknown proxy: ...".
+ * {@code ?app=} query 400s with "unknown proxy: ...". {@code POST /api/providers/{id}/messages}
+ * (console chat = a DIRECT provider call, no router) additionally requires a {@link MessagesAdmin}
+ * (the 15-arg constructor); without one that route 404s.
  */
 public final class ManagementApi implements HttpHandler {
 
@@ -107,6 +113,7 @@ public final class ManagementApi implements HttpHandler {
     private final ProxySource proxySource;
     private final ProxyRegistryHolder proxyHolder;
     private final Path proxiesDir;
+    private final MessagesAdmin messages;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -185,16 +192,32 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: additionally adds the proxy install/available/uninstall surface backed by
-     * {@code proxySource}/{@code proxyHolder} (jars land in {@code proxiesDir}), and makes {@code
-     * ?app=} on {@code /api/routing/model-map} resolve against an installed proxy's {@link
-     * RoutingProfile} via {@code proxyHolder.profileFor} instead of a hardcoded per-app table.
+     * Adds the proxy install/available/uninstall surface backed by {@code proxySource}/{@code
+     * proxyHolder} (jars land in {@code proxiesDir}), and makes {@code ?app=} on {@code
+     * /api/routing/model-map} resolve against an installed proxy's {@link RoutingProfile} via
+     * {@code proxyHolder.profileFor} instead of a hardcoded per-app table. No {@link MessagesAdmin}
+     * — {@code /api/providers/{id}/messages} 404s (see the full 15-arg constructor for the full
+     * wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
                           ProxyAdmin proxy, ProxySource proxySource, ProxyRegistryHolder proxyHolder,
                           Path proxiesDir) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, config, oauth,
+                proxy, proxySource, proxyHolder, proxiesDir, null);
+    }
+
+    /**
+     * Full constructor: additionally adds the direct-provider-chat surface ({@code POST
+     * /api/providers/{id}/messages}) backed by {@code messages} — this is how the console reaches a
+     * provider for chat: a DIRECT {@code MessagesAdmin.send} call, never through a router.
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
+                          ProxyAdmin proxy, ProxySource proxySource, ProxyRegistryHolder proxyHolder,
+                          Path proxiesDir, MessagesAdmin messages) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -208,6 +231,7 @@ public final class ManagementApi implements HttpHandler {
         this.proxy = proxy;
         this.proxySource = proxySource;
         this.proxyHolder = proxyHolder;
+        this.messages = messages;
         this.proxiesDir = proxiesDir;
     }
 
@@ -302,6 +326,11 @@ public final class ManagementApi implements HttpHandler {
         if ("PUT".equals(method) && seg.length == 4
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "config".equals(seg[3])) {
             handlePutConfig(exchange, decode(seg[2]));
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "messages".equals(seg[3])) {
+            handleMessages(exchange, decode(seg[2]));
             return;
         }
         if ("POST".equals(method) && seg.length == 5
@@ -520,7 +549,13 @@ public final class ManagementApi implements HttpHandler {
         }
         try {
             RoutingProfile p = profileFromQuery(exchange);
-            respondJson(exchange, 200, p == null ? routing.modelMapView() : routing.modelMapView(p));
+            if (p == null) {
+                Map<String, Object> error = new LinkedHashMap<>();
+                error.put("error", "select a proxy for routing");
+                respondJson(exchange, 400, error);
+                return;
+            }
+            respondJson(exchange, 200, routing.modelMapView(p));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
@@ -535,6 +570,12 @@ public final class ManagementApi implements HttpHandler {
         }
         try {
             RoutingProfile p = profileFromQuery(exchange);
+            if (p == null) {
+                Map<String, Object> error = new LinkedHashMap<>();
+                error.put("error", "select a proxy for routing");
+                respondJson(exchange, 400, error);
+                return;
+            }
             Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
             Object mapObj = body != null ? body.get("map") : null;
             if (!(mapObj instanceof Map)) {
@@ -542,7 +583,7 @@ public final class ManagementApi implements HttpHandler {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> map = (Map<String, Object>) mapObj;
-            respondJson(exchange, 200, p == null ? routing.putModelMap(map) : routing.putModelMap(p, map));
+            respondJson(exchange, 200, routing.putModelMap(p, map));
         } catch (IllegalArgumentException e) {
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
@@ -550,10 +591,12 @@ public final class ManagementApi implements HttpHandler {
         }
     }
 
-    // A missing/blank ?app= keeps existing behavior (the server's default routing profile); a
-    // named app resolves against an INSTALLED PROXY's own RoutingProfile (proxyHolder.profileFor)
-    // rather than a hardcoded per-app table -- an app with no installed proxy (or no proxyHolder
-    // wired in at all) throws, which routes to the 400 path.
+    // A missing/blank ?app= resolves to null -- there is no default/built-in routing profile
+    // anymore (routing is per-installed-proxy only), so the caller must 400 "select a proxy for
+    // routing" rather than falling back to one. A named app resolves against an INSTALLED PROXY's
+    // own RoutingProfile (proxyHolder.profileFor) rather than a hardcoded per-app table -- an app
+    // with no installed proxy (or no proxyHolder wired in at all) throws, which routes to the 400
+    // path with "unknown proxy: ...".
     private RoutingProfile profileFromQuery(HttpExchange exchange) {
         String app = queryParam(exchange, "app");
         if (app == null || app.isEmpty()) return null;
@@ -627,6 +670,20 @@ public final class ManagementApi implements HttpHandler {
             error.put("error", e.getMessage());
             respondJson(exchange, 400, error);
         }
+    }
+
+    // Console chat: a DIRECT provider call (MessagesAdmin.send), never through a router. The
+    // provider's HttpResponse is written back VERBATIM (status/headers/body) -- unlike every other
+    // route here it is NOT a {...} admin-result wrapped via respondJson, because an
+    // Anthropic-messages response (or the provider's own error shape/headers) already IS the wire
+    // body.
+    private void handleMessages(HttpExchange exchange, String providerId) throws IOException {
+        if (messages == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        String body = readBody(exchange.getRequestBody());
+        writeRaw(exchange, messages.send(providerId, body));
     }
 
     private void handleOAuthAuthorize(HttpExchange exchange, String providerId) throws IOException {
@@ -831,5 +888,25 @@ public final class ManagementApi implements HttpHandler {
     private void respondNoBody(HttpExchange exchange, int status) throws IOException {
         exchange.sendResponseHeaders(status, -1);
         exchange.close();
+    }
+
+    // Writes a provider's HttpResponse back VERBATIM: status, every header (content-length is
+    // recomputed from the actual byte count, never copied), and body -- mirrors
+    // ExampleServer/ProxyServer's own writeResponse, since this is the one route whose response
+    // body is not a JSON map this class built itself.
+    private void writeRaw(HttpExchange exchange, HttpResponse resp) throws IOException {
+        if (resp.headers != null) {
+            for (Map.Entry<String, String> e : resp.headers.entrySet()) {
+                if (e.getKey() != null && e.getValue() != null
+                        && !"content-length".equalsIgnoreCase(e.getKey())) {
+                    exchange.getResponseHeaders().set(e.getKey(), e.getValue());
+                }
+            }
+        }
+        byte[] body = (resp.body != null ? resp.body : "").getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(resp.status, body.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
+        }
     }
 }

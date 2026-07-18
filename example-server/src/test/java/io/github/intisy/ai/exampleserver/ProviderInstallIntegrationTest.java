@@ -1,13 +1,13 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
@@ -39,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Drives the on-demand install API end to end with a {@link FakeProviderSource} (no network):
  * boot with an EMPTY providers dir (0 providers loaded), confirm {@code /api/providers/available}
  * reports the fake entry as not installed, install it, then confirm the live registry refreshed
- * without a restart -- {@code /api/providers} now lists it and {@code /v1/messages} routes to it.
+ * without a restart -- {@code /api/providers} now lists it and a DIRECT {@code POST
+ * /api/providers/echo/messages} call reaches it (console chat never goes through a router).
  */
 class ProviderInstallIntegrationTest {
 
@@ -67,15 +68,12 @@ class ProviderInstallIntegrationTest {
 
         String stagedDir = System.getProperty("exampleserver.providersDir");
         ProviderSource fakeSource = new FakeProviderSource(Path.of(stagedDir));
+        MessagesAdmin messages = new MessagesAdmin(store, json, holder, ai.logger());
 
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json,
-                fakeSource, providersDir, holder);
+                fakeSource, providersDir, holder, null, null, null, null, null, null, null, null, messages);
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach
@@ -124,10 +122,12 @@ class ProviderInstallIntegrationTest {
         assertTrue(afterAvailable.body.contains("\"installed\":true") || afterAvailable.body.contains("\"installed\": true"),
                 afterAvailable.body);
 
+        // Console chat is a DIRECT provider call now, never a router match -- POST straight to the
+        // just-installed provider's own /api/providers/{id}/messages.
         String body = "{\"model\":\"claude-haiku-4\",\"messages\":[]}";
-        Response messages = post("/v1/messages", body);
-        assertEquals(200, messages.status, messages.body);
-        assertTrue(messages.body.contains("Echo provider handled your request"), messages.body);
+        Response chat = post("/api/providers/echo/messages", body);
+        assertEquals(200, chat.status, chat.body);
+        assertTrue(chat.body.contains("Echo provider handled your request"), chat.body);
     }
 
     @Test

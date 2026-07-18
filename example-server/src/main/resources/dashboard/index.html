@@ -852,7 +852,7 @@
   var routingCatalog = {}; // provider -> {models:{id:{name,..}}, ranking:[..]}
   var routingTiers = [];
   var routingMap = {};     // tier -> [{provider,model},..] -- the editable working copy
-  var selectedProxyApp = null; // null/"" = server's default profile; else the selected proxy's app id
+  var selectedProxyApp = null; // null until a proxy row is clicked; else the selected proxy's app id
 
   // A stored slot is either a single {provider,model} object (legacy) or an ordered chain
   // (array of them); normalize both shapes to an array so the UI only ever deals with one.
@@ -873,11 +873,10 @@
   }
 
   // Builds the "?app=..." query suffix for /api/routing/model-map calls from the currently
-  // selected proxy row; null/"" (the Server row) means the default profile, so no suffix is
-  // sent (back-compat).
+  // selected INSTALLED proxy row -- routing is per-proxy only, so this is only ever called once a
+  // real proxy is selected (selectProxy is never wired to a default/"Server" row anymore).
   function routingAppSuffix() {
-    var app = selectedProxyApp;
-    return app ? ("?app=" + encodeURIComponent(app)) : "";
+    return selectedProxyApp ? ("?app=" + encodeURIComponent(selectedProxyApp)) : "";
   }
 
   function loadRouting() {
@@ -1191,21 +1190,15 @@
     });
   }
 
-  // Renders the Server row first (carries the "" / default-profile routing scope, no port or
-  // start/stop controls since it's the running example server itself), then one row per merged
-  // entry: installed rows get port/save/start-stop/uninstall and are always selectable -- a
-  // routable proxy (row.routing === true) opens the tier editor, a passthrough proxy (row.routing
-  // === false, e.g. opencode) opens a read-only model catalog instead; available rows get an
-  // Install button.
+  // Renders one row per merged entry: installed rows get port/save/start-stop/uninstall and are
+  // always selectable -- a routable proxy (row.routing === true) opens the tier editor, a
+  // passthrough proxy (row.routing === false, e.g. opencode) opens a read-only model catalog
+  // instead; available rows get an Install button. There is no "Server" row (the built-in console
+  // has no router of its own -- it reaches providers directly) -- routing is per-INSTALLED-PROXY
+  // only.
   function renderProxies(rows) {
     var body = document.getElementById("proxies-body");
     body.innerHTML = "";
-
-    var serverLine = el("div", "proxy-row selectable");
-    serverLine.dataset.app = "";
-    serverLine.appendChild(el("span", "proxy-app", "Server (this example server)"));
-    serverLine.addEventListener("click", function () { selectProxy(""); });
-    body.appendChild(serverLine);
 
     rows.forEach(function (row) {
       body.appendChild(row.kind === "installed" ? buildInstalledProxyRow(row) : buildAvailableProxyRow(row));
@@ -1314,17 +1307,14 @@
   // passthrough proxy's read-only model catalog (false); the Refresh button branches on it.
   var selectedProxyRouting = true;
 
-  // Opens the settings panel for the given proxy id ("" = the Server/default profile). A
-  // routing === false proxy (passthrough, e.g. opencode) gets the read-only catalog view instead
-  // of the tier editor -- there is nothing to route since it exposes every model as-is.
+  // Opens the settings panel for the given INSTALLED proxy id. A routing === false proxy
+  // (passthrough, e.g. opencode) gets the read-only catalog view instead of the tier editor --
+  // there is nothing to route since it exposes every model as-is.
   function selectProxy(app) {
     selectedProxyApp = app;
-    var label = app || "Server (this example server)";
-    var routing = true;
-    if (app) {
-      var match = installedProxies.filter(function (p) { return p.id === app; })[0];
-      routing = !(match && match.routing === false);
-    }
+    var label = app;
+    var match = installedProxies.filter(function (p) { return p.id === app; })[0];
+    var routing = !(match && match.routing === false);
     selectedProxyRouting = routing;
     document.getElementById("proxy-settings-title").textContent = (routing ? "Routing — " : "Passthrough — ") + label;
     document.getElementById("proxy-settings").style.display = "";
@@ -1877,24 +1867,38 @@
     }).catch(accountActionFailed);
   }
 
-  // -- chat --
+  // -- chat: console = DIRECT provider access, never through a router --
 
+  // Sources the chat model dropdown from the routing catalog (provider-keyed
+  // {provider:{models:{id:{name}},ranking:[...]}}) instead of a router's /v1/models -- the console
+  // has no router of its own. Each option's value is the model id and `dataset.provider` records
+  // which provider serves it, since sendChat posts straight to that provider's own
+  // /api/providers/{id}/messages.
   function loadModels() {
     var select = document.getElementById("model-select");
-    return jsonFetch("/v1/models").then(function (payload) {
-      var models = (payload && payload.data) || [];
+    return jsonFetch("/api/routing/catalog").then(function (catalog) {
       var previous = select.value;
       select.innerHTML = "";
-      if (!models.length) {
+      var any = false;
+      Object.keys(catalog || {}).forEach(function (providerId) {
+        var entry = catalog[providerId] || {};
+        var models = entry.models || {};
+        var ranking = entry.ranking || Object.keys(models);
+        ranking.forEach(function (modelId) {
+          var model = models[modelId] || {};
+          var opt = el("option", null, providerId + " / " + (model.name || modelId));
+          opt.value = modelId;
+          opt.dataset.provider = providerId;
+          select.appendChild(opt);
+          any = true;
+        });
+      });
+      if (!any) {
         select.appendChild(el("option", null, "no models available")).value = "";
         return;
       }
-      models.forEach(function (m) {
-        var opt = el("option", null, m.id);
-        opt.value = m.id;
-        select.appendChild(opt);
-      });
-      if (previous && models.some(function (m) { return m.id === previous; })) {
+      var stillPresent = Array.prototype.some.call(select.options, function (o) { return o.value === previous; });
+      if (previous && stillPresent) {
         select.value = previous;
       }
     }).catch(function (err) {
@@ -1924,9 +1928,11 @@
     var sendButton = document.getElementById("send-button");
     var status = document.getElementById("chat-status");
 
+    var selectedOption = modelSelect.options[modelSelect.selectedIndex];
     var model = modelSelect.value;
+    var provider = selectedOption ? selectedOption.dataset.provider : null;
     var prompt = promptInput.value.trim();
-    if (!model) { status.textContent = "Select a model first."; return; }
+    if (!model || !provider) { status.textContent = "Select a model first."; return; }
     if (!prompt) { status.textContent = "Enter a prompt first."; return; }
 
     status.textContent = "";
@@ -1936,7 +1942,8 @@
     sendButton.textContent = "…";
     var pendingBubble = appendBubble("assistant", "…", "pending");
 
-    jsonFetch("/v1/messages", {
+    // Console chat = a DIRECT call to the selected model's own provider, never through a router.
+    jsonFetch("/api/providers/" + encodeURIComponent(provider) + "/messages", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

@@ -1,9 +1,5 @@
 package io.github.intisy.ai.exampleserver;
 
-import io.github.intisy.ai.jvm.AiJava;
-import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,31 +15,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Boots the full {@link ExampleServer} (no {@code /api} handler needed for this check) and drives
- *  {@code GET /} over loopback: it must serve the self-contained dashboard HTML, not the router. */
+/** Boots the built-in {@link ExampleServer} (no {@code /api} handler needed for these checks, and
+ *  no router/{@code /v1} at all -- see the class javadoc) and drives {@code GET /} over loopback:
+ *  it must serve the self-contained dashboard HTML. */
 class DashboardIntegrationTest {
 
-    private static final String CONFIG_FILE = "dashboard-routing.json";
-
-    private AiJava ai;
     private ExampleServer server;
 
     @BeforeEach
     void setUp() {
-        String providersDir = System.getProperty("exampleserver.providersDir");
-        assertTrue(providersDir != null && !providersDir.isEmpty(),
-                "exampleserver.providersDir must be set by the Gradle test task");
-        ai = AiJava.builder().storage(Storage.memory()).providersDir(Paths.get(providersDir)).build();
-        Store store = ai.store();
-        ServerSeeds.seedEcho(store, ai.jsonCodec(), CONFIG_FILE);
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        server = ExampleServer.start(ai, profile, 0); // ephemeral port
+        server = ExampleServer.start(0, null); // ephemeral port; dashboard + healthz only
     }
 
     @AfterEach
-    void tearDown() throws IOException {
+    void tearDown() {
         if (server != null) server.stop();
-        if (ai != null) ai.close();
     }
 
     @Test
@@ -62,14 +48,16 @@ class DashboardIntegrationTest {
     }
 
     @Test
-    void routedPathsStillWorkAlongsideDashboard() throws IOException {
-        Response models = get("/v1/models");
-        assertEquals(200, models.status);
-        assertTrue(models.body.contains("m-echo-haiku"), models.body);
-
+    void healthzWorksAlongsideDashboardAndBuiltInV1IsGone() throws IOException {
         Response health = get("/healthz");
         assertEquals(200, health.status);
         assertTrue(health.body.contains("ok"), health.body);
+
+        // ExampleServer carries no router/`/v1` of its own anymore (console chat is a DIRECT
+        // provider call via /api/providers/{id}/messages) -- both must 404, same as any other
+        // unknown path under the dashboard's "/" context.
+        assertEquals(404, get("/v1/models").status);
+        assertEquals(404, get("/v1/messages").status);
     }
 
     @Test
@@ -209,6 +197,22 @@ class DashboardIntegrationTest {
         String html = get("/").body;
         assertTrue(html.contains("CHAT_MAX_TOKENS"), "CHAT_MAX_TOKENS constant missing");
         assertTrue(html.contains("max_tokens: CHAT_MAX_TOKENS"), "send payload must include max_tokens");
+    }
+
+    // Console chat = a DIRECT provider call, never a router match: the model dropdown must source
+    // from the routing catalog (provider-keyed) rather than a router's /v1/models, and sendChat
+    // must post straight to the selected option's own provider.
+    @Test
+    void chatModelDropdownIsCatalogSourcedAndSendsDirectlyToProvider() throws IOException {
+        String html = get("/").body;
+        assertFalse(html.contains("jsonFetch(\"/v1/models\")"), "loadModels must not call the removed /v1/models");
+        assertTrue(html.contains("jsonFetch(\"/api/routing/catalog\")"),
+                "loadModels must source the chat dropdown from /api/routing/catalog");
+        assertTrue(html.contains("opt.dataset.provider = providerId"),
+                "each model option must record its own provider");
+        assertFalse(html.contains("jsonFetch(\"/v1/messages\""), "sendChat must not post to the removed /v1/messages");
+        assertTrue(html.contains("\"/api/providers/\" + encodeURIComponent(provider) + \"/messages\""),
+                "sendChat must POST straight to the selected model's own provider");
     }
 
     @Test

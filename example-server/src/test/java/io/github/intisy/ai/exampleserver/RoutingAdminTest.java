@@ -40,6 +40,7 @@ class RoutingAdminTest {
     private JsonCodec json;
     private ProviderRegistryHolder holder;
     private RoutingAdmin routing;
+    private RoutingProfile profile;
 
     @BeforeEach
     void setUp(@TempDir Path providersDir) throws IOException {
@@ -52,8 +53,8 @@ class RoutingAdminTest {
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
         assertTrue(holder.listProviderIds().contains("ratelimited"), holder.listProviderIds().toString());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        routing = new RoutingAdmin(store, json, profile, holder, msg -> { });
+        profile = ServerProfile.echoTiers(CONFIG_FILE);
+        routing = new RoutingAdmin(store, json, holder, msg -> { });
     }
 
     @AfterEach
@@ -109,7 +110,7 @@ class RoutingAdminTest {
 
     @Test
     void modelMapViewReturnsTiersAndSeededMap() {
-        Map<String, Object> view = routing.modelMapView();
+        Map<String, Object> view = routing.modelMapView(profile);
         assertEquals(Arrays.asList("opus", "sonnet", "haiku"), view.get("tiers"));
 
         @SuppressWarnings("unchecked")
@@ -143,7 +144,7 @@ class RoutingAdminTest {
         // surface as a pre-configurable slot.
         profile.tierOrder = Arrays.asList("opus", "sonnet", "haiku", "fable");
 
-        RoutingAdmin unionRouting = new RoutingAdmin(unionStore, unionJson, profile, holder, msg -> { });
+        RoutingAdmin unionRouting = new RoutingAdmin(unionStore, unionJson, holder, msg -> { });
         Map<String, Object> view = unionRouting.modelMapView(profile);
 
         assertEquals(Arrays.asList("opus", "sonnet", "haiku", "fable", "extra"), view.get("tiers"));
@@ -164,11 +165,10 @@ class RoutingAdminTest {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("haiku", Collections.singletonList(assignment("echo", "m-echo-haiku")));
 
-        Map<String, Object> result = routing.putModelMap(map);
+        Map<String, Object> result = routing.putModelMap(profile, map);
         assertEquals(Boolean.TRUE, result.get("ok"));
         assertTrue(((List<?>) result.get("warnings")).isEmpty());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
         Map<String, Object> reread = ModelMap.readModelMap(store, json, profile);
         assertTrue(reread.containsKey("haiku"));
     }
@@ -178,7 +178,7 @@ class RoutingAdminTest {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("haiku", Collections.singletonList(assignment("nope", "m-x")));
 
-        assertThrows(IllegalArgumentException.class, () -> routing.putModelMap(map));
+        assertThrows(IllegalArgumentException.class, () -> routing.putModelMap(profile, map));
     }
 
     @Test
@@ -186,7 +186,7 @@ class RoutingAdminTest {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("haiku", Collections.singletonList(assignment("echo", "m-does-not-exist")));
 
-        Map<String, Object> result = routing.putModelMap(map);
+        Map<String, Object> result = routing.putModelMap(profile, map);
         assertEquals(Boolean.TRUE, result.get("ok"));
         @SuppressWarnings("unchecked")
         List<String> warnings = (List<String>) result.get("warnings");

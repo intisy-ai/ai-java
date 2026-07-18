@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
+import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
@@ -18,7 +19,6 @@ import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 
@@ -32,18 +32,22 @@ import java.nio.file.Paths;
  * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task) — startup only ever
  * reads whatever's already on disk, never the network. That registry is held in a
  * {@link ProviderRegistryHolder} so it can be refreshed after a provider is installed on demand
- * (a later task's job) without restarting the process: the router is wired with lambdas that
- * read through the holder, so every request sees the current registry. The port comes from
- * {@code -Dexampleserver.port} (default 8787). On top of routing, this wires the {@code /api}
- * management endpoints and the {@code /} dashboard. The running server starts with NO fake/demo
- * providers or accounts seeded — {@code -Dexampleserver.providersDir} points at an empty directory
- * by default (see {@code build.gradle}'s {@code run} task), and every real provider/account comes
- * only from an on-demand install via the API/dashboard (backed by {@link GithubOrgProviderSource}).
- * Tests that need the echo fixture seed it themselves via {@code ServerSeeds.seedEcho}.
+ * without restarting the process. This server has NO router/{@code /v1} of its own: the console
+ * (its own dashboard, running in this SAME JVM) reaches an installed provider by a DIRECT Java
+ * call through the admin classes wired below ({@code MessagesAdmin} for chat, {@code
+ * ConfigAdmin}/{@code QuotaAdmin}/{@code OAuthAdmin} for the rest) — all resolved through the
+ * holder, so every request sees the current registry. Routing-over-HTTP for OUT-OF-PROCESS apps
+ * (Claude Code, OpenCode) is a separate concern: each proxy {@code proxyManager} starts runs its
+ * OWN {@link io.github.intisy.ai.exampleserver.ProxyServer} on its own port and serves that app's
+ * {@code /v1/messages} there. The port comes from {@code -Dexampleserver.port} (default 8787). On
+ * top of this, the server wires the {@code /api} management endpoints and the {@code /} dashboard.
+ * The running server starts with NO fake/demo providers or accounts seeded —
+ * {@code -Dexampleserver.providersDir} points at an empty directory by default (see {@code
+ * build.gradle}'s {@code run} task), and every real provider/account comes only from an on-demand
+ * install via the API/dashboard (backed by {@link GithubOrgProviderSource}). Tests that need the
+ * echo fixture seed it themselves via {@code ServerSeeds.seedEcho}.
  */
 public final class ServerMain {
-
-    private static final String CONFIG_FILE = "example-server-routing.json";
 
     private ServerMain() {
     }
@@ -64,16 +68,12 @@ public final class ServerMain {
                 .backend(backend)
                 .build()) {
 
-            RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-
-            AiJava.WiredRouter router = ai.router(profile,
-                    id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-            RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), profile, holder, ai.logger());
+            RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             QuotaAdmin quota = new QuotaAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ConfigAdmin config = new ConfigAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             OAuthAdmin oauth = new OAuthAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger(), admin);
+            MessagesAdmin messages = new MessagesAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ProxyManager proxyManager = new ProxyManager(ai, holder, proxyHolder, ai.store(), ai.jsonCodec(), ai.logger());
             ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
             // ONE shared org scan feeds both sources so the org is only ever scanned once.
@@ -82,8 +82,12 @@ public final class ServerMain {
             GithubOrgProxySource proxySource = new GithubOrgProxySource(orgScan);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
                     providerSource, providersDir, holder, routing, quota, config, oauth,
-                    proxyAdmin, proxySource, proxyHolder, proxiesDir);
-            ExampleServer server = ExampleServer.start(router, port, api);
+                    proxyAdmin, proxySource, proxyHolder, proxiesDir, messages);
+            // No router/`/v1` here: the console (this server's own dashboard) reaches providers
+            // DIRECTLY (see ManagementApi's /api/providers/{id}/messages, config, quota, oauth
+            // routes). Routing-over-HTTP for out-of-process apps is the per-proxy ProxyServer's job
+            // (each installed proxy started by proxyManager serves its own /v1/messages).
+            ExampleServer server = ExampleServer.start(port, api);
             proxyManager.startEnabledOnBoot();
 
             System.out.println("example-server listening on http://127.0.0.1:" + server.port());
@@ -93,9 +97,10 @@ public final class ServerMain {
             System.out.println("  POST /api/providers/install      {\"name\":\"<entry name>\"}");
             System.out.println("  POST /api/providers/{id}/models/discover");
             System.out.println("  POST /api/providers/{id}/quota/refresh");
+            System.out.println("  POST /api/providers/{id}/messages  {\"model\":\"<model-id>\",\"max_tokens\":1024,\"messages\":[...]}");
             System.out.println("  GET  /api/routing/catalog");
-            System.out.println("  GET  /api/routing/model-map");
-            System.out.println("  PUT  /api/routing/model-map      {\"map\":{...}}");
+            System.out.println("  GET  /api/routing/model-map      ?app=<installed proxy id>");
+            System.out.println("  PUT  /api/routing/model-map      ?app=<installed proxy id>  {\"map\":{...}}");
             System.out.println("  GET  /api/providers/{id}/config");
             System.out.println("  PUT  /api/providers/{id}/config  {\"values\":{...}}");
             System.out.println("  POST /api/providers/{id}/oauth/authorize");
@@ -105,9 +110,7 @@ public final class ServerMain {
             System.out.println("  POST /api/proxies/install         {\"name\":\"<entry name>\"}");
             System.out.println("  DELETE /api/proxies/{id}");
             System.out.println("  PUT  /api/proxies/{id}          {\"port\":N}");
-            System.out.println("  POST /api/proxies/{id}/start | /stop");
-            System.out.println("  POST /v1/messages  {\"model\":\"<model-id>\",\"max_tokens\":1024,\"messages\":[...]}");
-            System.out.println("  GET  /v1/models");
+            System.out.println("  POST /api/proxies/{id}/start | /stop  (each started proxy serves its own /v1/messages)");
             System.out.println("  GET  /healthz");
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> { proxyManager.stopAll(); server.stop(); }));

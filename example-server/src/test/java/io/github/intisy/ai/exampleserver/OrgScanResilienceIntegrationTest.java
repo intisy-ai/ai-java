@@ -104,7 +104,6 @@ class OrgScanResilienceIntegrationTest {
         AccountStore accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
         proxyManager = new ProxyManager(ai, holder, proxyHolder, store, json, ai.logger());
         ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
 
@@ -116,9 +115,7 @@ class OrgScanResilienceIntegrationTest {
                 null, null, null, null,
                 proxyAdmin, proxySource, proxyHolder, proxiesDir);
 
-        AiJava.WiredRouter router = ai.router(profile,
-                id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
-        server = ExampleServer.start(router, 0, api); // ephemeral port
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach

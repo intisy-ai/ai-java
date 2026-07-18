@@ -21,25 +21,25 @@ import java.util.Map;
 /**
  * UI-safe routing administration: discovers an installed provider's live model catalog into the
  * shared {@code models.json} cache, and reads/writes the tier -&gt; {provider,model} chain map
- * stored under the {@link RoutingProfile#configFile}. Mirrors {@link AccountAdmin}'s shape
- * (encapsulates the {@link Store}; {@link io.github.intisy.ai.exampleserver.api.ManagementApi}
- * never sees it directly).
+ * stored under a caller-supplied {@link RoutingProfile#configFile}. Routing is per-INSTALLED-PROXY
+ * only (there is no built-in default profile -- the {@code ExampleServer} console reaches providers
+ * directly, never through a router; see the per-proxy {@code ProxyServer}), so every model-map
+ * method here takes its {@link RoutingProfile} as an explicit argument rather than a ctor default.
+ * Mirrors {@link AccountAdmin}'s shape (encapsulates the {@link Store}; {@link
+ * io.github.intisy.ai.exampleserver.api.ManagementApi} never sees it directly).
  */
 public class RoutingAdmin {
     private static final String CATALOG_KEY = "models.json";
 
     private final Store store;
     private final JsonCodec json;
-    private final RoutingProfile profile;
     private final ProviderRegistryHolder holder;
     private final Logger log;
     private final String configDir;
 
-    public RoutingAdmin(Store store, JsonCodec json, RoutingProfile profile,
-                         ProviderRegistryHolder holder, Logger log) {
+    public RoutingAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.store = store;
         this.json = json;
-        this.profile = profile;
         this.holder = holder;
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
@@ -141,11 +141,6 @@ public class RoutingAdmin {
         return union;
     }
 
-    /** {@code {tiers, map}} for the ctor's default profile (back-compat). */
-    public Map<String, Object> modelMapView() {
-        return modelMapView(this.profile);
-    }
-
     /**
      * Validates and persists a full tier -&gt; chain map into the given profile's config file.
      * Every {@code provider} must be one of {@link ProviderRegistryHolder#listProviderIds()}
@@ -178,11 +173,6 @@ public class RoutingAdmin {
         result.put("ok", true);
         result.put("warnings", warnings);
         return result;
-    }
-
-    /** Validates + persists a full tier-&gt;chain map for the ctor's default profile (back-compat). */
-    public Map<String, Object> putModelMap(Map<String, Object> map) {
-        return putModelMap(this.profile, map);
     }
 
     // A stored slot is either a single {provider,model} object (legacy) or an ordered chain

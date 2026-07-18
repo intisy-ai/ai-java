@@ -1,17 +1,20 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
+import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
+import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
+import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.model.Account;
-import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,14 +22,20 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** Boots {@link ExampleServer} with the {@code /api} management context wired in and drives it
- *  over loopback: provider listing, account listing, enable/disable, and removal. */
+ *  over loopback: provider listing, account listing, enable/disable, removal, and (via a staged
+ *  real echo provider jar + {@link MessagesAdmin}) the direct-chat route. */
 class ManagementApiIntegrationTest {
 
     private static final String CONFIG_FILE = "management-api-routing.json";
@@ -34,9 +43,12 @@ class ManagementApiIntegrationTest {
     private AiJava ai;
     private ExampleServer server;
     private AccountStore accountStore;
+    private ProviderRegistryHolder holder;
 
     @BeforeEach
-    void setUp() {
+    void setUp(@TempDir Path providersDir) throws IOException {
+        stageProviderJar(providersDir);
+
         ai = AiJava.builder().storage(Storage.memory()).build();
         Store store = ai.store();
         JsonCodec json = ai.jsonCodec();
@@ -46,17 +58,34 @@ class ManagementApiIntegrationTest {
         accountStore.add("echo", account("acc1", "acc1@example.com"));
         accountStore.add("echo", account("acc2", "acc2@example.com"));
 
-        AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
-        ManagementApi api = new ManagementApi(() -> Arrays.asList("echo"), admin, json);
+        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
 
-        RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
-        server = ExampleServer.start(ai, profile, 0, api); // ephemeral port
+        AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
+        MessagesAdmin messages = new MessagesAdmin(store, json, holder, ai.logger());
+        ManagementApi api = new ManagementApi(() -> Arrays.asList("echo"), admin, json,
+                null, null, holder, null, null, null, null, null, null, null, null, messages);
+
+        server = ExampleServer.start(0, api); // ephemeral port
     }
 
     @AfterEach
     void tearDown() throws IOException {
         if (server != null) server.stop();
+        if (holder != null && holder.get() != null) holder.get().close();
         if (ai != null) ai.close();
+    }
+
+    private static void stageProviderJar(Path targetDir) throws IOException {
+        String staged = System.getProperty("exampleserver.providersDir");
+        assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+            for (Path jar : stream) {
+                Files.copy(jar, targetDir.resolve(jar.getFileName()));
+                return;
+            }
+        }
+        fail("no staged provider jar found in " + staged);
     }
 
     private static Account account(String id, String email) {
@@ -142,6 +171,24 @@ class ManagementApiIntegrationTest {
         Response r = get("/api/nope");
         assertEquals(404, r.status);
         assertTrue(r.body.contains("not found"), r.body);
+    }
+
+    // -- direct chat: console = a DIRECT provider call, never a router match --
+
+    @Test
+    void postMessagesCallsProviderDirectlyAndWritesItsResponseVerbatim() throws IOException {
+        Response r = post("/api/providers/echo/messages", "{\"model\":\"m-echo-haiku\",\"messages\":[]}");
+        assertEquals(200, r.status, r.body);
+        assertTrue(r.body.contains("Echo provider handled your request"), r.body);
+        assertTrue(r.body.contains("m-echo-haiku"), r.body);
+    }
+
+    @Test
+    void postMessagesUnknownProviderIsAnthropicShaped404() throws IOException {
+        Response r = post("/api/providers/does-not-exist/messages", "{\"model\":\"x\",\"messages\":[]}");
+        assertEquals(404, r.status, r.body);
+        assertTrue(r.body.contains("\"type\":\"error\""), r.body);
+        assertTrue(r.body.contains("not_found"), r.body);
     }
 
     @Test
