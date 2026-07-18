@@ -45,7 +45,9 @@ public final class GithubOrgProxySource implements ProxySource {
 
     @Override
     public Path download(Entry entry, Path dir) throws IOException {
-        return scan.download(new GithubOrgScan.Asset(entry.name, entry.assetName, entry.downloadUrl, "proxy"), dir);
+        // ProxySource.Entry carries no version (update-detection is a provider-only feature for
+        // now) -- null here is a no-op for GithubOrgScan.download's version-sidecar write.
+        return scan.download(new GithubOrgScan.Asset(entry.name, entry.assetName, entry.downloadUrl, "proxy", null), dir);
     }
 
     private static Entry toEntry(GithubOrgScan.Asset asset) {

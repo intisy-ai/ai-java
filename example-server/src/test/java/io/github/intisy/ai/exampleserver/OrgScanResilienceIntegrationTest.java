@@ -224,7 +224,7 @@ class OrgScanResilienceIntegrationTest {
         @Override
         public Entry find(String name) {
             return INSTALL_PROVIDER_NAME.equals(name)
-                    ? new Entry(INSTALL_PROVIDER_NAME, PROVIDER_ASSET_NAME, "")
+                    ? new Entry(INSTALL_PROVIDER_NAME, PROVIDER_ASSET_NAME, "", "1.0.0")
                     : null;
         }
 

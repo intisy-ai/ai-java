@@ -9,6 +9,7 @@ import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
+import io.github.intisy.ai.exampleserver.discovery.InstalledVersions;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
@@ -41,9 +42,11 @@ import java.util.function.Supplier;
  *
  * <pre>
  * GET    /api/providers                                 -> [{"id":..,"accounts":&lt;int&gt;}]
- * GET    /api/providers/available                        -> [{"name":..,"assetName":..,"installed":bool}]
+ * GET    /api/providers/available                        -> [{"name":..,"assetName":..,"installed":bool,
+ *                                                             "version":..,"installedVersion":..,"updateAvailable":bool}]
  * POST   /api/providers/install         {"name":..}       -> 200 {"installed":true,"providers":[...]}
  * DELETE /api/providers/{id}                             -> 200 {"uninstalled":true,"providers":[...]} / 404
+ * POST   /api/providers/{id}/update                       -> 200 {"updated":true,"version":..,"providers":[...]} / 404
  * GET    /api/providers/{id}/accounts                    -> [AccountView...]
  * POST   /api/providers/{id}/accounts    {refresh,...}    -> 200 AccountView (seed from a pasted token)
  * POST   /api/providers/{id}/accounts/{accId}/enable     -> 204
@@ -275,6 +278,11 @@ public final class ManagementApi implements HttpHandler {
             handleUninstall(exchange, decode(seg[2]));
             return;
         }
+        if ("POST".equals(method) && seg.length == 4
+                && "api".equals(seg[0]) && "providers".equals(seg[1]) && "update".equals(seg[3])) {
+            handleUpdate(exchange, decode(seg[2]));
+            return;
+        }
         if ("GET".equals(method) && seg.length == 4
                 && "api".equals(seg[0]) && "providers".equals(seg[1]) && "accounts".equals(seg[3])) {
             handleListAccounts(exchange, decode(seg[2]));
@@ -411,9 +419,24 @@ public final class ManagementApi implements HttpHandler {
             boolean installed = Files.exists(providersDir.resolve(entry.assetName))
                     || installedIds.contains(entry.name);
             item.put("installed", installed);
+            item.put("version", entry.version);
+            String installedVersion = installed ? installedVersionFor(entry) : null;
+            item.put("installedVersion", installedVersion);
+            item.put("updateAvailable", InstalledVersions.updateAvailable(installed, installedVersion, entry.version));
             body.add(item);
         }
         respondJson(exchange, 200, body);
+    }
+
+    // The jar actually backing entry.name in the live registry is the authoritative source for
+    // "what's installed" (works even when the org asset was renamed, mirroring the installed-id
+    // fallback above); a plain providersDir.resolve(entry.assetName) is the fallback for a jar
+    // that exists on disk but never registered (or the registry hasn't been refreshed yet).
+    private String installedVersionFor(ProviderSource.Entry entry) {
+        Path jar = holder.jarFor(entry.name);
+        if (jar == null) jar = providersDir.resolve(entry.assetName);
+        if (!Files.exists(jar)) return null;
+        return InstalledVersions.read(jar);
     }
 
     private void handleInstall(HttpExchange exchange) throws IOException {
@@ -470,6 +493,59 @@ public final class ManagementApi implements HttpHandler {
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("uninstalled", true);
+        body.put("providers", holder.listProviderIds());
+        respondJson(exchange, 200, body);
+    }
+
+    /**
+     * Updates an installed provider to the latest org version: mirrors {@code handleUninstall}'s
+     * Windows-safe sequencing (see {@link ProviderRegistryHolder#update}) -- the current registry
+     * is closed BEFORE the new jar overwrites the old one, so a still-open {@code URLClassLoader}
+     * never causes a sharing-violation write failure on Windows. Accounts live in the {@code
+     * Store}, not the jar, so they are untouched. 404s when no install surface is wired in, when
+     * {@code providerId} isn't currently installed, or when no matching org entry can be resolved
+     * (e.g. the repo was deleted/renamed upstream).
+     */
+    private void handleUpdate(HttpExchange exchange, String providerId) throws IOException {
+        if (source == null || holder == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        if (!holder.listProviderIds().contains(providerId)) {
+            handleNotFound(exchange);
+            return;
+        }
+
+        // Same targeted-find-then-list-scan fallback as handleInstall, so an update still works
+        // even when the cached org-wide scan is rate-limited/empty.
+        ProviderSource.Entry match = source.find(providerId);
+        if (match == null) {
+            for (ProviderSource.Entry entry : source.list()) {
+                if (entry.name.equals(providerId)) {
+                    match = entry;
+                    break;
+                }
+            }
+        }
+        if (match == null) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "no update source found for provider: " + providerId);
+            respondJson(exchange, 404, body);
+            return;
+        }
+
+        try {
+            holder.update(source, match, providersDir);
+        } catch (IOException e) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("error", "update failed: " + e.getMessage());
+            respondJson(exchange, 502, body);
+            return;
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("updated", true);
+        body.put("version", match.version);
         body.put("providers", holder.listProviderIds());
         respondJson(exchange, 200, body);
     }

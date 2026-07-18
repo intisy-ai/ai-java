@@ -25,16 +25,19 @@ public interface ProviderSource {
     Path download(Entry entry, Path dir) throws IOException;
 
     /** One installable provider jar: a human-readable {@code name}, the {@code assetName} it will
-     *  be saved as, and the {@code downloadUrl} to fetch it from. */
+     *  be saved as, the {@code downloadUrl} to fetch it from, and the release's {@code version}
+     *  (leading {@code v} already stripped; {@code null} when the release carried no tag). */
     final class Entry {
         public final String name;
         public final String assetName;
         public final String downloadUrl;
+        public final String version;
 
-        public Entry(String name, String assetName, String downloadUrl) {
+        public Entry(String name, String assetName, String downloadUrl, String version) {
             this.name = name;
             this.assetName = assetName;
             this.downloadUrl = downloadUrl;
+            this.version = version;
         }
     }
 }

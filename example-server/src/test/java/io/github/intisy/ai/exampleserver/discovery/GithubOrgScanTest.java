@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,7 +40,18 @@ class GithubOrgScanTest {
     }
 
     private static String releaseJson(String... assetNames) {
-        StringBuilder sb = new StringBuilder("{\"assets\":[");
+        return releaseJsonWithTag(null, assetNames);
+    }
+
+    /** Same fixture shape as {@link #releaseJson}, plus a top-level {@code tag_name} -- the field
+     *  {@code GithubOrgScan} reads the release version from. {@code tagName} null omits the field
+     *  entirely (simulates a release with no tag, e.g. a draft). */
+    private static String releaseJsonWithTag(String tagName, String... assetNames) {
+        StringBuilder sb = new StringBuilder("{");
+        if (tagName != null) {
+            sb.append("\"tag_name\":\"").append(tagName).append("\",");
+        }
+        sb.append("\"assets\":[");
         for (int i = 0; i < assetNames.length; i++) {
             if (i > 0) sb.append(",");
             sb.append("{\"name\":\"").append(assetNames[i])
@@ -58,6 +70,8 @@ class GithubOrgScanTest {
         public Object parse(String json) {
             if (json.trim().startsWith("[")) return parseRepoList(json);
             Map<String, Object> release = new HashMap<>();
+            List<String> tags = extractField(json, "tag_name");
+            if (!tags.isEmpty()) release.put("tag_name", tags.get(0));
             release.put("assets", parseAssetList(json));
             return release;
         }
@@ -239,5 +253,36 @@ class GithubOrgScanTest {
         List<ProxySource.Entry> proxies = proxySource.list();
         assertEquals(1, proxies.size(), proxies.toString());
         assertEquals("claude-code-proxy-proxy.jar", proxies.get(0).assetName);
+    }
+
+    @Test
+    void tagNameBecomesNormalizedVersionOnAssetAndProviderEntry() {
+        FakeHttp http = new FakeHttp();
+        http.responses.put(REPOS_URL, reposJson("claude-code-auth"));
+        http.responses.put(releaseUrl("claude-code-auth"),
+                releaseJsonWithTag("v1.5.1", "claude-code-auth-provider.jar"));
+        AtomicLong clock = new AtomicLong(0);
+        GithubOrgScan scan = newScan(http, clock, null);
+
+        List<GithubOrgScan.Asset> assets = scan.scan();
+        assertEquals(1, assets.size(), assets.toString());
+        assertEquals("1.5.1", assets.get(0).version, "a leading v must be stripped");
+
+        ProviderSource.Entry entry = new GithubOrgProviderSource(scan).find("claude-code-auth");
+        assertNotNull(entry);
+        assertEquals("1.5.1", entry.version);
+    }
+
+    @Test
+    void releaseWithNoTagNameYieldsNullVersion() {
+        FakeHttp http = new FakeHttp();
+        http.responses.put(REPOS_URL, reposJson("claude-code-auth"));
+        http.responses.put(releaseUrl("claude-code-auth"), releaseJson("claude-code-auth-provider.jar"));
+        AtomicLong clock = new AtomicLong(0);
+        GithubOrgScan scan = newScan(http, clock, null);
+
+        List<GithubOrgScan.Asset> assets = scan.scan();
+        assertEquals(1, assets.size(), assets.toString());
+        assertNull(assets.get(0).version);
     }
 }

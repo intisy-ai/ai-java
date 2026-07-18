@@ -37,25 +37,31 @@ public final class GithubOrgScan {
     private static final int TIMEOUT_MS = 5000;
     private static final long CACHE_TTL_MS = 60_000L;
 
-    /** One classified release asset: {@code kind} is {@code "provider"} or {@code "proxy"}. */
+    /** One classified release asset: {@code kind} is {@code "provider"} or {@code "proxy"}.
+     *  {@code version} is the release's {@code tag_name} with a leading {@code v} stripped (e.g.
+     *  {@code "v1.5.1"} -> {@code "1.5.1"}), or {@code null} when the release carried no
+     *  {@code tag_name}. */
     public static final class Asset {
         public final String repoName;
         public final String assetName;
         public final String downloadUrl;
         public final String kind;
+        public final String version;
 
-        public Asset(String repoName, String assetName, String downloadUrl, String kind) {
+        public Asset(String repoName, String assetName, String downloadUrl, String kind, String version) {
             this.repoName = repoName;
             this.assetName = assetName;
             this.downloadUrl = downloadUrl;
             this.kind = kind;
+            this.version = version;
         }
 
         @Override
         public String toString() {
-            return "Asset{" + repoName + "/" + assetName + ", kind=" + kind + "}";
+            return "Asset{" + repoName + "/" + assetName + ", kind=" + kind + ", version=" + version + "}";
         }
     }
+
 
     /** HTTP seam: {@code bearerToken} is null/empty when no token is configured. */
     interface Http {
@@ -129,11 +135,14 @@ public final class GithubOrgScan {
     /**
      * Downloads {@code asset}'s jar into {@code dir}, replacing any existing file of the same
      * name. Resolves using only the file-name component of {@code asset.assetName} so a
-     * maliciously-named asset (e.g. {@code ../evil.jar}) can't escape {@code dir}.
+     * maliciously-named asset (e.g. {@code ../evil.jar}) can't escape {@code dir}. Also records
+     * {@code asset.version} in a {@code <jar>.version} sidecar file next to it (see {@link
+     * InstalledVersions}) -- a no-op when the release carried no {@code tag_name} (version null).
      */
     public Path download(Asset asset, Path dir) throws IOException {
         Path target = dir.resolve(java.nio.file.Paths.get(asset.assetName).getFileName().toString());
         downloadTo(asset.downloadUrl, target);
+        InstalledVersions.write(target, asset.version);
         return target;
     }
 
@@ -167,7 +176,10 @@ public final class GithubOrgScan {
             String releaseUrl = "https://api.github.com/repos/" + ORG + "/" + repoName + "/releases/latest";
             Object releaseJson = json.parse(httpGet(releaseUrl));
             if (!(releaseJson instanceof Map)) return assets;
-            Object assetsObj = ((Map<?, ?>) releaseJson).get("assets");
+            Map<?, ?> release = (Map<?, ?>) releaseJson;
+            Object tagObj = release.get("tag_name");
+            String version = tagObj instanceof String ? InstalledVersions.normalize((String) tagObj) : null;
+            Object assetsObj = release.get("assets");
             if (!(assetsObj instanceof List)) return assets;
 
             for (Object assetObj : (List<?>) assetsObj) {
@@ -180,7 +192,7 @@ public final class GithubOrgScan {
                 String kind = classify(assetName);
                 if (kind == null) continue;
 
-                assets.add(new Asset(repoName, assetName, (String) urlObj, kind));
+                assets.add(new Asset(repoName, assetName, (String) urlObj, kind, version));
             }
         } catch (RuntimeException | IOException e) {
             System.err.println(LOG_PREFIX + "failed to list release for " + repoName + ": " + e.getMessage());

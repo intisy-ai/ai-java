@@ -40,6 +40,13 @@ public final class ProviderRegistryHolder {
         return current.get(id);
     }
 
+    /** The jar file that registers {@code providerId} in the CURRENT registry, or {@code null}
+     *  if no such provider is loaded. Lets a caller (e.g. {@code ManagementApi}) resolve an
+     *  installed provider's on-disk jar without knowing its asset-name convention. */
+    public Path jarFor(String providerId) {
+        return current.jarFor(providerId);
+    }
+
     /**
      * Rebuilds the registry from {@code providersDir} and swaps it into the volatile field. The
      * previous registry (and the {@link java.net.URLClassLoader} it holds open for its provider
@@ -81,5 +88,29 @@ public final class ProviderRegistryHolder {
         }
         refresh(providersDir);
         return true;
+    }
+
+    /**
+     * Updates an already-installed provider to {@code entry}'s latest jar: closes the CURRENT
+     * registry FIRST (same Windows-safe sequence as {@link #uninstall} -- {@code Files.write} on
+     * a jar still held open by a {@link java.net.URLClassLoader} fails with a sharing violation
+     * on Windows), downloads {@code entry}'s jar over the old one via {@code source} (which also
+     * rewrites the {@code .version} sidecar -- see {@link GithubOrgScan#download}), then rebuilds
+     * the registry. Accounts live in the {@code Store}, not the jar, so they are untouched by this
+     * -- only the provider's classes/jar are replaced. Returns the path written.
+     */
+    public synchronized Path update(ProviderSource source, ProviderSource.Entry entry, Path providersDir)
+            throws IOException {
+        try {
+            // Close the current registry FIRST so the URLClassLoader releases the old jar's file
+            // handle (on Windows, overwriting a still-open jar fails with a sharing violation).
+            current.close();
+        } catch (IOException e) {
+            // Best-effort: proceed to overwrite anyway -- a loader that fails to close cleanly
+            // still relinquishes its file handles on most platforms.
+        }
+        Path jar = source.download(entry, providersDir);
+        refresh(providersDir);
+        return jar;
     }
 }

@@ -237,8 +237,8 @@ class ProviderOrgInstallServeE2ETest {
         @Override
         public List<Entry> list() {
             return Arrays.asList(
-                    new Entry("claude", "claude-provider.jar", ""),
-                    new Entry("antigravity", "antigravity-provider.jar", ""));
+                    new Entry("claude", "claude-provider.jar", "", "1.0.0"),
+                    new Entry("antigravity", "antigravity-provider.jar", "", "1.0.0"));
         }
 
         @Override

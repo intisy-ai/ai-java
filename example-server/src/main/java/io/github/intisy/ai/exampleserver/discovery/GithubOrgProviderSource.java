@@ -47,10 +47,11 @@ public final class GithubOrgProviderSource implements ProviderSource {
 
     @Override
     public Path download(Entry entry, Path dir) throws IOException {
-        return scan.download(new GithubOrgScan.Asset(entry.name, entry.assetName, entry.downloadUrl, "provider"), dir);
+        return scan.download(
+                new GithubOrgScan.Asset(entry.name, entry.assetName, entry.downloadUrl, "provider", entry.version), dir);
     }
 
     private static Entry toEntry(GithubOrgScan.Asset asset) {
-        return new Entry(asset.repoName, asset.assetName, asset.downloadUrl);
+        return new Entry(asset.repoName, asset.assetName, asset.downloadUrl, asset.version);
     }
 }

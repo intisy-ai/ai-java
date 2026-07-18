@@ -203,8 +203,8 @@ class ProviderInstallIntegrationTest {
             // (DECISION-FLAG dedupe fix): its own assetName is never downloaded/present on disk,
             // so it only reports installed:true via the name-matches-an-installed-id branch.
             return Arrays.asList(
-                    new Entry("echo-demo", "echo-provider.jar", ""),
-                    new Entry("echo", "echo-renamed-asset.jar", ""));
+                    new Entry("echo-demo", "echo-provider.jar", "", "1.0.0"),
+                    new Entry("echo", "echo-renamed-asset.jar", "", "1.0.0"));
         }
 
         @Override
