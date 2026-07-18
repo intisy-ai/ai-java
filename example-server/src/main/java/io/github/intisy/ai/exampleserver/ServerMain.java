@@ -8,6 +8,7 @@ import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.api.ManagementApi;
+import io.github.intisy.ai.exampleserver.discovery.GithubAuth;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgProxySource;
 import io.github.intisy.ai.exampleserver.discovery.GithubOrgScan;
@@ -76,13 +77,18 @@ public final class ServerMain {
             MessagesAdmin messages = new MessagesAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());
             ProxyManager proxyManager = new ProxyManager(ai, holder, proxyHolder, ai.store(), ai.jsonCodec(), ai.logger());
             ProxyAdmin proxyAdmin = new ProxyAdmin(proxyManager);
-            // ONE shared org scan feeds both sources so the org is only ever scanned once.
-            GithubOrgScan orgScan = new GithubOrgScan(ai.jsonCodec());
+            // Auto-detects from the gh CLI (or GITHUB_TOKEN/GH_TOKEN) at construction so the org
+            // scan below is authenticated from the very first request when possible.
+            GithubAuth githubAuth = new GithubAuth(ai.jsonCodec());
+            // ONE shared org scan feeds both sources so the org is only ever scanned once. Reads
+            // githubAuth's token fresh on every scan, so connecting a token from the console takes
+            // effect immediately (see GithubOrgScan#invalidateCache, called by the /api/github routes).
+            GithubOrgScan orgScan = new GithubOrgScan(ai.jsonCodec(), githubAuth::token);
             GithubOrgProviderSource providerSource = new GithubOrgProviderSource(orgScan);
             GithubOrgProxySource proxySource = new GithubOrgProxySource(orgScan);
             ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(),
                     providerSource, providersDir, holder, routing, quota, config, oauth,
-                    proxyAdmin, proxySource, proxyHolder, proxiesDir, messages);
+                    proxyAdmin, proxySource, proxyHolder, proxiesDir, messages, githubAuth, orgScan);
             // No router/`/v1` here: the console (this server's own dashboard) reaches providers
             // DIRECTLY (see ManagementApi's /api/providers/{id}/messages, config, quota, oauth
             // routes). Routing-over-HTTP for out-of-process apps is the per-proxy ProxyServer's job
@@ -111,6 +117,10 @@ public final class ServerMain {
             System.out.println("  DELETE /api/proxies/{id}");
             System.out.println("  PUT  /api/proxies/{id}          {\"port\":N}");
             System.out.println("  POST /api/proxies/{id}/start | /stop  (each started proxy serves its own /v1/messages)");
+            System.out.println("  GET  /api/github                connect status (never the token)");
+            System.out.println("  POST /api/github/detect          detect a token from the gh CLI");
+            System.out.println("  POST /api/github/token   {\"token\":\"..\"}  connect a manual token");
+            System.out.println("  DELETE /api/github               disconnect the manual token");
             System.out.println("  GET  /healthz");
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> { proxyManager.stopAll(); server.stop(); }));

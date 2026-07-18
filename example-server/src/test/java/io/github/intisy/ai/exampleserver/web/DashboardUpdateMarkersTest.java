@@ -86,4 +86,51 @@ class DashboardUpdateMarkersTest {
         assertTrue(html.contains("GITHUB_TOKEN"), "the empty-state row must mention GITHUB_TOKEN");
         assertTrue(html.contains("No providers found."), "the empty-state row must still read as a clear empty state");
     }
+
+    // E-M: connect a GitHub token from the console (gh CLI auto-detect or manual) so the org scan
+    // is authenticated instead of anonymously rate-limited.
+    @Test
+    void dashboardRendersTheGithubConnectPanel() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("id=\"github-card\""), "a dedicated GitHub panel must exist");
+        assertTrue(html.contains("id=\"github-detect-button\""), "a Detect from gh CLI button must exist");
+        assertTrue(html.contains("id=\"github-token-input\""), "a manual token input field must exist");
+        assertTrue(html.contains("id=\"github-save-token-button\""), "a Save button for the manual token must exist");
+        assertTrue(html.contains("id=\"github-disconnect-button\""), "a Disconnect button must exist");
+        assertTrue(html.contains("id=\"github-status\""), "a status line must exist");
+    }
+
+    @Test
+    void dashboardGithubTokenInputIsAPasswordField() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("type=\"password\" id=\"github-token-input\""),
+                "the manual token field must never render its value as plain text");
+    }
+
+    @Test
+    void dashboardCallsTheGithubDetectAndTokenEndpoints() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("/api/github/detect"), "the Detect button must POST /api/github/detect");
+        assertTrue(html.contains("/api/github/token"), "Save must POST /api/github/token");
+        assertTrue(html.contains("function detectGithub"), "a detectGithub handler must exist");
+        assertTrue(html.contains("function saveGithubToken"), "a saveGithubToken handler must exist");
+        assertTrue(html.contains("function disconnectGithub"), "a disconnectGithub handler must exist");
+    }
+
+    @Test
+    void dashboardLoadsGithubStatusOnPageLoad() throws IOException {
+        String html = loadDashboardHtml();
+        assertTrue(html.contains("jsonFetch(\"/api/github\")"), "the status line must GET /api/github");
+        assertTrue(html.contains("loadGithubStatus();"), "loadGithubStatus must be called on init");
+    }
+
+    @Test
+    void dashboardNeverRendersTheTokenValueItself() throws IOException {
+        String html = loadDashboardHtml();
+        // renderGithubStatus must only ever read connected/source/login -- never a "token" field
+        // off the status response, and it must never assign a fetched value into the token input.
+        assertTrue(!html.contains("status.token"), "the status renderer must never read a token field");
+        assertTrue(!html.contains("github-token-input\").value = status"),
+                "the token input must never be populated FROM a server response");
+    }
 }

@@ -374,6 +374,27 @@
 </div>
 
 <main>
+  <section class="card" id="github-card">
+    <div class="card-head">
+      <h2>GitHub</h2>
+      <div class="card-head-actions">
+        <span class="hint">authenticates the org scan so it isn't rate-limited</span>
+      </div>
+    </div>
+    <div id="github-toast" class="toast hidden"></div>
+    <div class="card-body">
+      <div class="hint" id="github-status">Loading connection status&hellip;</div>
+      <div class="row" style="margin-top:0.6rem">
+        <button class="small" id="github-detect-button" type="button">Detect from gh CLI</button>
+        <button class="subtle small" id="github-disconnect-button" type="button" style="display:none">Disconnect</button>
+      </div>
+      <div class="row" style="margin-top:0.6rem;align-items:flex-end">
+        <div class="field"><label for="github-token-input">Personal access token</label><input type="password" id="github-token-input" autocomplete="off"></div>
+        <button class="primary small" id="github-save-token-button" type="button">Save</button>
+      </div>
+    </div>
+  </section>
+
   <section class="card" id="providers-card">
     <div class="card-head">
       <h2>Providers</h2>
@@ -788,6 +809,93 @@
 
   function hideProvidersToast() {
     document.getElementById("providers-toast").className = "toast hidden";
+  }
+
+  // -- GitHub connect (console-driven token for the org scan) --
+  //
+  // The server never returns the token value in any response -- these functions only ever read
+  // connected/source/login/rateLimitRemaining off /api/github, and only ever SEND a token (never
+  // display one back).
+
+  function showGithubToast(message, ok) {
+    var toast = document.getElementById("github-toast");
+    toast.textContent = message;
+    toast.className = "toast " + (ok ? "ok" : "err");
+  }
+
+  function hideGithubToast() {
+    document.getElementById("github-toast").className = "toast hidden";
+  }
+
+  function renderGithubStatus(status) {
+    var line = document.getElementById("github-status");
+    if (status && status.connected) {
+      line.textContent = "Connected as " + status.login + " (via " + status.source + ")";
+    } else {
+      line.textContent = "Not connected (anonymous scans are rate-limited)";
+    }
+    var disconnectBtn = document.getElementById("github-disconnect-button");
+    disconnectBtn.style.display = status && status.source !== "none" ? "" : "none";
+  }
+
+  function loadGithubStatus() {
+    return jsonFetch("/api/github").then(function (status) {
+      renderGithubStatus(status);
+    }).catch(function (err) {
+      document.getElementById("github-status").textContent = "Failed to load GitHub status: " + err.message;
+    });
+  }
+
+  function detectGithub() {
+    hideGithubToast();
+    var btn = document.getElementById("github-detect-button");
+    btn.disabled = true;
+    jsonFetch("/api/github/detect", { method: "POST" }).then(function (status) {
+      renderGithubStatus(status);
+      showGithubToast(
+          status.detected ? "Detected a token from the gh CLI." : "No gh CLI token found.",
+          status.detected);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Detect failed: " + err.message, false);
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
+  function saveGithubToken() {
+    var input = document.getElementById("github-token-input");
+    var token = input.value;
+    if (!token) {
+      showGithubToast("Enter a token first.", false);
+      return;
+    }
+    hideGithubToast();
+    jsonFetch("/api/github/token", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: token })
+    }).then(function (status) {
+      input.value = "";
+      renderGithubStatus(status);
+      showGithubToast(
+          status.connected ? "Connected as " + status.login + "." : "Token saved but could not be validated.",
+          status.connected);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Save failed: " + err.message, false);
+    });
+  }
+
+  function disconnectGithub() {
+    hideGithubToast();
+    jsonFetch("/api/github", { method: "DELETE" }).then(function (status) {
+      renderGithubStatus(status);
+      showGithubToast("Disconnected.", true);
+      return fetchAndRenderProviders();
+    }).catch(function (err) {
+      showGithubToast("Disconnect failed: " + err.message, false);
+    });
   }
 
   // Deletes an installed provider's jar and rebuilds the live registry without it (DELETE
@@ -2078,7 +2186,11 @@
   document.getElementById("oauth-complete-button").addEventListener("click", completeOAuthLogin);
   document.getElementById("oauth-cancel-button").addEventListener("click", hideOauthPasteRow);
   document.getElementById("account-detail-close").addEventListener("click", closeAccountDetail);
+  document.getElementById("github-detect-button").addEventListener("click", detectGithub);
+  document.getElementById("github-save-token-button").addEventListener("click", saveGithubToken);
+  document.getElementById("github-disconnect-button").addEventListener("click", disconnectGithub);
 
+  loadGithubStatus();
   loadProvidersInitial();
   loadModels();
   loadProxies();

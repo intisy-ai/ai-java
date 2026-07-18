@@ -80,6 +80,16 @@ public final class GithubOrgScan {
         this(json, GithubOrgScan::realHttpGet, System::currentTimeMillis, GithubOrgScan::envToken);
     }
 
+    /**
+     * Authenticates the scan with {@code tokenSupplier} (e.g. {@code GithubAuth::token}) instead of
+     * the plain env-var lookup -- read fresh at the start of every scan/find (see {@link
+     * #httpGet}), so connecting/changing a token from the console takes effect on the very next
+     * scan, no restart required.
+     */
+    public GithubOrgScan(JsonCodec json, Supplier<String> tokenSupplier) {
+        this(json, GithubOrgScan::realHttpGet, System::currentTimeMillis, tokenSupplier);
+    }
+
     GithubOrgScan(JsonCodec json, Http http, LongSupplier clock, Supplier<String> token) {
         this.json = json;
         this.http = http;
@@ -116,6 +126,16 @@ public final class GithubOrgScan {
             System.err.println(LOG_PREFIX + "org scan failed: " + e.getMessage());
             return snapshot != null ? snapshot : Collections.emptyList();
         }
+    }
+
+    /**
+     * Clears the TTL cache so the very next {@link #scan()} re-fetches immediately instead of
+     * serving a stale cached result -- called after the effective token changes (connect/disconnect
+     * from the console) so an authenticated re-scan isn't stuck waiting out the TTL.
+     */
+    public void invalidateCache() {
+        cached = null;
+        cachedAt = Long.MIN_VALUE;
     }
 
     /**

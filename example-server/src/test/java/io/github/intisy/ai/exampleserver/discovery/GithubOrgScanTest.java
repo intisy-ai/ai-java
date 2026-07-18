@@ -273,6 +273,50 @@ class GithubOrgScanTest {
         assertEquals("1.5.1", entry.version);
     }
 
+    // A mutable supplier stands in for GithubAuth::token: the scan must read it FRESH on every
+    // uncached (post-TTL-expiry) scan, not capture a value once at construction.
+    @Test
+    void tokenSupplierIsReadFreshOnEveryUncachedScan() {
+        FakeHttp http = new FakeHttp();
+        http.responses.put(REPOS_URL, reposJson("claude-code-auth"));
+        http.responses.put(releaseUrl("claude-code-auth"), releaseJson("claude-code-auth-provider.jar"));
+        AtomicLong clock = new AtomicLong(0);
+        java.util.concurrent.atomic.AtomicReference<String> tokenHolder =
+                new java.util.concurrent.atomic.AtomicReference<>("token-one");
+        GithubOrgScan scan = new GithubOrgScan(new FakeJsonCodec(), http, clock::get, tokenHolder::get);
+
+        scan.scan();
+        assertTrue(http.tokensSeen.contains("token-one"));
+
+        tokenHolder.set("token-two");
+        clock.addAndGet(60_001L); // past the TTL so this scan actually re-hits Http
+        scan.scan();
+
+        assertTrue(http.tokensSeen.contains("token-two"),
+                "a changed supplier value must be observed on the next uncached scan");
+    }
+
+    // Connecting/disconnecting a token from the console must take effect immediately, not wait out
+    // the 60s TTL -- invalidateCache() is what the /api/github routes call to force this.
+    @Test
+    void invalidateCacheForcesAnImmediateReFetchWithinTheTtl() {
+        FakeHttp http = new FakeHttp();
+        http.responses.put(REPOS_URL, reposJson("claude-code-auth"));
+        http.responses.put(releaseUrl("claude-code-auth"), releaseJson("claude-code-auth-provider.jar"));
+        AtomicLong clock = new AtomicLong(0);
+        GithubOrgScan scan = newScan(http, clock, "irrelevant");
+
+        scan.scan();
+        int callsAfterFirst = http.callCount.get();
+
+        clock.addAndGet(1_000L); // well within the 60s TTL
+        scan.invalidateCache();
+        scan.scan();
+
+        assertTrue(http.callCount.get() > callsAfterFirst,
+                "invalidateCache must force a re-fetch even though the TTL hasn't expired");
+    }
+
     @Test
     void releaseWithNoTagNameYieldsNullVersion() {
         FakeHttp http = new FakeHttp();

@@ -9,6 +9,8 @@ import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.admin.ProxyAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
+import io.github.intisy.ai.exampleserver.discovery.GithubAuth;
+import io.github.intisy.ai.exampleserver.discovery.GithubOrgScan;
 import io.github.intisy.ai.exampleserver.discovery.InstalledVersions;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
@@ -72,6 +74,10 @@ import java.util.function.Supplier;
  * PUT    /api/proxies/{id}               {"port":N}       -> 200 {status}/400
  * POST   /api/proxies/{id}/start                          -> 200 {status}/400
  * POST   /api/proxies/{id}/stop                           -> 200 {status}/400
+ * GET    /api/github                                     -> 200 {connected,source,login,rateLimitRemaining}
+ * POST   /api/github/detect                               -> 200 {...status,"detected":bool}
+ * POST   /api/github/token       {"token":".."}           -> 200 {...status} (never echoes the token)
+ * DELETE /api/github                                     -> 200 {...status} (clears the manual token only)
  * (anything else under /api/)                            -> 404 {"error":"not found"}
  * </pre>
  *
@@ -117,6 +123,8 @@ public final class ManagementApi implements HttpHandler {
     private final ProxyRegistryHolder proxyHolder;
     private final Path proxiesDir;
     private final MessagesAdmin messages;
+    private final GithubAuth githubAuth;
+    private final GithubOrgScan githubScan;
 
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
         this(providerIds, admin, json, null, null, null, null, null);
@@ -212,15 +220,33 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Full constructor: additionally adds the direct-provider-chat surface ({@code POST
-     * /api/providers/{id}/messages}) backed by {@code messages} — this is how the console reaches a
-     * provider for chat: a DIRECT {@code MessagesAdmin.send} call, never through a router.
+     * Adds the direct-provider-chat surface ({@code POST /api/providers/{id}/messages}) backed by
+     * {@code messages} -- this is how the console reaches a provider for chat: a DIRECT {@code
+     * MessagesAdmin.send} call, never through a router. No {@link GithubAuth}/{@link GithubOrgScan}
+     * -- the {@code /api/github*} routes 404 (see the full constructor below for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
                           RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
                           ProxyAdmin proxy, ProxySource proxySource, ProxyRegistryHolder proxyHolder,
                           Path proxiesDir, MessagesAdmin messages) {
+        this(providerIds, admin, json, source, providersDir, holder, routing, quota, config, oauth,
+                proxy, proxySource, proxyHolder, proxiesDir, messages, null, null);
+    }
+
+    /**
+     * Full constructor: additionally adds the GitHub-connect surface ({@code GET /api/github},
+     * {@code POST /api/github/detect}, {@code POST /api/github/token}, {@code DELETE /api/github})
+     * backed by {@code githubAuth} (token precedence + login validation) and {@code githubScan}
+     * (whose TTL cache is invalidated after any token change so the next org scan picks it up
+     * immediately, no restart required).
+     */
+    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
+                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
+                          RoutingAdmin routing, QuotaAdmin quota, ConfigAdmin config, OAuthAdmin oauth,
+                          ProxyAdmin proxy, ProxySource proxySource, ProxyRegistryHolder proxyHolder,
+                          Path proxiesDir, MessagesAdmin messages, GithubAuth githubAuth,
+                          GithubOrgScan githubScan) {
         this.providerIds = providerIds;
         this.admin = admin;
         this.json = json;
@@ -236,6 +262,8 @@ public final class ManagementApi implements HttpHandler {
         this.proxyHolder = proxyHolder;
         this.messages = messages;
         this.proxiesDir = proxiesDir;
+        this.githubAuth = githubAuth;
+        this.githubScan = githubScan;
     }
 
     @Override
@@ -387,6 +415,26 @@ public final class ManagementApi implements HttpHandler {
                 && "api".equals(seg[0]) && "proxies".equals(seg[1])
                 && ("start".equals(seg[3]) || "stop".equals(seg[3]))) {
             handleProxyLifecycle(exchange, decode(seg[2]), "start".equals(seg[3]));
+            return;
+        }
+        if ("GET".equals(method) && seg.length == 2
+                && "api".equals(seg[0]) && "github".equals(seg[1])) {
+            handleGithubStatus(exchange);
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "github".equals(seg[1]) && "detect".equals(seg[2])) {
+            handleGithubDetect(exchange);
+            return;
+        }
+        if ("POST".equals(method) && seg.length == 3
+                && "api".equals(seg[0]) && "github".equals(seg[1]) && "token".equals(seg[2])) {
+            handleGithubSetToken(exchange);
+            return;
+        }
+        if ("DELETE".equals(method) && seg.length == 2
+                && "api".equals(seg[0]) && "github".equals(seg[1])) {
+            handleGithubDisconnect(exchange);
             return;
         }
         handleNotFound(exchange);
@@ -973,6 +1021,67 @@ public final class ManagementApi implements HttpHandler {
             error.put("error", e.getMessage());
             respondJson(exchange, 400, error);
         }
+    }
+
+    // -- GitHub connect (console-driven token for the org scan) --
+    //
+    // SECURITY: none of these three handlers ever put the token itself into a response body --
+    // githubStatusBody() below is the ONLY place a github status map is built, and it exposes only
+    // source/connected/login/rateLimitRemaining. A manually POSTed token is written into GithubAuth
+    // (in-memory only) and never echoed back.
+
+    private void handleGithubStatus(HttpExchange exchange) throws IOException {
+        if (githubAuth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        respondJson(exchange, 200, githubStatusBody());
+    }
+
+    private void handleGithubDetect(HttpExchange exchange) throws IOException {
+        if (githubAuth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        boolean detected = githubAuth.detectFromGhCli();
+        if (githubScan != null) githubScan.invalidateCache();
+        Map<String, Object> body = githubStatusBody();
+        body.put("detected", detected);
+        respondJson(exchange, 200, body);
+    }
+
+    private void handleGithubSetToken(HttpExchange exchange) throws IOException {
+        if (githubAuth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        Map<?, ?> body = asMap(json.parse(readBody(exchange.getRequestBody())));
+        String token = stringField(body, "token");
+        githubAuth.setManualToken(token);
+        if (githubScan != null) githubScan.invalidateCache();
+        respondJson(exchange, 200, githubStatusBody());
+    }
+
+    private void handleGithubDisconnect(HttpExchange exchange) throws IOException {
+        if (githubAuth == null) {
+            handleNotFound(exchange);
+            return;
+        }
+        githubAuth.setManualToken(null);
+        if (githubScan != null) githubScan.invalidateCache();
+        respondJson(exchange, 200, githubStatusBody());
+    }
+
+    // {connected, source, login, rateLimitRemaining} -- NEVER a token field. rateLimitRemaining is
+    // always null (skipped: an extra GitHub API round trip isn't worth it just for a status line).
+    private Map<String, Object> githubStatusBody() {
+        String login = githubAuth.validateLogin();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("connected", login != null);
+        body.put("source", githubAuth.source());
+        body.put("login", login);
+        body.put("rateLimitRemaining", null);
+        return body;
     }
 
     private void handleNotFound(HttpExchange exchange) throws IOException {
