@@ -295,6 +295,9 @@
   .proxy-app { flex: 1; font-weight: 600; font-size: 0.85rem; }
   .proxy-port { width: 6.5rem; flex: none; }
   .proxy-error { color: var(--danger); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .proxy-hint { color: var(--muted); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .config-group-title { margin: 0.9rem 0 0.4rem; font-size: 0.78rem; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .config-group-title:first-child { margin-top: 0; }
 
   select, input[type="text"], input[type="password"], textarea {
     width: 100%;
@@ -893,6 +896,38 @@
     body.appendChild(el("div", "empty-state", message || "Routing management unavailable on this server."));
   }
 
+  // Read-only view for a passthrough proxy (row.routing === false): flattens the routing catalog
+  // into "provider / model (name)" rows instead of the tier editor -- there's nothing to add,
+  // remove, or save since the proxy exposes every provider's models as-is.
+  function loadPassthroughCatalog() {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+    body.appendChild(el("div", "loading-row", "loading…"));
+    fetchOrNull404("/api/routing/catalog").then(function (catalog) {
+      if (selectedProxyRouting) return; // stale: selection moved to a routable proxy meanwhile
+      renderPassthroughCatalog(catalog || {});
+    }).catch(function (err) {
+      if (selectedProxyRouting) return;
+      renderRoutingUnavailable("Failed to load models: " + err.message);
+    });
+  }
+
+  function renderPassthroughCatalog(catalog) {
+    var body = document.getElementById("routing-body");
+    body.innerHTML = "";
+    body.appendChild(el("h3", "config-group-title", "Passthrough — exposes all provider models"));
+    var any = false;
+    Object.keys(catalog).forEach(function (providerId) {
+      var models = (catalog[providerId] && catalog[providerId].models) || {};
+      Object.keys(models).forEach(function (modelId) {
+        any = true;
+        var name = (models[modelId] && models[modelId].name) || modelId;
+        body.appendChild(el("div", "chain-empty", providerId + " / " + modelId + " (" + name + ")"));
+      });
+    });
+    if (!any) body.appendChild(el("div", "empty-state", "No models discovered yet."));
+  }
+
   function renderRouting() {
     var body = document.getElementById("routing-body");
     body.innerHTML = "";
@@ -1079,19 +1114,26 @@
     span.textContent = "";
   }
 
+  // Strips a single trailing "-proxy" from a repo name so an available row's label matches the
+  // stable id an installed row shows for the same plugin (e.g. "claude-code-proxy" -> "claude-code");
+  // anything else is left untouched.
+  function stripProxySuffix(name) {
+    return name && name.slice(-6) === "-proxy" ? name.slice(0, -6) : name;
+  }
+
   // Merges the two proxy sources into one row list, same convention as mergeProviderRows:
   // available entries already installed (installed:true) are skipped to avoid duplicate rows.
   function mergeProxyRows(installed, available) {
     var rows = [];
     (installed || []).forEach(function (p) {
       rows.push({
-        kind: "installed", id: p.id, displayName: p.displayName, port: p.port,
+        kind: "installed", id: p.id, port: p.port,
         running: p.running, routing: p.routing, error: p.error
       });
     });
     (available || []).forEach(function (item) {
       if (item.installed === true) return;
-      rows.push({ kind: "available", id: item.name, assetName: item.assetName });
+      rows.push({ kind: "available", id: item.name, label: stripProxySuffix(item.name), assetName: item.assetName });
     });
     return rows;
   }
@@ -1134,9 +1176,10 @@
 
   // Renders the Server row first (carries the "" / default-profile routing scope, no port or
   // start/stop controls since it's the running example server itself), then one row per merged
-  // entry: installed rows get port/save/start-stop/uninstall and are selectable for routing
-  // ONLY when row.routing === true (a passthrough proxy like opencode shows a hint instead of
-  // opening the tier editor); available rows get an Install button.
+  // entry: installed rows get port/save/start-stop/uninstall and are always selectable -- a
+  // routable proxy (row.routing === true) opens the tier editor, a passthrough proxy (row.routing
+  // === false, e.g. opencode) opens a read-only model catalog instead; available rows get an
+  // Install button.
   function renderProxies(rows) {
     var body = document.getElementById("proxies-body");
     body.innerHTML = "";
@@ -1163,13 +1206,15 @@
 
   function buildInstalledProxyRow(row) {
     var canRoute = row.routing === true;
-    var line = el("div", "proxy-row" + (canRoute ? " selectable" : ""));
+    var isPassthrough = row.routing === false;
+    var line = el("div", "proxy-row" + ((canRoute || isPassthrough) ? " selectable" : ""));
     line.dataset.app = row.id;
-    line.appendChild(el("span", "proxy-app", row.displayName || row.id));
-    if (canRoute) {
+    line.appendChild(el("span", "proxy-app", row.id));
+    if (canRoute || isPassthrough) {
       line.addEventListener("click", function () { selectProxy(row.id); });
-    } else {
-      line.appendChild(el("span", "proxy-error", "native / no routing"));
+    }
+    if (isPassthrough) {
+      line.appendChild(el("span", "proxy-hint", "passthrough — all provider models"));
     }
 
     var port = el("input", "proxy-port");
@@ -1201,7 +1246,7 @@
 
   function buildAvailableProxyRow(row) {
     var line = el("div", "proxy-row");
-    line.appendChild(el("span", "proxy-app", row.id));
+    line.appendChild(el("span", "proxy-app", row.label || row.id));
     if (row.assetName) line.appendChild(el("span", "prov-asset", row.assetName));
     line.appendChild(badge("available"));
 
@@ -1248,18 +1293,30 @@
     });
   }
 
-  // Opens the routing settings panel for the given proxy id ("" = the Server/default profile).
+  // Tracks whether the open proxy-settings panel is the routable tier editor (true) or a
+  // passthrough proxy's read-only model catalog (false); the Refresh button branches on it.
+  var selectedProxyRouting = true;
+
+  // Opens the settings panel for the given proxy id ("" = the Server/default profile). A
+  // routing === false proxy (passthrough, e.g. opencode) gets the read-only catalog view instead
+  // of the tier editor -- there is nothing to route since it exposes every model as-is.
   function selectProxy(app) {
     selectedProxyApp = app;
-    var label = "Server (this example server)";
+    var label = app || "Server (this example server)";
+    var routing = true;
     if (app) {
       var match = installedProxies.filter(function (p) { return p.id === app; })[0];
-      label = (match && match.displayName) || app;
+      routing = !(match && match.routing === false);
     }
-    document.getElementById("proxy-settings-title").textContent = "Routing — " + label;
+    selectedProxyRouting = routing;
+    document.getElementById("proxy-settings-title").textContent = (routing ? "Routing — " : "Passthrough — ") + label;
     document.getElementById("proxy-settings").style.display = "";
     markSelectedProxyRow();
-    loadRouting();
+    if (routing) {
+      loadRouting();
+    } else {
+      loadPassthroughCatalog();
+    }
   }
 
   // Highlights whichever proxy row matches the current selectedProxyApp, if any.
@@ -1590,18 +1647,23 @@
       });
   }
 
+  // Renders {groups:[{title,fields}], values} grouped, like the loader's config editor. An older
+  // flat {fields:[...]} payload (no groups) becomes one implicit, unheaded group so it still
+  // renders instead of breaking; a single group that itself carries no title also skips the
+  // header, since there's nothing to label.
   function renderConfig(resp) {
     var body = document.getElementById("config-body");
     body.innerHTML = "";
     configFields = [];
-    var groups = (resp && resp.groups) || [];
     var values = (resp && resp.values) || {};
+    var groups = (resp && resp.groups) || (resp && resp.fields ? [{ title: null, fields: resp.fields }] : []);
     if (!groups.length) {
       body.appendChild(el("div", "empty-state", "This provider has no configurable settings."));
       return;
     }
+    var singleUnnamed = groups.length === 1 && !groups[0].title;
     groups.forEach(function (group) {
-      body.appendChild(el("h3", "config-group-title", group.title || ""));
+      if (!singleUnnamed) body.appendChild(el("h3", "config-group-title", group.title || ""));
       (group.fields || []).forEach(function (field) {
         configFields.push({ key: field.key, type: field.type });
         var wrap = el("div", "field");
@@ -1618,7 +1680,7 @@
       input = el("input");
       input.type = "checkbox";
       input.checked = value === true;
-    } else if (field.type === "enum") {
+    } else if (field.type === "select") {
       input = el("select");
       (field.options || []).forEach(function (opt) {
         var o = el("option", null, opt);
@@ -1886,7 +1948,9 @@
     if (event.key === "Enter") sendChat();
   });
   document.getElementById("refresh-providers-button").addEventListener("click", refreshProviders);
-  document.getElementById("refresh-routing-button").addEventListener("click", loadRouting);
+  document.getElementById("refresh-routing-button").addEventListener("click", function () {
+    if (selectedProxyRouting) loadRouting(); else loadPassthroughCatalog();
+  });
   document.getElementById("refresh-proxies-button").addEventListener("click", loadProxies);
   document.getElementById("refresh-quota-button").addEventListener("click", function () {
     loadQuota(selectedProviderId);

@@ -155,10 +155,40 @@ class DashboardIntegrationTest {
     }
 
     @Test
-    void proxyRowRenderingReadsDisplayNameAndRoutingFlag() throws IOException {
+    void proxyRowRenderingUsesStableIdNotDisplayName() throws IOException {
         String html = get("/").body;
-        assertTrue(html.contains("row.displayName"), "proxy rows must read row.displayName");
+        assertTrue(html.contains("el(\"span\", \"proxy-app\", row.id)"),
+                "installed proxy row label must be the stable row.id");
+        assertFalse(html.contains("row.displayName"), "proxy rows must not read row.displayName anymore");
         assertTrue(html.contains("row.routing"), "proxy rows must gate on row.routing");
+    }
+
+    @Test
+    void availableProxyRowLabelStripsTrailingProxySuffix() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("function stripProxySuffix("), "stripProxySuffix helper missing");
+        assertTrue(html.contains("stripProxySuffix(item.name)"),
+                "available proxy rows must derive their label via stripProxySuffix");
+    }
+
+    @Test
+    void configRendersGroupedWithSelectFieldSupportAndFlatFallback() throws IOException {
+        String html = get("/").body;
+        assertTrue(html.contains("config-group-title"), "grouped config header class missing");
+        assertTrue(html.contains("field.type === \"select\""), "select field type not handled in config rendering");
+        assertTrue(html.contains("singleUnnamed"), "single-unnamed-group header suppression missing");
+        assertTrue(html.contains("resp.fields"), "flat/older {fields:[...]} config shape fallback missing");
+    }
+
+    @Test
+    void passthroughProxyIsSelectableWithNeutralHintAndReadOnlyCatalog() throws IOException {
+        String html = get("/").body;
+        assertFalse(html.contains("native / no routing"), "old alarming passthrough hint text must be gone");
+        assertTrue(html.contains("passthrough — all provider models"), "neutral passthrough hint text missing");
+        assertTrue(html.contains("proxy-hint"), "neutral proxy-hint class missing");
+        assertTrue(html.contains("function renderPassthroughCatalog("), "passthrough read-only catalog view missing");
+        assertTrue(html.contains("Passthrough — exposes all provider models"), "passthrough view heading missing");
+        assertTrue(html.contains("row.routing === false"), "selectProxy must branch on routing === false");
     }
 
     @Test
