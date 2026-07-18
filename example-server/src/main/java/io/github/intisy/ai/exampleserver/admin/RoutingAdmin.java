@@ -4,13 +4,13 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.shared.logic.ModelMap;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.ProxyHandler;
+import io.github.intisy.ai.shared.routing.ModelCatalogProvider;
+import io.github.intisy.ai.shared.routing.ModelInfo;
+import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Logger;
 import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,40 +46,38 @@ public class RoutingAdmin {
     }
 
     /**
-     * Calls the provider's own {@code GET /v1/models} branch and merges the result into
+     * Calls the provider's typed {@link ModelCatalogProvider#models} and merges the result into
      * {@code models.json} under {@code providerId}, preserving every other provider's entry.
      *
-     * @throws IllegalArgumentException if the provider id is unknown, the call throws, or the
-     *                                   provider responds with a non-2xx status (its message is
-     *                                   carried through so the caller sees why, e.g. no account)
+     * @throws IllegalArgumentException if the provider id is unknown, or the provider does not
+     *                                   implement {@link ModelCatalogProvider} (discover is an
+     *                                   explicit user action; erroring is fine)
      */
     public Map<String, Object> discover(String providerId) {
-        ProxyHandler handler = holder.asHandlerResolver().resolve(providerId);
-        if (handler == null) {
+        Provider p = holder.get(providerId);
+        if (p == null) {
             throw new IllegalArgumentException("unknown provider: " + providerId);
         }
+        if (!(p instanceof ModelCatalogProvider)) {
+            throw new IllegalArgumentException("provider has no model catalog: " + providerId);
+        }
 
-        HttpRequest request = new HttpRequest();
-        request.method = "GET";
-        request.url = "/v1/models";
-        request.headers = new LinkedHashMap<>();
         HandlerCtx ctx = new HandlerCtx(configDir, store, log, null);
+        List<ModelInfo> modelInfos = ((ModelCatalogProvider) p).models(ctx);
+        if (modelInfos == null) modelInfos = new ArrayList<>();
 
-        HttpResponse response;
-        try {
-            response = handler.handle(request, ctx);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("discovery failed: " + e.getMessage());
+        Map<String, Object> models = new LinkedHashMap<>();
+        List<String> ranking = new ArrayList<>();
+        for (ModelInfo m : modelInfos) {
+            Map<String, Object> modelEntry = new LinkedHashMap<>();
+            modelEntry.put("name", m.name);
+            Map<String, Object> limit = new LinkedHashMap<>();
+            limit.put("context", m.context);
+            limit.put("output", m.output);
+            modelEntry.put("limit", limit);
+            models.put(m.id, modelEntry);
+            ranking.add(m.id);
         }
-        if (response.status / 100 != 2) {
-            throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
-        }
-
-        Map<String, Object> parsed = asMap(json.parse(response.body));
-        Map<String, Object> models = parsed != null ? asMap(parsed.get("models")) : null;
-        if (models == null) models = new LinkedHashMap<>();
-        List<String> ranking = parsed != null ? asStringList(parsed.get("ranking")) : null;
-        if (ranking == null) ranking = new ArrayList<>(models.keySet());
 
         Map<String, Object> catalog = readCatalog();
         Map<String, Object> entry = new LinkedHashMap<>();
@@ -189,15 +187,6 @@ public class RoutingAdmin {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(Object o) {
         return o instanceof Map ? (Map<String, Object>) o : null;
-    }
-
-    private static List<String> asStringList(Object o) {
-        if (!(o instanceof List)) return null;
-        List<String> out = new ArrayList<>();
-        for (Object item : (List<?>) o) {
-            if (item instanceof String) out.add((String) item);
-        }
-        return out;
     }
 
     private static String stringOf(Object o) {

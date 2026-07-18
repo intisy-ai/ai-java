@@ -83,18 +83,39 @@ class QuotaAdminTest {
     }
 
     @Test
+    void refreshKeepsTheErroredBarlessAccountInTheAccountsArray() {
+        // a3 is an errored account with an EMPTY bars list (not a missing account) -- this is
+        // exactly why the SPI carries AccountQuota per-account rather than flattening every bar
+        // into one account-keyed list: an account with no bars must still survive to the wire.
+        Map<String, Object> result = quota.refresh("echo");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        Map<String, Object> a3 = accounts.stream()
+                .filter(a -> "a3".equals(a.get("id")))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(a3, "the errored barless account a3 must still appear: " + accounts);
+        assertEquals("error", a3.get("status"));
+        assertEquals(java.util.Collections.emptyList(), a3.get("quota"));
+    }
+
+    @Test
     void refreshUnknownProviderThrows() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> quota.refresh("nope"));
         assertTrue(e.getMessage().contains("unknown provider: nope"), e.getMessage());
     }
 
+    // -- absent-capability: "ratelimited" (AlwaysRateLimitedProvider) implements Provider only --
+
     @Test
-    void refreshNon2xxThrowsWithProviderMessage() {
-        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                () -> quota.refresh("ratelimited"));
-        assertTrue(e.getMessage().contains("provider returned 429"), e.getMessage());
-        assertTrue(e.getMessage().contains("rate_limit_error"), e.getMessage());
+    void refreshOfBareProviderReturnsEmptyAccounts() {
+        Map<String, Object> result = quota.refresh("ratelimited");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> accounts = (List<Map<String, Object>>) result.get("accounts");
+        assertTrue(accounts.isEmpty(), accounts.toString());
     }
 
     @Test

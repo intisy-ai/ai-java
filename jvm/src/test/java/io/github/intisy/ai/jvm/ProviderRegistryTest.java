@@ -132,6 +132,19 @@ class ProviderRegistryTest {
     }
 
     @Test
+    void get_returnsTheDiscoveredProviderInstanceById_orNullWhenUnknown(@TempDir Path tmp) throws IOException {
+        Path providersDir = tmp.resolve("providers");
+        Files.createDirectory(providersDir);
+        writeStubProviderJar(providersDir.resolve("stub-provider.jar"));
+
+        try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
+            Provider found = registry.get("stub");
+            assertEquals("stub", found.id());
+            assertEquals(null, registry.get("nope"));
+        }
+    }
+
+    @Test
     void jarFor_attributesDiscoveredProviderToItsOwnJarFile(@TempDir Path tmp) throws IOException {
         Path providersDir = tmp.resolve("providers");
         Files.createDirectory(providersDir);

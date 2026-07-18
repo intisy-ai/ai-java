@@ -1,29 +1,47 @@
 package io.github.intisy.ai.examples.provider;
 
+import io.github.intisy.ai.shared.routing.AccountQuota;
+import io.github.intisy.ai.shared.routing.AuthorizeInfo;
+import io.github.intisy.ai.shared.routing.ConfigField;
+import io.github.intisy.ai.shared.routing.ConfigGroup;
+import io.github.intisy.ai.shared.routing.ConfigSchema;
+import io.github.intisy.ai.shared.routing.ConfigurableProvider;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
+import io.github.intisy.ai.shared.routing.ModelCatalogProvider;
+import io.github.intisy.ai.shared.routing.ModelInfo;
+import io.github.intisy.ai.shared.routing.OAuthProvider;
 import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.shared.routing.QuotaBar;
+import io.github.intisy.ai.shared.routing.QuotaProvider;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * A healthy, realistic example {@link Provider}: it answers with a well-formed
  * Anthropic-messages-shaped JSON body that echoes back the model the router assigned to the
  * request (via {@link HandlerCtx#model}) plus a canned assistant message. This is the "it works"
- * half of the {@code :examples} showcase's fallback chain. It also answers {@code GET /v1/models}
- * with a canned catalog, the same discovery branch a real provider (claude/antigravity) gains —
- * this is what {@code RoutingAdmin.discover} exercises in tests, with no network involved. It
- * likewise answers {@code GET /v1/quota} with a canned accounts/quota catalog, the same branch a
- * real provider gains — this is what {@code QuotaAdmin.refresh} exercises in tests.
+ * half of the {@code :examples} showcase's fallback chain. It also implements every optional
+ * typed capability ({@link ModelCatalogProvider}, {@link QuotaProvider}, {@link
+ * ConfigurableProvider}, {@link OAuthProvider}) with canned data -- the test vehicle
+ * {@code RoutingAdmin.discover}/{@code QuotaAdmin.refresh}/{@code ConfigAdmin}/{@code OAuthAdmin}
+ * exercise, with no network involved and no fabricated HTTP request.
  *
  * <p>Shape discipline mirrors stub-auth's {@code StubProvider}: no gson, no reflection, no
- * {@code java.net}/{@code java.nio} — just hand-rolled JSON string building — so the jar stays
- * thin and the class transpiles cleanly. The {@code content}/{@code stop_reason}/{@code usage}
- * fields match what an Anthropic {@code /v1/messages} client expects, so a caller reading the
- * response never has to special-case "this came from an example provider".
+ * {@code java.net}/{@code java.nio} -- just typed POJOs / hand-rolled JSON string building for the
+ * messages echo -- so the jar stays thin and the class transpiles cleanly. The {@code
+ * content}/{@code stop_reason}/{@code usage} fields match what an Anthropic {@code /v1/messages}
+ * client expects, so a caller reading the response never has to special-case "this came from an
+ * example provider".
  */
-public final class EchoProvider implements Provider {
+public final class EchoProvider implements Provider, ConfigurableProvider, ModelCatalogProvider,
+        QuotaProvider, OAuthProvider {
 
     /** The provider id this instance serves; matches the {@code provider} field in a model-map assignment. */
     public static final String ID = "echo";
@@ -37,25 +55,6 @@ public final class EchoProvider implements Provider {
 
     @Override
     public HttpResponse handle(HttpRequest request, HandlerCtx ctx) {
-        if (request != null && "GET".equals(request.method) && "/v1/models".equals(request.url)) {
-            return modelsResponse();
-        }
-        if (request != null && "GET".equals(request.method) && "/v1/quota".equals(request.url)) {
-            return quotaResponse();
-        }
-        if (request != null && "GET".equals(request.method) && "/v1/config".equals(request.url)) {
-            return configResponse();
-        }
-        if (request != null && "PUT".equals(request.method) && "/v1/config".equals(request.url)) {
-            return putConfigResponse(request.body);
-        }
-        if (request != null && "GET".equals(request.method) && "/v1/oauth/authorize".equals(request.url)) {
-            return oauthAuthorizeResponse();
-        }
-        if (request != null && "POST".equals(request.method) && "/v1/oauth/exchange".equals(request.url)) {
-            return oauthExchangeResponse(request.body);
-        }
-
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
                 : "echo-default";
@@ -68,95 +67,83 @@ public final class EchoProvider implements Provider {
         return response;
     }
 
-    // Last-written values object as raw JSON text (defaults shown). PUT replaces it; GET echoes it.
-    // The fixture persists-and-echoes rather than parsing -- enough to prove ConfigAdmin's round-trip;
-    // a real provider parses+validates+coerces against its schema and persists under configDir.
-    private String valuesJson = "{\"greeting\":\"Echo provider handled your request\",\"verbose\":false}";
+    // -- ConfigurableProvider: a simple in-memory Map is enough for this fixture; a real provider
+    // parses+validates+coerces against its schema and persists under configDir. --
 
-    private HttpResponse configResponse() {
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{"
-                + "\"groups\":[{\"title\":\"General\",\"fields\":["
-                + "{\"key\":\"greeting\",\"label\":\"Greeting\",\"type\":\"string\"},"
-                + "{\"key\":\"verbose\",\"label\":\"Verbose\",\"type\":\"bool\"}"
-                + "]}],"
-                + "\"values\":" + valuesJson
-                + "}";
-        return response;
+    private final Map<String, Object> values = new LinkedHashMap<>();
+    {
+        values.put("greeting", ASSISTANT_TEXT);
+        values.put("verbose", false);
     }
 
-    private HttpResponse putConfigResponse(String body) {
-        String extracted = extractJsonObject(body, "values");
-        if (extracted != null) valuesJson = extracted;
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{\"values\":" + valuesJson + "}";
-        return response;
+    @Override
+    public ConfigSchema configSchema(HandlerCtx ctx) {
+        ConfigField greeting = new ConfigField("greeting", "Greeting", "text", null, null);
+        ConfigField verbose = new ConfigField("verbose", "Verbose", "bool", null, null);
+        ConfigGroup general = new ConfigGroup("General", Arrays.asList(greeting, verbose));
+        return new ConfigSchema(Collections.singletonList(general));
     }
 
-    // Returns the raw JSON object text that is the value of `key` in `body` (from its opening '{'
-    // to the matching '}', quote/escape-aware), or null if not found. Hand-rolled to keep the
-    // fixture gson-free and transpilable.
-    private static String extractJsonObject(String body, String key) {
-        if (body == null) return null;
-        String needle = "\"" + key + "\"";
-        int k = body.indexOf(needle);
-        if (k < 0) return null;
-        int start = body.indexOf('{', k + needle.length());
-        if (start < 0) return null;
-        int depth = 0;
-        boolean inString = false;
-        boolean escaped = false;
-        for (int i = start; i < body.length(); i++) {
-            char c = body.charAt(i);
-            if (inString) {
-                if (escaped) escaped = false;
-                else if (c == '\\') escaped = true;
-                else if (c == '"') inString = false;
-            } else if (c == '"') {
-                inString = true;
-            } else if (c == '{') {
-                depth++;
-            } else if (c == '}') {
-                depth--;
-                if (depth == 0) return body.substring(start, i + 1);
-            }
+    @Override
+    public Map<String, Object> getConfigValues(HandlerCtx ctx) {
+        return new LinkedHashMap<>(values);
+    }
+
+    @Override
+    public Map<String, Object> putConfigValues(HandlerCtx ctx, Map<String, Object> newValues) {
+        if (newValues != null) {
+            values.putAll(newValues);
         }
-        return null;
+        return new LinkedHashMap<>(values);
     }
 
-    private static HttpResponse oauthAuthorizeResponse() {
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{"
-                + "\"authorizeUrl\":\"https://echo.example/authorize?response_type=code&client_id=echo-client-id"
-                + "&code_challenge=echo-challenge&code_challenge_method=S256&state=echo-state\","
-                + "\"completion\":\"paste\""
-                + "}";
-        return response;
+    // -- ModelCatalogProvider: canned catalog, matching the ids ServerSeeds already seeds for
+    // "echo" so the two stay in sync for anyone comparing seeded vs. discovered. List order =
+    // ranking. --
+
+    @Override
+    public List<ModelInfo> models(HandlerCtx ctx) {
+        return Arrays.asList(
+                new ModelInfo("m-echo-opus", "Echo Opus", 200000, 64000),
+                new ModelInfo("m-echo-haiku", "Echo Haiku", 200000, 64000));
     }
 
-    // Fixture exchange: no network. Echoes the code into the refresh token so a test can prove the
-    // code reached the provider. A real provider calls OAuthExchange.exchangeCode here.
-    private HttpResponse oauthExchangeResponse(String body) {
+    // -- QuotaProvider: THREE accounts -- two active accounts sharing the "5-hour" pool
+    // (remainingFraction 0.8 and 0.4, so QuotaAdmin.combined's mean is 0.6) and one errored account
+    // with no quota bars at all (excluded from the mean but still counted in
+    // combined.accountCount -- the whole point of the per-account AccountQuota shape). --
+
+    @Override
+    public List<AccountQuota> quota(HandlerCtx ctx) {
+        AccountQuota a1 = new AccountQuota("a1", null, "active",
+                Collections.singletonList(new QuotaBar("5-hour", 0.8, "123")));
+        AccountQuota a2 = new AccountQuota("a2", null, "active",
+                Collections.singletonList(new QuotaBar("5-hour", 0.4, "123")));
+        AccountQuota a3 = new AccountQuota("a3", null, "error", Collections.emptyList());
+        return Arrays.asList(a1, a2, a3);
+    }
+
+    // -- OAuthProvider: fixture exchange, no network. Echoes the code into the refresh token so a
+    // test can prove the code reached the provider. A real provider calls OAuthExchange.exchangeCode
+    // here. --
+
+    @Override
+    public AuthorizeInfo authorize(HandlerCtx ctx) {
+        String url = "https://echo.example/authorize?response_type=code&client_id=echo-client-id"
+                + "&code_challenge=echo-challenge&code_challenge_method=S256&state=echo-state";
+        return new AuthorizeInfo(url, "paste", null, null, null);
+    }
+
+    @Override
+    public Map<String, Object> exchange(HandlerCtx ctx, String body) {
         String code = extractStringField(body, "code");
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{\"account\":{"
-                + "\"id\":\"echo-oauth-user\","
-                + "\"email\":\"echo-oauth@example.com\","
-                + "\"refresh\":" + quote("echo-refresh-" + (code != null ? code : ""))
-                + "}}";
-        return response;
+        Map<String, Object> account = new LinkedHashMap<>();
+        account.put("id", "echo-oauth-user");
+        account.put("email", "echo-oauth@example.com");
+        account.put("refresh", "echo-refresh-" + (code != null ? code : ""));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("account", account);
+        return result;
     }
 
     // Returns the string value of `key` in a flat JSON object (quote/escape-aware), or null.
@@ -181,50 +168,6 @@ public final class EchoProvider implements Provider {
             else sb.append(c);
         }
         return sb.toString();
-    }
-
-    // Canned quota catalog: THREE accounts -- two active accounts sharing the "5-hour" pool
-    // (remainingFraction 0.8 and 0.4, so QuotaAdmin.combined's mean is 0.6) and one errored account
-    // with no quota (excluded from the mean but still counted in combined.accountCount). Shape
-    // matches what QuotaAdmin.refresh expects back ({accounts:[{id,status,quota:[...]}]}).
-    private static HttpResponse quotaResponse() {
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{"
-                + "\"accounts\":[{"
-                + "\"id\":\"a1\","
-                + "\"status\":\"active\","
-                + "\"quota\":[{\"label\":\"5-hour\",\"remainingFraction\":0.8,\"resetTime\":123}]"
-                + "},{"
-                + "\"id\":\"a2\","
-                + "\"status\":\"active\","
-                + "\"quota\":[{\"label\":\"5-hour\",\"remainingFraction\":0.4,\"resetTime\":123}]"
-                + "},{"
-                + "\"id\":\"a3\","
-                + "\"status\":\"error\","
-                + "\"quota\":null"
-                + "}]"
-                + "}";
-        return response;
-    }
-
-    // Canned discovery catalog, matching the ids ServerSeeds already seeds for "echo" so the two
-    // stay in sync for anyone comparing seeded vs. discovered.
-    private static HttpResponse modelsResponse() {
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{"
-                + "\"models\":{"
-                + "\"m-echo-opus\":{\"name\":\"Echo Opus\",\"limit\":{\"context\":200000,\"output\":64000}},"
-                + "\"m-echo-haiku\":{\"name\":\"Echo Haiku\",\"limit\":{\"context\":200000,\"output\":64000}}"
-                + "},"
-                + "\"ranking\":[\"m-echo-opus\",\"m-echo-haiku\"]"
-                + "}";
-        return response;
     }
 
     // { id, type, role, model, content:[{type,text}], stop_reason, stop_sequence,

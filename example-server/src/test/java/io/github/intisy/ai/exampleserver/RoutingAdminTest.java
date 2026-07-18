@@ -98,12 +98,13 @@ class RoutingAdminTest {
         assertTrue(e.getMessage().contains("does-not-exist"), e.getMessage());
     }
 
+    // "ratelimited" (AlwaysRateLimitedProvider) implements Provider only, no ModelCatalogProvider --
+    // discover is an explicit user action, so erroring on an absent capability is fine.
     @Test
-    void discoverNon2xxThrowsWithProviderMessage() {
+    void discoverOfBareProviderThrows() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> routing.discover("ratelimited"));
-        assertTrue(e.getMessage().contains("429"), e.getMessage());
-        assertTrue(e.getMessage().contains("rate_limit_error"), e.getMessage());
+        assertTrue(e.getMessage().contains("provider has no model catalog: ratelimited"), e.getMessage());
     }
 
     @Test

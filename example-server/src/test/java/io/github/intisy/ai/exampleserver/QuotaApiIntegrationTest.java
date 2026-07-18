@@ -101,11 +101,14 @@ class QuotaApiIntegrationTest {
         assertTrue(r.body.contains("5-hour"), r.body);
     }
 
+    // "ratelimited" (AlwaysRateLimitedProvider) implements Provider only, no QuotaProvider --
+    // refresh answers an empty accounts array rather than an error (the dashboard shows nothing
+    // rather than erroring for a provider with no quota surface at all).
     @Test
-    void refreshNon2xxIs400() throws IOException {
+    void refreshOfBareProviderIs200WithEmptyAccounts() throws IOException {
         Response r = post("/api/providers/ratelimited/quota/refresh");
-        assertEquals(400, r.status, r.body);
-        assertTrue(r.body.contains("429"), r.body);
+        assertEquals(200, r.status, r.body);
+        assertTrue(r.body.contains("\"accounts\":[]"), r.body);
     }
 
     @Test

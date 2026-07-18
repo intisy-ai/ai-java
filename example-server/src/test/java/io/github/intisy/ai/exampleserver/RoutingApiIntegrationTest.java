@@ -145,11 +145,13 @@ class RoutingApiIntegrationTest {
         assertTrue(r.body.contains("Echo Opus"), r.body);
     }
 
+    // "ratelimited" (AlwaysRateLimitedProvider) implements Provider only, no ModelCatalogProvider --
+    // discover is an explicit user action, so erroring on an absent capability is fine.
     @Test
-    void discoverNon2xxIs400() throws IOException {
+    void discoverOfBareProviderIs400() throws IOException {
         Response r = post("/api/providers/ratelimited/models/discover");
         assertEquals(400, r.status, r.body);
-        assertTrue(r.body.contains("429"), r.body);
+        assertTrue(r.body.contains("provider has no model catalog"), r.body);
     }
 
     @Test

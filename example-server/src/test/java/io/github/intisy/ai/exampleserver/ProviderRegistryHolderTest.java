@@ -2,16 +2,41 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
+import io.github.intisy.ai.shared.routing.Provider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProviderRegistryHolderTest {
+    @Test
+    void getByIdPassesThroughToTheCurrentRegistry(@TempDir Path dir) throws Exception {
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        assertNull(holder.get("echo"), "no jar staged yet -- nothing discovered");
+
+        String staged = System.getProperty("exampleserver.providersDir");
+        Path jar = null;
+        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+            if (p.getFileName().toString().endsWith(".jar")) { jar = p; break; }
+        }
+        Files.copy(jar, dir.resolve(jar.getFileName()));
+        holder.refresh(dir);
+
+        Provider found = holder.get("echo");
+        assertNotNull(found);
+        assertEquals("echo", found.id());
+        assertNull(holder.get("nope"));
+
+        holder.get().close();
+    }
+
     @Test
     void refreshPicksUpNewlyAddedJar(@TempDir Path dir) throws Exception {
         ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));

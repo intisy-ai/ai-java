@@ -137,6 +137,14 @@ public final class ProviderRegistry implements Closeable {
         return providers.stream().map(Provider::id).collect(Collectors.toList());
     }
 
+    /** The discovered {@link Provider} whose {@link Provider#id()} equals {@code id}, or {@code null}. */
+    public Provider get(String id) {
+        for (Provider provider : providers) {
+            if (provider.id().equals(id)) return provider;
+        }
+        return null;
+    }
+
     /** The jar file that registers {@code providerId}, or {@code null} if no such provider is loaded. */
     public Path jarFor(String providerId) {
         return jars.get(providerId);

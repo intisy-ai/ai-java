@@ -49,6 +49,7 @@ class OAuthAdminTest {
         stageProviderJar(providersDir);
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
+        assertTrue(holder.listProviderIds().contains("ratelimited"), holder.listProviderIds().toString());
 
         accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, () -> 1000L);
@@ -95,5 +96,13 @@ class OAuthAdminTest {
     @Test
     void authorizeUnknownProviderThrows() {
         assertThrows(IllegalArgumentException.class, () -> oauth.authorize("nope"));
+    }
+
+    // "ratelimited" (AlwaysRateLimitedProvider) implements Provider only, no OAuthProvider.
+    @Test
+    void authorizeOfBareProviderThrows() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> oauth.authorize("ratelimited"));
+        assertTrue(e.getMessage().contains("provider has no oauth surface: ratelimited"), e.getMessage());
     }
 }

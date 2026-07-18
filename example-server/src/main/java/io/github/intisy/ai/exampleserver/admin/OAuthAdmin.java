@@ -2,13 +2,13 @@ package io.github.intisy.ai.exampleserver.admin;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.shared.routing.AuthorizeInfo;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.ProxyHandler;
+import io.github.intisy.ai.shared.routing.OAuthProvider;
+import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.spi.JsonCodec;
 import io.github.intisy.ai.shared.spi.Logger;
 import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -16,10 +16,10 @@ import java.util.Map;
 /**
  * UI-safe OAuth login administration (provider-authorize model): the installed provider builds its
  * own authorize URL (its PKCE, its {@code state} with the verifier packed in, its registered
- * redirect) via {@code GET /v1/oauth/authorize}; the operator completes the flow (paste the code)
- * and {@link #complete} relays it to {@code POST /v1/oauth/exchange} and seeds the account through
- * {@link AccountAdmin}. The server generates no PKCE/state and holds no pending state. Never logs
- * {@code code}/{@code state}/tokens.
+ * redirect) via the typed {@link OAuthProvider} capability; the operator completes the flow (paste
+ * the code) and {@link #complete} relays it to the provider's typed {@code exchange} and seeds the
+ * account through {@link AccountAdmin}. The server generates no PKCE/state and holds no pending
+ * state. Never logs {@code code}/{@code state}/tokens.
  */
 public final class OAuthAdmin {
     private final ProviderRegistryHolder holder;
@@ -39,32 +39,47 @@ public final class OAuthAdmin {
         this.store = store;
     }
 
-    /** The provider's {@code {authorizeUrl, completion, loopbackPort?, loopbackPath?}}. */
+    /** The provider's {@code {authorizeUrl, completion, state?, loopbackPort?, loopbackPath?}}. */
     public Map<String, Object> authorize(String providerId) {
-        HttpResponse response = call(providerId, "GET", "/v1/oauth/authorize", null);
-        if (response.status == 404) {
+        Provider p = holder.get(providerId);
+        if (p == null) {
+            throw new IllegalArgumentException("unknown provider: " + providerId);
+        }
+        if (!(p instanceof OAuthProvider)) {
             throw new IllegalArgumentException("provider has no oauth surface: " + providerId);
         }
-        if (response.status / 100 != 2) {
-            throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
-        }
-        Map<String, Object> params = asMap(json.parse(response.body));
-        if (params == null || stringOf(params.get("authorizeUrl")) == null) {
+
+        HandlerCtx ctx = new HandlerCtx(configDir, store, log, null);
+        AuthorizeInfo info = ((OAuthProvider) p).authorize(ctx);
+        if (info == null || info.authorizeUrl == null) {
             throw new IllegalArgumentException("provider returned no authorizeUrl");
         }
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("authorizeUrl", info.authorizeUrl);
+        params.put("completion", info.completion);
+        if (info.state != null) params.put("state", info.state);
+        if (info.loopbackPort != null) params.put("loopbackPort", info.loopbackPort);
+        if (info.loopbackPath != null) params.put("loopbackPath", info.loopbackPath);
         return params;
     }
 
     /** Relays {@code {code,state}} to the provider's exchange and seeds the returned account. */
     public Map<String, Object> complete(String providerId, String code, String state) {
+        Provider p = holder.get(providerId);
+        if (p == null) {
+            throw new IllegalArgumentException("unknown provider: " + providerId);
+        }
+        if (!(p instanceof OAuthProvider)) {
+            throw new IllegalArgumentException("provider has no oauth surface: " + providerId);
+        }
+
         Map<String, Object> reqBody = new LinkedHashMap<>();
         reqBody.put("code", code);
         reqBody.put("state", state != null ? state : "");
-        HttpResponse response = call(providerId, "POST", "/v1/oauth/exchange", json.stringify(reqBody));
-        if (response.status / 100 != 2) {
-            throw new IllegalArgumentException("provider returned " + response.status + ": " + response.body);
-        }
-        Map<String, Object> parsed = asMap(json.parse(response.body));
+        HandlerCtx ctx = new HandlerCtx(configDir, store, log, null);
+        Map<String, Object> parsed = ((OAuthProvider) p).exchange(ctx, json.stringify(reqBody));
+
         Map<String, Object> account = parsed != null ? asMap(parsed.get("account")) : null;
         if (account == null) {
             throw new IllegalArgumentException("provider exchange returned no account");
@@ -80,23 +95,6 @@ public final class OAuthAdmin {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("account", view);
         return result;
-    }
-
-    private HttpResponse call(String providerId, String method, String url, String body) {
-        ProxyHandler handler = holder.asHandlerResolver().resolve(providerId);
-        if (handler == null) {
-            throw new IllegalArgumentException("unknown provider: " + providerId);
-        }
-        HttpRequest request = new HttpRequest();
-        request.method = method;
-        request.url = url;
-        request.headers = new LinkedHashMap<>();
-        request.body = body;
-        try {
-            return handler.handle(request, new HandlerCtx(configDir, store, log, null));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("oauth call failed: " + e.getMessage());
-        }
     }
 
     @SuppressWarnings("unchecked")

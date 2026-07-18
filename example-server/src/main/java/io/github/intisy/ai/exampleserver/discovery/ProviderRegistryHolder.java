@@ -2,6 +2,7 @@ package io.github.intisy.ai.exampleserver.discovery;
 
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
+import io.github.intisy.ai.shared.routing.Provider;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,6 +33,11 @@ public final class ProviderRegistryHolder {
 
     public HandlerResolver asHandlerResolver() {
         return current.asHandlerResolver();
+    }
+
+    /** The discovered {@link Provider} whose id equals {@code id}, or {@code null}. */
+    public Provider get(String id) {
+        return current.get(id);
     }
 
     /**
