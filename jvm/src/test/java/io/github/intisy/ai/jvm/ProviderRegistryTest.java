@@ -1,5 +1,7 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
@@ -128,6 +130,45 @@ class ProviderRegistryTest {
                         "the request should have been dispatched to the jar-only JarOnlyProvider, "
                                 + "which itself delegated to a helper class loadable only through the still-open jar classloader");
             }
+        }
+    }
+
+    /**
+     * SP-3 T3b: proves {@code :jvm}'s {@code implementation project(":ir")} dependency is what
+     * makes a THIN provider jar's {@link Provider#handleIr} resolvable at runtime. Like {@link
+     * #fromDirectory_keepsClassLoaderOpen_soHandlerCanLazilyLoadAHelperClass}, the fixture Provider
+     * is compiled with {@code javax.tools.ToolProvider}'s compiler into a scratch directory NEVER
+     * on this test's own classpath, so the ONLY way {@code handleIr}'s body can resolve {@link
+     * IrRequest}/{@link IrResponse} at runtime is through the {@link ProviderRegistry}'s {@code
+     * URLClassLoader} delegating to its PARENT (this module's own classloader) -- exactly mirroring
+     * how a real, thin provider jar (antigravity/claude/stub -- {@code compileOnly project(":ir")},
+     * no {@code io.github.intisy.ai.ir.*} classes bundled) depends on the HOST providing those
+     * classes. A regression that dropped {@code :jvm}'s dependency on {@code :ir} back to {@code
+     * compileOnly} (or removed it) would fail this with {@link NoClassDefFoundError} the moment
+     * {@code handleIr} runs, exactly as it would for a real provider jar.
+     */
+    @Test
+    void fromDirectory_irCapableJarOnlyProvider_resolvesCoreIrClassesAtRuntime(@TempDir Path tmp) throws Exception {
+        Path providersDir = tmp.resolve("providers");
+        Files.createDirectory(providersDir);
+        writeJarOnlyIrProviderJar(providersDir.resolve("jar-only-ir-provider.jar"), tmp.resolve("compile-work-ir"));
+
+        try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
+            assertEquals(List.of("jaronlyir"), registry.listProviderIds());
+            Provider provider = registry.get("jaronlyir");
+
+            IrRequest request = new IrRequest();
+            request.model = "m-jaronlyir";
+            HandlerCtx ctx = new HandlerCtx("", Storage.memory(), null, "m-jaronlyir");
+
+            IrResponse response = provider.handleIr(request, ctx);
+            assertEquals("m-jaronlyir", response.model);
+            assertEquals("jaronlyir-ir-ok", response.id);
+
+            // The legacy handle() path still works unchanged on the SAME jar-loaded instance.
+            HttpResponse legacy = provider.handle(post("/v1/messages", "{}"), ctx);
+            assertEquals(200, legacy.status);
+            assertEquals("jaronlyir-legacy:m-jaronlyir", legacy.body);
         }
     }
 
@@ -351,6 +392,100 @@ class ProviderRegistryTest {
         jar.putNextEntry(new JarEntry(entryName));
         jar.write(Files.readAllBytes(classFile));
         jar.closeEntry();
+    }
+
+    // -- jar-only, IR-capable provider (SP-3 T3b: proves handleIr resolves core-ir at runtime) ----
+
+    private static final String JAR_ONLY_IR_PACKAGE = "io.github.intisy.ai.jvm.jaronlyir";
+
+    private static final String JAR_ONLY_IR_PROVIDER_SOURCE =
+            "package " + JAR_ONLY_IR_PACKAGE + ";\n"
+            + "import io.github.intisy.ai.ir.IrRequest;\n"
+            + "import io.github.intisy.ai.ir.IrResponse;\n"
+            + "import io.github.intisy.ai.shared.routing.HandlerCtx;\n"
+            + "import io.github.intisy.ai.shared.routing.Provider;\n"
+            + "import io.github.intisy.ai.shared.spi.http.HttpRequest;\n"
+            + "import io.github.intisy.ai.shared.spi.http.HttpResponse;\n"
+            + "import java.util.HashMap;\n"
+            + "public final class JarOnlyIrProvider implements Provider {\n"
+            + "    @Override public String id() { return \"jaronlyir\"; }\n"
+            + "    @Override public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {\n"
+            + "        HttpResponse resp = new HttpResponse();\n"
+            + "        resp.status = 200;\n"
+            + "        resp.headers = new HashMap<>();\n"
+            + "        resp.body = \"jaronlyir-legacy:\" + ctx.model;\n"
+            + "        return resp;\n"
+            + "    }\n"
+            // The whole point: IrRequest/IrResponse are referenced ONLY here, never bundled into
+            // this jar (mirrors a real thin provider jar's compileOnly project(":ir")) -- resolving
+            // them at runtime depends entirely on the host classloader (this module's own) already
+            // carrying core-ir's classes, per :jvm's `implementation project(":ir")` dependency.
+            + "    @Override public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {\n"
+            + "        IrResponse resp = new IrResponse();\n"
+            + "        resp.model = request.model;\n"
+            + "        resp.id = \"jaronlyir-ir-ok\";\n"
+            + "        return resp;\n"
+            + "    }\n"
+            + "}\n";
+
+    /**
+     * Compiles {@code JarOnlyIrProvider} (source above) into a scratch directory NOT on this
+     * test's own classpath, using a compile classpath that ALSO includes {@link IrRequest}/{@link
+     * IrResponse}'s code source (unlike {@link #jarOnlyProviderCompileClasspath}) -- javac needs
+     * them to compile the source, but the resulting jar bundles ONLY the compiled {@code
+     * JarOnlyIrProvider.class}, never core-ir's own classes, keeping the jar thin exactly like a
+     * real provider module's.
+     */
+    private static void writeJarOnlyIrProviderJar(Path jarPath, Path workDir) throws IOException {
+        Path srcDir = workDir.resolve("src").resolve(JAR_ONLY_IR_PACKAGE.replace('.', '/'));
+        Files.createDirectories(srcDir);
+        Path providerSrc = srcDir.resolve("JarOnlyIrProvider.java");
+        Files.write(providerSrc, JAR_ONLY_IR_PROVIDER_SOURCE.getBytes(StandardCharsets.UTF_8));
+
+        Path classesDir = workDir.resolve("classes");
+        Files.createDirectories(classesDir);
+
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException(
+                    "no system Java compiler available -- run this test on a JDK, not a JRE");
+        }
+        LinkedHashSet<String> cp = new LinkedHashSet<>();
+        for (Class<?> c : new Class<?>[] {
+                Provider.class, HttpRequest.class, HttpResponse.class, HandlerCtx.class, IrRequest.class, IrResponse.class}) {
+            cp.add(codeSourcePath(c));
+        }
+        int result = compiler.run(null, null, null,
+                "-d", classesDir.toString(),
+                "-cp", String.join(File.pathSeparator, cp),
+                providerSrc.toString());
+        if (result != 0) {
+            throw new IllegalStateException("failed to compile jar-only IR provider fixture source");
+        }
+
+        Path classFilesDir = classesDir.resolve(JAR_ONLY_IR_PACKAGE.replace('.', '/'));
+        try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(jarPath))) {
+            String entryName = JAR_ONLY_IR_PACKAGE.replace('.', '/') + "/JarOnlyIrProvider.class";
+            jar.putNextEntry(new JarEntry(entryName));
+            jar.write(Files.readAllBytes(classFilesDir.resolve("JarOnlyIrProvider.class")));
+            jar.closeEntry();
+
+            jar.putNextEntry(new JarEntry("META-INF/services/" + Provider.class.getName()));
+            jar.write((JAR_ONLY_IR_PACKAGE + ".JarOnlyIrProvider").getBytes(StandardCharsets.UTF_8));
+            jar.closeEntry();
+        }
+    }
+
+    private static String codeSourcePath(Class<?> c) throws IOException {
+        CodeSource cs = c.getProtectionDomain().getCodeSource();
+        if (cs == null || cs.getLocation() == null) {
+            throw new IllegalStateException("no code source for " + c + " -- cannot build a compile classpath");
+        }
+        try {
+            return new File(cs.getLocation().toURI()).getAbsolutePath();
+        } catch (URISyntaxException e) {
+            throw new IOException(e);
+        }
     }
 
     /** Minimal {@link Provider} used only to prove {@link ProviderRegistry} discovery + wiring. */

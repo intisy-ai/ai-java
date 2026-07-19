@@ -136,6 +136,17 @@ class ProviderOrgInstallServeE2ETest {
         // noAccountConfigured_returnsSyntheticInvalidRequestError): 400, x-hub-chat-error: 1,
         // an invalid_request_error body -- proving the DIRECT call reached the INSTALLED provider
         // (console chat, POST /api/providers/{id}/messages, never a router match).
+        //
+        // SP-3 T3b: MessagesAdmin now tries ClaudeProvider#handleIr FIRST; the jar staged at
+        // exampleserver.orgProvidersDir predates SP-3 T2 (verified: javap shows no handleIr method
+        // on the staged class -- only the legacy typed-capability-SPI shape), so it still hits
+        // Provider#handleIr's own default, which throws UnsupportedOperationException --
+        // MessagesAdmin falls back to the legacy handle() call below unchanged, reproducing this
+        // exact response. This assertion therefore stays meaningful for TODAY's staged jar; once
+        // the org provider jars are refreshed to a build that implements handleIr, the no-account
+        // case will instead surface as a flat 502 carrying "claude handleIr: synthetic error
+        // response (status 400)" (handleIr's SYNTHETIC branch throws rather than returning that
+        // body -- see Provider#handleIr's own contract), and this test will need updating to match.
         String body = "{\"model\":\"" + CLAUDE_MODEL + "\",\"messages\":[]}";
         Response messages = post("/api/providers/claude/messages", body);
         assertEquals(400, messages.status, messages.body);
@@ -168,6 +179,16 @@ class ProviderOrgInstallServeE2ETest {
         // rate_limit_error), body mentioning "No available antigravity account" -- the provider's
         // OWN wording, proving the DIRECT call reached the INSTALLED provider (console chat, POST
         // /api/providers/{id}/messages, never a router match).
+        //
+        // SP-3 T3b: MessagesAdmin now tries AntigravityProvider#handleIr FIRST; the staged jar
+        // predates SP-3 T2 (see installRoutesToClaudeProvider's comment -- verified via javap), so
+        // it still hits Provider#handleIr's own default (UnsupportedOperationException) and
+        // MessagesAdmin falls back to the legacy handle() call below unchanged. Once the org
+        // provider jars are refreshed to a build with handleIr, this will instead surface as a flat
+        // 502 (handleIr's SYNTHETIC branch throws a RuntimeException carrying this SAME message
+        // text, extracted from the synthesized body via extractGeminiErrorMessage, so the "No
+        // available antigravity account" assertion below survives that future change unmodified --
+        // only the status/x-hub-chat-error expectations would need revisiting).
         String body = "{\"model\":\"" + ANTIGRAVITY_MODEL + "\",\"messages\":[]}";
         Response messages = post("/api/providers/antigravity/messages", body);
         assertEquals(503, messages.status, messages.body);

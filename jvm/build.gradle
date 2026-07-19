@@ -7,6 +7,14 @@ dependencies {
     // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
     api project(":routing")
     api project(":accounts")
+    // SP-3 T3b: core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
+    // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
+    // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
+    // (see ProviderRegistry#fromDirectory), so a provider's handleIr resolving io.github.intisy.
+    // ai.ir.IrRequest/IrResponse at runtime depends on THIS classpath actually carrying :ir's
+    // classes for that parent-first delegation to find. implementation (not api): :jvm's own
+    // public surface (AiJava) does not expose IR types itself, it only needs to PROVIDE them.
+    implementation project(":ir")
     api "com.google.code.gson:gson:2.10.1"
     githubApi "intisy:simple-logger:1.12.7"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.

@@ -6,6 +6,10 @@ apply plugin: "application"
 dependencies {
     // Consume :jvm's public facade (it re-exports :routing + :accounts via `api`).
     implementation project(":jvm")
+    // SP-3 T3b: core-ir's IR types + vendor translators (AnthropicTranslator), needed directly by
+    // ServerProfile (profile.translator) and MessagesAdmin (console chat's IR front-door). :jvm's
+    // own dependency on :ir is `implementation` (non-transitive), so this module needs its own.
+    implementation project(":ir")
     // Deliberately NO project(":examples-provider") dependency — the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
     // Default store backend: a real JDBC driver so ServerMain's default `sqlite` store (via

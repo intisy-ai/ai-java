@@ -24,6 +24,16 @@ project(":routing").projectDir = file("core-proxy/java/routing")
 include ":teavm"
 project(":teavm").projectDir = file("core-proxy/java/teavm")
 
+// :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
+// aliased in the same way as :routing/:teavm above. core-ir is nested as core-proxy's OWN
+// submodule (core-proxy/core-ir, pinned per core-proxy/.gitmodules), not a direct submodule of
+// ai-java. :routing's Provider/RoutingProfile (SP-3) reference core-ir's Translator/IrRequest/
+// IrResponse types, so any build that includes :routing must also include :ir at this exact path
+// for `project(":ir")` to resolve (see core-proxy/java/routing/build.gradle's compileOnly/
+// testImplementation project(":ir")).
+include ":ir"
+project(":ir").projectDir = file("core-proxy/core-ir/java/ir")
+
 include ":accounts"
 project(":accounts").projectDir = file("core-auth/java/accounts")
 
