@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * An {@link HttpClient} that delegates to a real client (e.g. the default {@code
  * UrlConnectionHttpClient}) while counting the requests it sends. Injecting this proves the HTTP
- * boundary is swappable — a server that wants connection pooling, proxies, or its own retry policy
- * just implements {@link HttpClient} — and the count confirms the injected client is what performed
+ * boundary is swappable: a server that wants connection pooling, proxies, or its own retry policy
+ * just implements {@link HttpClient}, and the count confirms the injected client is what performed
  * the OAuth refresh call.
  */
 public final class RecordingHttpClient implements HttpClient {

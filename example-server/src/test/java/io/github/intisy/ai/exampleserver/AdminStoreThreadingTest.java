@@ -26,17 +26,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Proves Task 2's fix: {@link QuotaAdmin}/{@link ConfigAdmin} (and, by the same one-line change,
- * {@code OAuthAdmin}/{@code RoutingAdmin}) must thread the server's injected {@link Store} into
+ * Proves {@link QuotaAdmin}/{@link ConfigAdmin} (and, by the same one-line change,
+ * {@code OAuthAdmin}/{@code RoutingAdmin}) thread the server's injected {@link Store} into
  * the {@code HandlerCtx} they build for a provider call -- not just {@code configDir}. Exercised
- * via the real jar-discovered {@code ctx-capture} example provider (added alongside this task,
- * staged the same way {@link QuotaAdminTest}/{@link ConfigAdminTest}/{@link RoutingAdminTest}
- * already stage the jar): its {@code handle} writes a fixed marker into {@code ctx.store} IFF that
- * store is non-null. The test's own {@code store} reference reads the marker back after the call
- * -- if the admin threaded a different (or no) store, the marker would never appear in it. The
- * store here is a plain {@code InMemoryStore} (not a {@code FileStore}), so {@code configDir} is
- * empty and the provider has no store of its own to fall back to: before the fix, the marker's
- * absence is a direct signal of the split-brain, not an artifact of some other fallback path.
+ * via the real jar-discovered {@code ctx-capture} example provider, staged the same way
+ * {@link QuotaAdminTest}/{@link ConfigAdminTest}/{@link RoutingAdminTest} stage the jar: its
+ * {@code handle} writes a fixed marker into {@code ctx.store} IFF that store is non-null. The
+ * test's own {@code store} reference reads the marker back after the call -- if the admin
+ * threaded a different (or no) store, the marker would never appear in it. The store here is a
+ * plain {@code InMemoryStore} (not a {@code FileStore}), so {@code configDir} is empty and the
+ * provider has no store of its own to fall back to: the marker's absence is a direct signal of a
+ * store split-brain, not an artifact of some other fallback path.
  */
 class AdminStoreThreadingTest {
 

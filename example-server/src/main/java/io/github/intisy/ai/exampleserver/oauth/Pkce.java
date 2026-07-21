@@ -8,7 +8,7 @@ import java.util.Base64;
 
 /**
  * PKCE (RFC 7636) + CSRF-state helpers for the server-side OAuth flow. JVM-only (uses
- * {@link SecureRandom}/{@link MessageDigest}) — it lives in the example-server, not in the
+ * {@link SecureRandom}/{@link MessageDigest}): it lives in the example-server, not in the
  * transpilable {@code :accounts} core, so it may use {@code java.security}/{@code java.util.Base64}.
  */
 public final class Pkce {

@@ -7,8 +7,8 @@ import java.util.List;
 /**
  * A source of installable provider jars, decoupled from any particular hosting scheme (GitHub
  * releases today; could be a private registry or a local index tomorrow). {@link #list()} is a
- * pure lookup — it never writes to disk — so callers (e.g. an install API added in a later task)
- * can show what's available before committing to a download.
+ * pure lookup (it never writes to disk), so callers (e.g. an install API) can show what's
+ * available before committing to a download.
  */
 public interface ProviderSource {
 

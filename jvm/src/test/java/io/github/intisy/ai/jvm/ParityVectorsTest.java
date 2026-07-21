@@ -23,15 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Phase 2 Task 7: JVM half of the JVM&lt;-&gt;JS parity harness. Loads vector files from this
- * module's own {@code src/test/resources/parity/} (originally {@code shared/src/test/resources/
- * parity/}, restored here in Phase 4 Task 3 now that {@code shared}/{@code js} relocated out of
- * ai-java into the core-proxy/core-auth submodules and their JS-side parity tests moved with
- * them), and runs each vector through the routing/select engine's {@code RateLimitMath}/
- * {@code RateLimit}/{@code ModelMap} (now sourced from the {@code :routing}/{@code :accounts}
- * submodule projects) directly,
- * using the PRODUCTION {@link GsonJsonCodec} and this module's {@link InMemoryStore} -- the
- * exact combination the {@code jvm} artifact ships. A passing run here plus a passing run of
+ * JVM half of the JVM&lt;-&gt;JS parity harness. Loads vector files from this module's own
+ * {@code src/test/resources/parity/} and runs each vector through the routing/select engine's
+ * {@code RateLimitMath}/{@code RateLimit}/{@code ModelMap} directly, using the PRODUCTION
+ * {@link GsonJsonCodec} and this module's {@link InMemoryStore} -- the exact combination the
+ * {@code jvm} artifact ships. A passing run here plus a passing run of
  * the JS test on the identical vectors is the correctness guarantee: the same shared logic
  * produces IDENTICAL outputs on the JVM and on TeaVM-compiled JS.
  *

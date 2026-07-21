@@ -18,7 +18,7 @@ import io.github.intisy.ai.shared.spi.Store;
 /**
  * The whole platform as one swappable unit: every SPI a server needs, bundled so a caller can
  * hand ai-java a single object that <i>is</i> the backend rather than threading each dependency
- * through by hand. {@link #store()} is the one required member (no default — storage is never
+ * through by hand. {@link #store()} is the one required member (no default; storage is never
  * silently chosen); {@link #notifier()} may be {@code null}, meaning "let the host resolve the
  * store-derived default" (see {@code AiJava}). Build one with {@link #builder()} or take the JVM
  * defaults from {@link Backends#defaults(Store)}.
@@ -37,7 +37,7 @@ public interface Backend {
 
     Logger logger();
 
-    /** May be {@code null} — the host then applies its store-derived default notifier. */
+    /** May be {@code null}; the host then applies its store-derived default notifier. */
     Notifier notifier();
 
     Env env();

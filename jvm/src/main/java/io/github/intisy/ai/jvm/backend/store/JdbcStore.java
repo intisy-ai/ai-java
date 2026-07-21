@@ -16,7 +16,7 @@ import java.util.function.UnaryOperator;
 /**
  * JDBC-backed {@link Store}: a SQL blob key/value table for servers running against a real
  * database (H2, MySQL, PostgreSQL, SQLite) instead of {@link FileStore}'s JSON files. The
- * library itself has no runtime JDBC driver dependency — the caller (server) supplies a
+ * library itself has no runtime JDBC driver dependency: the caller (server) supplies a
  * configured {@link DataSource}; only {@code javax.sql} types are used here, which are part of
  * the Java 8 platform.
  *
@@ -29,21 +29,21 @@ import java.util.function.UnaryOperator;
  * {@code TEXT}. Any other/unrecognized database falls back to {@code CLOB}, the ANSI SQL
  * large-object type.
  *
- * <p><b>Atomic {@code update} — ensure-row-then-lock.</b> {@code SELECT ... FOR UPDATE} only
+ * <p><b>Atomic {@code update}: ensure-row-then-lock.</b> {@code SELECT ... FOR UPDATE} only
  * locks a row that already exists; on an absent key it locks nothing, so two concurrent
  * {@code update} calls on the SAME absent key could both read {@code null} and one's
- * {@code UPDATE} would silently clobber the other's already-committed {@code INSERT} — a lost
+ * {@code UPDATE} would silently clobber the other's already-committed {@code INSERT}: a lost
  * write with no exception. To make the lock always cover the eventual write, {@code update}
  * first <b>ensures the row exists</b> ({@code INSERT ... (k, v) VALUES (?, NULL)}, swallowing
- * the duplicate-key {@code SQLException} if another transaction just did the same insert —
+ * the duplicate-key {@code SQLException} if another transaction just did the same insert;
  * a portable, DB-agnostic "insert-if-absent"), THEN runs
- * {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE} — except on SQLite, which has no
+ * {@code SELECT v FROM ai_kv WHERE k = ? FOR UPDATE}, except on SQLite, which has no
  * {@code FOR UPDATE} syntax at all and doesn't need one: it has no row-level locking, and the
  * {@code ensureRowExists} INSERT just above already takes SQLite's whole-database write lock
  * for the rest of the transaction, so the plain {@code SELECT} that follows is just as
  * serialized (see {@link #supportsRowLocking}). A real row is now always locked (or, on
- * SQLite, the whole database already is), so a second {@code update} on the same key —
- * whether it started out present or absent — blocks until the first transaction commits,
+ * SQLite, the whole database already is), so a second {@code update} on the same key
+ * (whether it started out present or absent) blocks until the first transaction commits,
  * deterministically, with no retry needed for this race.
  *
  * <p><b>NULL {@code v} means logically absent.</b> The placeholder row inserted by
@@ -54,23 +54,23 @@ import java.util.function.UnaryOperator;
  * {@code current == null} exactly as it would for a genuinely absent key.
  *
  * <p><b>{@code put} shares {@code update}'s atomic path.</b> A separate UPDATE-then-INSERT
- * upsert for {@code put} has the exact same absent-key race as the old {@code update} did (two
+ * upsert for {@code put} would have the exact same absent-key race described above (two
  * concurrent {@code put}s on a fresh key can both miss the {@code UPDATE} and collide on
  * {@code INSERT}). Rather than duplicate the ensure-row-then-lock logic, {@code put(key, value)}
  * is simply {@code update(key, ignored -> value)}.
  *
  * <p><b>Failure handling.</b> The whole read-mutate-write cycle runs in one transaction
- * (autoCommit off) and is wrapped so that ANY throwable — a JDBC failure or a {@code
- * RuntimeException} thrown by the caller's mutator — triggers a rollback before propagating,
+ * (autoCommit off) and is wrapped so that ANY throwable (a JDBC failure or a {@code
+ * RuntimeException} thrown by the caller's mutator) triggers a rollback before propagating,
  * so a failure never leaves an open transaction on a pooled {@link DataSource}. A bounded retry
  * ({@link #MAX_ATTEMPTS}) is kept only for genuinely transient SQL failures (deadlock /
- * serialization-failure SQLStates) — not for the absent-key race, which ensure-row-then-lock
- * now makes deterministic without needing a retry.
+ * serialization-failure SQLStates); the absent-key race is handled deterministically by
+ * ensure-row-then-lock and doesn't need a retry.
  *
  * <p>Semantics match {@link FileStore}: {@link #get} of an absent key returns {@code null},
  * {@link #delete} of an absent key is a no-op, a {@code null} mutator result still creates/keeps
  * the key written as an empty string (never {@code null}, so it doesn't look absent), and
- * {@link #listKeys} returns keys starting with {@code prefix} (a literal prefix — {@code %}/
+ * {@link #listKeys} returns keys starting with {@code prefix} (a literal prefix: {@code %}/
  * {@code _} in it are escaped, not treated as SQL wildcards).
  */
 public class JdbcStore implements Store {

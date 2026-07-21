@@ -24,8 +24,8 @@ import java.io.IOException;
 
 /**
  * Shows the account engine end to end against a REAL local OAuth token endpoint (the one true
- * external edge, faked by {@link FakeTokenServer}). Everything else — the store, the HTTP client,
- * the manager — is real. A fixed clock and seeded random make cooldown/backoff a single predictable
+ * external edge, faked by {@link FakeTokenServer}). Everything else (the store, the HTTP client,
+ * the manager) is real. A fixed clock and seeded random make cooldown/backoff a single predictable
  * timestamp. It walks: acquire &rarr; rate-limit &rarr; cooldown respected &rarr; reset &rarr;
  * transient-error backoff &rarr; success clears it &rarr; a stored-refresh-token refresh round trip
  * &rarr; a revoked ({@code invalid_grant}) refresh disabling the account.

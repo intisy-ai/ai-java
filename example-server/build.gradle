@@ -6,11 +6,11 @@ apply plugin: "application"
 dependencies {
     // Consume :jvm's public facade (it re-exports :routing + :accounts via `api`).
     implementation project(":jvm")
-    // SP-3 T3b: core-ir's IR types + vendor translators (AnthropicTranslator), needed directly by
+    // core-ir's IR types + vendor translators (AnthropicTranslator), needed directly by
     // ServerProfile (profile.translator) and MessagesAdmin (console chat's IR front-door). :jvm's
     // own dependency on :ir is `implementation` (non-transitive), so this module needs its own.
     implementation project(":ir")
-    // Deliberately NO project(":examples-provider") dependency — the provider is discovered from
+    // Deliberately NO project(":examples-provider") dependency: the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
     // Default store backend: a real JDBC driver so ServerMain's default `sqlite` store (via
     // Storage.jdbc) persists across restarts. Must be on the runtime classpath, not just test.
@@ -27,7 +27,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // Stage :examples-provider's built jar into a providers/ directory, as a server operator would
-// drop a provider jar into a plugins folder. Only the `test` task depends on this — the
+// drop a provider jar into a plugins folder. Only the `test` task depends on this: the
 // integration tests route through the echo provider and need it staged. A real `run` must start
 // with NO fake providers (see ServerMain), so it points at a clean, never-staged directory instead.
 def providersDir = layout.buildDirectory.dir("providers")
@@ -47,10 +47,10 @@ tasks.named("run") {
 tasks.named("test") {
     dependsOn(stageProviders)
     systemProperty("exampleserver.providersDir", providersDir.get().asFile.absolutePath)
-    // Phase 7: the two REAL provider jars (antigravity/claude) are pre-built out-of-band in
-    // their own repos (ai-java cannot includeBuild them -- see phase-7-e2e-interface-map.md §6)
-    // and staged here manually. Default to build/orgProviders (empty in CI); the e2e test skips
-    // via Assumptions when the jars aren't present. Override with -PorgProvidersDir=<dir>.
+    // The two REAL provider jars (antigravity/claude) are pre-built out-of-band in their own
+    // repos (ai-java cannot includeBuild them) and staged here manually. Default to
+    // build/orgProviders (empty in CI); the e2e test skips via Assumptions when the jars aren't
+    // present. Override with -PorgProvidersDir=<dir>.
     systemProperty("exampleserver.orgProvidersDir",
         (project.findProperty("orgProvidersDir") ?: layout.buildDirectory.dir("orgProviders").get().asFile.absolutePath).toString())
 }

@@ -36,25 +36,25 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Task 3: proves the {@code ServiceLoader}-based {@link ProviderRegistry} really is the seam
+ * Proves the {@code ServiceLoader}-based {@link ProviderRegistry} really is the seam
  * {@link AiJava#router(RoutingProfile)} wires in as its {@code HandlerResolver}, replacing the
  * hand-assembled test resolvers ({@code HandlerResolvers.fromRegistry(...)}) other tests
  * (e.g. {@link AiJavaTest}, {@link RouterJvmIntegrationTest}) build by hand.
  *
  * <p>{@link #writeStubProviderJar} packages the already-compiled {@link StubProvider} {@code
- * .class} (compiled as a normal part of this module's test-compile step — no {@code javac}
+ * .class} (compiled as a normal part of this module's test-compile step, no {@code javac}
  * invoked at test runtime) plus a real {@code META-INF/services} registration into an actual
- * jar, then drops it into a temp "providers" directory — exactly the shape a real provider
+ * jar, then drops it into a temp "providers" directory: exactly the shape a real provider
  * module ships. {@link ProviderRegistry#fromDirectory} discovers it via {@code
  * ServiceLoader.load(Provider.class, classLoader)} over a dedicated {@code URLClassLoader}, and
  * {@code AiJava.builder().providersDir(...).build().router(profile)} routes a real request
- * through it end-to-end — proving the full chain: jar on disk -&gt; ServiceLoader discovery -&gt;
+ * through it end-to-end, proving the full chain: jar on disk -&gt; ServiceLoader discovery -&gt;
  * {@code HandlerResolvers.fromProviders} -&gt; {@code Router.route} dispatch. Dropping in a
- * SEPARATE real provider module (its own Gradle project, own jar, own release) is Task 4's job —
- * this only proves the registry wiring itself is correct.
+ * SEPARATE real provider module (its own Gradle project, own jar, own release) is out of scope
+ * here; this only proves the registry wiring itself is correct.
  *
  * <p>{@code fromDirectory_discoversJarProvider_andWiresAsAiJavaResolver}'s {@link StubProvider}
- * is a nested class of THIS test, so it's already present on the test's own compile classpath —
+ * is a nested class of THIS test, so it's already present on the test's own compile classpath:
  * the parent-first {@link ClassLoader} delegation the {@code URLClassLoader} in
  * {@link ProviderRegistry} uses would resolve it there without ever reading the jar this test
  * wrote, so that test alone can't tell a working {@code URLClassLoader} apart from a broken (or
@@ -62,7 +62,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * compiles a {@code Provider} implementation (plus a helper class referenced only from inside
  * {@code handle(...)}, never during construction) with {@code javax.tools.ToolProvider}'s
  * compiler into a scratch directory that is NOT on this test's classpath, jars only that output,
- * and routes a real request through it — a regression of the {@code ProviderRegistry}
+ * and routes a real request through it. A regression of the {@code ProviderRegistry}
  * classloader-lifetime bug (closing the {@code URLClassLoader} right after {@code ServiceLoader}
  * discovery instead of keeping it open for the registry's lifetime) fails that test with a
  * {@link NoClassDefFoundError} instead of returning the expected response.
@@ -134,7 +134,7 @@ class ProviderRegistryTest {
     }
 
     /**
-     * SP-3 T3b: proves {@code :jvm}'s {@code implementation project(":ir")} dependency is what
+     * Proves {@code :jvm}'s {@code implementation project(":ir")} dependency is what
      * makes a THIN provider jar's {@link Provider#handleIr} resolvable at runtime. Like {@link
      * #fromDirectory_keepsClassLoaderOpen_soHandlerCanLazilyLoadAHelperClass}, the fixture Provider
      * is compiled with {@code javax.tools.ToolProvider}'s compiler into a scratch directory NEVER
@@ -299,7 +299,8 @@ class ProviderRegistryTest {
             + "    @Override public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {\n"
             // JarOnlyHelper is referenced ONLY here, never during construction/ServiceLoader
             // instantiation, so the JVM resolves (and thus needs to load) it lazily, the first
-            // time handle(...) actually runs -- exactly the code path Finding 1 breaks.
+            // time handle(...) actually runs: exactly the classloader-lifetime scenario this
+            // test guards against.
             + "        return JarOnlyHelper.respond(ctx.model);\n"
             + "    }\n"
             + "}\n";
@@ -394,7 +395,7 @@ class ProviderRegistryTest {
         jar.closeEntry();
     }
 
-    // -- jar-only, IR-capable provider (SP-3 T3b: proves handleIr resolves core-ir at runtime) ----
+    // -- jar-only, IR-capable provider (proves handleIr resolves core-ir at runtime) ----
 
     private static final String JAR_ONLY_IR_PACKAGE = "io.github.intisy.ai.jvm.jaronlyir";
 

@@ -6,8 +6,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A {@link JsonCodec} that delegates to a real codec (e.g. the default {@code GsonJsonCodec}) while
- * counting calls. It exists to demonstrate that the JSON boundary is a swappable SPI — a server that
- * prefers Jackson (or a hardened parser) just implements {@link JsonCodec} — without reimplementing
+ * counting calls. It exists to demonstrate that the JSON boundary is a swappable SPI: a server that
+ * prefers Jackson (or a hardened parser) just implements {@link JsonCodec}, without reimplementing
  * JSON parsing here; the call counts prove the injected codec is the one the engine actually used.
  */
 public final class RecordingJsonCodec implements JsonCodec {

@@ -10,14 +10,11 @@ import java.lang.reflect.Type;
 
 /**
  * gson-backed {@link JsonCodec}: the real JVM implementation of the JSON boundary SPI.
- * {@code LONG_OR_DOUBLE} matches JS {@code number} semantics — a whole JSON number
+ * {@code LONG_OR_DOUBLE} matches JS {@code number} semantics: a whole JSON number
  * deserializes to {@link Long} (so it reserializes without a spurious trailing {@code .0}),
  * a fractional one to {@link Double}. Without this, gson's default {@code ToNumberPolicy.DOUBLE}
  * would turn every parsed number into a {@code Double}, corrupting integer round-trips
  * (e.g. {@code {"count":5}} would come back as {@code {"count":5.0}}).
- *
- * <p>Reference: the old {@code core} module's store gson setup
- * ({@code core/src/main/java/.../store/AccountStore.java}'s {@code GSON} field).
  */
 public class GsonJsonCodec implements JsonCodec {
 

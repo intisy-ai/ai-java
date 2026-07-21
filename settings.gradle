@@ -1,19 +1,19 @@
 rootProject.name = artifact_name
 
 // ai-java composes a single Gradle build across two vendored git submodules (core-proxy,
-// core-auth) plus its own jvm module. Gradle settings don't nest — a submodule's own
-// settings.gradle/build.gradle is never read when it's folded in like this — so THIS file is
+// core-auth) plus its own jvm module. Gradle settings don't nest: a submodule's own
+// settings.gradle/build.gradle is never read when it's folded in like this, so THIS file is
 // authoritative and every project below is re-declared here, aliased to its real location via
 // projectDir. This mirrors exactly how core-auth/java/settings.gradle itself folds core-proxy's
-// :routing/:teavm into ITS OWN build (see core-auth/java/settings.gradle) — same technique, one
+// :routing/:teavm into ITS OWN build (see core-auth/java/settings.gradle), same technique, one
 // level up.
 //
 // :routing/:teavm are included from core-proxy/java/ (the top-level core-proxy submodule) and
 // NOT from core-auth/java/core-proxy/ (core-auth's OWN nested copy of the same submodule, left
-// uninitialized here — ai-java's root build never touches it). This keeps exactly ONE :routing
+// uninitialized here: ai-java's root build never touches it). This keeps exactly ONE :routing
 // project in this build: core-auth's :accounts declares `api project(":routing")` and
 // core-proxy's :teavm/core-auth's :auth-teavm both declare `project(":routing")`/
-// `project(":teavm")` — if both core-proxy/java/routing AND core-auth/java/core-proxy/routing
+// `project(":teavm")`. If both core-proxy/java/routing and core-auth/java/core-proxy/routing
 // were included under the same ":routing" path, Gradle would fail with a duplicate-project/path
 // collision (two different projectDirs claiming the same project path). Including it once, from
 // core-proxy/ only, is what makes :accounts' project(":routing") dependency resolve to that
@@ -27,7 +27,7 @@ project(":teavm").projectDir = file("core-proxy/java/teavm")
 // :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
 // aliased in the same way as :routing/:teavm above. core-ir is nested as core-proxy's OWN
 // submodule (core-proxy/core-ir, pinned per core-proxy/.gitmodules), not a direct submodule of
-// ai-java. :routing's Provider/RoutingProfile (SP-3) reference core-ir's Translator/IrRequest/
+// ai-java. :routing's Provider/RoutingProfile reference core-ir's Translator/IrRequest/
 // IrResponse types, so any build that includes :routing must also include :ir at this exact path
 // for `project(":ir")` to resolve (see core-proxy/java/routing/build.gradle's compileOnly/
 // testImplementation project(":ir")).
@@ -42,12 +42,12 @@ project(":auth-teavm").projectDir = file("core-auth/java/auth-teavm")
 
 include ":jvm"
 
-// The example projects live in ai-java's OWN tree (not a submodule), so — unlike :routing/
-// :teavm/:accounts above — they need no projectDir remap; Gradle finds them at the matching
+// The example projects live in ai-java's OWN tree (not a submodule), so, unlike :routing/
+// :teavm/:accounts above, they need no projectDir remap; Gradle finds them at the matching
 // ./examples-provider and ./examples directories by default.
 //
 // :examples-provider is a thin Provider jar (two Provider implementations + META-INF/services),
-// depending compileOnly on :routing exactly like stub-auth's stub-provider — its jar carries NO
+// depending compileOnly on :routing exactly like stub-auth's stub-provider: its jar carries NO
 // :routing classes and is discovered by :jvm's ProviderRegistry purely via ServiceLoader.
 // :examples is the runnable, never-published showcase (application plugin) that stages that jar
 // into a providers/ dir and drives the full :jvm API. Neither is a dependency of :jvm.

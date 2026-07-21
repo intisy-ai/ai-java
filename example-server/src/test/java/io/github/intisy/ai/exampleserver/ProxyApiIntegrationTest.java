@@ -54,7 +54,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * way it would in a real boot. The test actually starts a proxy on an ephemeral port (bound via
  * {@code {"port":0}}, never a fixed port, so the test is hermetic) and confirms it serves
  * {@code /healthz} for real before stopping it again. The proxy under test is an INSTALLED
- * {@link ProxyPlugin} fixture (not a hardcoded "claude-code" app) — {@link #stageProxyJar} packages
+ * {@link ProxyPlugin} fixture (not a hardcoded "claude-code" app): {@link #stageProxyJar} packages
  * it into a real jar the same way {@link ProxyManagerTest}'s fixtures are staged.
  */
 class ProxyApiIntegrationTest {
@@ -150,7 +150,7 @@ class ProxyApiIntegrationTest {
 
     /**
      * Packages the already-compiled {@link RoutingFixtureProxyPlugin} {@code .class} plus a real
-     * {@code META-INF/services} registration into an actual jar in {@code proxiesDir} — mirrors
+     * {@code META-INF/services} registration into an actual jar in {@code proxiesDir}, mirrors
      * {@code ProxyManagerTest#stageProxyJar}, kept local here since this test drives the proxy
      * through the HTTP API rather than {@link ProxyManager} directly.
      */

@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * A pair of in-process handlers for the demos whose subject is storage/SPI swappability rather than
  * jar discovery: {@code rl} is always rate-limited (429), {@code ok} always serves. Wired via the
- * three-argument {@code AiJava.router(profile, resolver, listProviders)} overload — the same
+ * three-argument {@code AiJava.router(profile, resolver, listProviders)} overload, the same
  * escape hatch a server would use to supply its own {@link HandlerResolver} (e.g. a test double)
  * instead of the jar-backed {@code ProviderRegistry}.
  */

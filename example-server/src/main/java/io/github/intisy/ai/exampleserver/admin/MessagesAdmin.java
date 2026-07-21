@@ -26,15 +26,15 @@ import java.util.Map;
  * ConfigAdmin}/{@link QuotaAdmin}'s shape (encapsulates the {@link Store}; {@code ManagementApi}
  * never sees it directly).
  *
- * <p>SP-3 T3b: the console's own IR front-door. {@code send} decodes the inbound Anthropic-shaped
+ * <p>This is the console's own IR front-door. {@code send} decodes the inbound Anthropic-shaped
  * {@code body} into IR via this admin's own {@link #translator} (console chat has no {@code
  * RoutingProfile} -- it is a fixed, always-Anthropic wire format, not a per-app concern), calls the
  * resolved provider's {@link Provider#handleIr}, and encodes the result back to wire JSON --
- * mirroring core-proxy's Router#route (SP-3 T1) one level up, without a router in between. A
+ * mirroring core-proxy's Router#route one level up, without a router in between. A
  * provider with no IR path (the {@link Provider#handleIr} default) throws {@link
  * UnsupportedOperationException}; that specific exception falls back to the legacy {@link
  * Provider#handle} call unchanged, exactly like Router's own fallback -- so a provider (or
- * in-tree fixture) that never migrated keeps working with zero changes here.
+ * in-tree fixture) without an IR implementation keeps working with zero changes here.
  */
 public final class MessagesAdmin {
     private final ProviderRegistryHolder holder;
@@ -83,13 +83,13 @@ public final class MessagesAdmin {
                 // This provider has no IR path (Provider#handleIr's own default) -- fall through
                 // to the legacy handle() call below, unchanged.
             } catch (Throwable e) {
-                // SP-3 T2's convention: a provider's handleIr THROWS instead of returning an error
+                // A provider's handleIr THROWS instead of returning an error
                 // IrResponse for any outcome that can't be expressed as a served IR message (a
                 // non-2xx upstream response, a synthesized error, ...) -- see Provider#handleIr's
                 // own contract. No structured status/body travels with that exception (only its
                 // message text does), so surface the exception itself verbatim rather than
                 // collapsing it to an opaque wrapper -- exactly mirroring core-proxy's own
-                // Router#route (SP-3 T1), which treats ANY handleIr exception identically: a flat
+                // Router#route, which treats ANY handleIr exception identically: a flat
                 // 502 whose message is the thrown exception's own text.
                 return errorResponse(502, "api_error", "chat failed: " + e);
             }

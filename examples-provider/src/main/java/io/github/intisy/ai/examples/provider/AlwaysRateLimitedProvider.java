@@ -10,7 +10,7 @@ import java.util.HashMap;
 /**
  * An always-rate-limited example {@link Provider}: every request gets a {@code 429} carrying the
  * rate-limit headers the routing engine reads ({@code retry-after} and {@code x-hub-rate-limited}).
- * This is the "it's exhausted" half of the {@code :examples} showcase's fallback chain — the
+ * This is the "it's exhausted" half of the {@code :examples} showcase's fallback chain: the
  * router sees the 429, records the reset time, and advances to the next entry in the tier
  * (the {@link EchoProvider}); when a tier contains ONLY this provider, the router synthesizes a
  * native-shaped 429 instead.

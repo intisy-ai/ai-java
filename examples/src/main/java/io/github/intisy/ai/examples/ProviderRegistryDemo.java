@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * Shows the provider jar discovery seam: point {@code AiJava.builder().providersDir(dir)} at a
  * directory of provider jars and the discovered providers back {@code router(profile)} with ZERO
- * registry code — no imports of the provider classes, no manual registration. The provider jar
+ * registry code: no imports of the provider classes, no manual registration. The provider jar
  * ({@code :examples-provider}) is staged into that directory by Gradle before this runs. Also shows
  * the {@code close()} lifecycle: AiJava owns the jar {@code URLClassLoader}, so it is used in a
  * try-with-resources block and a fresh instance re-discovers cleanly afterward.

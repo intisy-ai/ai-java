@@ -4,7 +4,7 @@ Archives containing JAR files are available as [releases](https://github.com/int
 
 ## What is ai-java?
 
-Server-side AI library for Java — providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
+Server-side AI library for Java: providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
 
 ## Usage in private projects
 

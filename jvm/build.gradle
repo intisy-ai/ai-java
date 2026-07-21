@@ -2,12 +2,12 @@ dependencies {
     // core-proxy's routing engine (SPIs, Router/ModelMap/RateLimit, Provider SPI,
     // HandlerResolver/HandlerResolvers) and core-auth's account engine (AccountManager,
     // OAuthConfig, AccountStore) -- both vendored as git submodules, composed into this single
-    // build by the root settings.gradle (:routing/:accounts, not ai-java's own :shared anymore).
+    // build by the root settings.gradle (:routing/:accounts).
     // api (not implementation): AiJava's own public API exposes these types directly
     // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
     api project(":routing")
     api project(":accounts")
-    // SP-3 T3b: core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
+    // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
     // (see ProviderRegistry#fromDirectory), so a provider's handleIr resolving io.github.intisy.
@@ -31,7 +31,7 @@ dependencies {
 // Keep the jar filenames version-LESS (jvm.jar / jvm-standalone.jar) even though project.version
 // is now set (for publishGithub's package version): publishGithub's artifacts block references
 // build/libs/jvm.jar by that exact name, and the uploaded asset is renamed to ai-java.jar from
-// `repo` anyway — so the local filename just has to be findable/stable.
+// `repo` anyway, so the local filename just has to be findable/stable.
 jar {
     archiveVersion = ""
 }
@@ -44,13 +44,13 @@ shadowJar {
 publishGithub {
     // :jvm is a subproject with no .git of its own, so publishGithub's default git-remote lookup
     // fails ("No git remote 'origin' found in .../jvm"). Set owner/repo explicitly to bypass it.
-    // These also drive the uploaded asset names — the package publishes as ai-java.jar /
+    // These also drive the uploaded asset names: the package publishes as ai-java.jar /
     // ai-java-standalone.jar (from `repo`), which is what `githubApi "intisy-ai:ai-java:<v>"`
     // consumers resolve (the source jar filenames below stay jvm*.jar; they're renamed on upload).
     owner = "intisy-ai"
     repo = "ai-java"
     releaseName = "Release ${project.findProperty('artifact_version') ?: project.version}"
-    // Multi-module release artifacts are aggregated at the repo level in Plan C;
+    // Multi-module release artifacts are aggregated at the repo level;
     // here we just ensure this module builds a plain jar + a standalone shaded jar.
     artifacts {
         artifact {

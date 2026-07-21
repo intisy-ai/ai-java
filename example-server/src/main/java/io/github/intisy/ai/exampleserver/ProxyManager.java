@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runs and manages an in-JVM routing proxy per INSTALLED {@code ProxyPlugin} (discovered via
- * {@link ProxyRegistryHolder} — see the plugin's own {@code META-INF/services} registration, not a
+ * {@link ProxyRegistryHolder}: see the plugin's own {@code META-INF/services} registration, not a
  * hardcoded app list). Each running proxy is a {@link ProxyServer} bound to its own loopback port,
  * backed by a {@link AiJava.WiredRouter} for that plugin's {@link RoutingProfile} and the shared,
  * installed-PROVIDER {@link ProviderRegistryHolder} (proxies route through providers; the two

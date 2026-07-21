@@ -13,16 +13,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Default {@link Notifier}: appends one JSONL line per notice to
- * {@code <configFolder>/../cache/auth-notifications.jsonl} — the queue core-auth's
+ * {@code <configFolder>/../cache/auth-notifications.jsonl}: the queue core-auth's
  * PostToolUse hook drains into a user-visible systemMessage/toast. Repeats of the same
  * message are throttled to once per {@link #NOTIFY_INTERVAL_MS} so a hot fallback loop
  * can't spam the queue.
  *
- * <p>Reference: the old {@code proxy} module's {@code Notify}
- * ({@code proxy/src/main/java/.../Notify.java}, itself a port of
- * {@code libs/core-proxy/src/server.ts}'s {@code defaultNotify}) — same JSONL shape
- * ({@code {message, level, at}}), now implementing {@code shared}'s {@link Notifier}
- * callback instead of the old JVM-only signature.
+ * <p>The JSONL shape ({@code {message, level, at}}) is a contract shared with core-auth's
+ * drain side; keep field names in sync if either side changes.
  */
 public class JsonlNotifier implements Notifier {
 
@@ -59,7 +56,7 @@ public class JsonlNotifier implements Notifier {
             Files.write(cacheDir.resolve("auth-notifications.jsonl"), json.getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception ignored) {
-            // swallow-all, mirrors the old Notify's defaultNotify try/catch
+            // swallow-all: a notification failure must never break the caller's request flow
         }
     }
 }

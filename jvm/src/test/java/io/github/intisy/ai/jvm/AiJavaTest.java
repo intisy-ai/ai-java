@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Task 3: covers the {@link AiJava} builder facade + {@link Storage} factory. Reuses the same
+ * Covers the {@link AiJava} builder facade + {@link Storage} factory. Reuses the same
  * fallback-routing scenario as {@link RouterJvmIntegrationTest}, but wired entirely through
  * {@code AiJava.builder()} instead of hand-assembling {@code RouterOptions}, and against both
  * a non-file backend ({@link Storage#memory()}) and a real database ({@link Storage#jdbc}) to
