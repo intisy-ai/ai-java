@@ -19,7 +19,7 @@ import java.util.Map;
  * {@code access_token} back; a {@code refresh_token} listed as revoked gets a {@code 400} with
  * {@code error=invalid_grant} (which the account manager treats as "disable this account").
  *
- * <p>Everything downstream of this — the {@code HttpClient}, the account store, the manager — is the
+ * <p>Everything downstream of this (the {@code HttpClient}, the account store, the manager) is the
  * REAL component, so the demo/test exercises the true refresh round trip end to end.
  */
 public final class FakeTokenServer implements Closeable {
@@ -79,7 +79,7 @@ public final class FakeTokenServer implements Closeable {
         return tokenUrl;
     }
 
-    /** How many refresh POSTs the endpoint received — lets a test assert the real network call happened. */
+    /** How many refresh POSTs the endpoint received, lets a test assert the real network call happened. */
     public int refreshRequestCount() {
         return refreshRequestCount;
     }

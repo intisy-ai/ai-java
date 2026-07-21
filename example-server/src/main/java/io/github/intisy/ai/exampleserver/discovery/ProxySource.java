@@ -7,8 +7,8 @@ import java.util.List;
 /**
  * A source of installable proxy jars, decoupled from any particular hosting scheme (GitHub
  * releases today; could be a private registry or a local index tomorrow). {@link #list()} is a
- * pure lookup — it never writes to disk — so callers (e.g. an install API added in a later task)
- * can show what's available before committing to a download. Proxy-side mirror of {@code
+ * pure lookup (it never writes to disk), so callers (e.g. an install API) can show what's
+ * available before committing to a download. Proxy-side mirror of {@code
  * ProviderSource}.
  */
 public interface ProxySource {
@@ -18,7 +18,7 @@ public interface ProxySource {
     List<Entry> list();
 
     /** Targeted lookup of a single installable proxy by its {@code name} (repo name), scanning
-     *  only that one repo's latest release — so an install works even when the full org scan is
+     *  only that one repo's latest release, so an install works even when the full org scan is
      *  rate-limited or cached-empty. Null when not found. */
     Entry find(String name);
 

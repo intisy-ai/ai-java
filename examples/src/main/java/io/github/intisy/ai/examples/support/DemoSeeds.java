@@ -11,11 +11,11 @@ import java.util.Map;
 
 /**
  * Writes the store documents the routing engine reads, using the SAME {@link Store}/{@link JsonCodec}
- * SPIs a real deployment uses — no hand-written JSON strings. Two shapes matter:
+ * SPIs a real deployment uses: no hand-written JSON strings. Two shapes matter:
  * <ul>
- *   <li>{@code models.json} — the per-provider catalog core-auth would populate on login; the
+ *   <li>{@code models.json}: the per-provider catalog core-auth would populate on login; the
  *       {@code /v1/models} endpoint and the model-map self-heal both read it.</li>
- *   <li>the profile's own config file ({@code modelMap}) — the tier &rarr; ordered
+ *   <li>the profile's own config file ({@code modelMap}): the tier &rarr; ordered
  *       {provider, model} chains that drive routing and fallback.</li>
  * </ul>
  */
@@ -34,7 +34,7 @@ public final class DemoSeeds {
      *   <li>{@code sonnet} &rarr; [ratelimited]: the whole tier is exhausted, so routing synthesizes a native 429.</li>
      * </ul>
      * Every model id referenced by the map also exists in the catalog, so the map resolves without
-     * self-healing — the chains route exactly as written.
+     * self-healing, the chains route exactly as written.
      */
     public static void seedJarRouting(Store store, JsonCodec json, String configFile) {
         Map<String, Object> catalog = new LinkedHashMap<>();
@@ -59,7 +59,7 @@ public final class DemoSeeds {
 
     /**
      * Seeds a minimal {@code opus} chain of [rl, ok] for the demos that route through an in-process
-     * {@code HandlerResolver} (rl always 429, ok always serves) rather than the provider jar — used
+     * {@code HandlerResolver} (rl always 429, ok always serves) rather than the provider jar, used
      * where the point is storage/SPI swappability, not jar discovery. No catalog is written, so the
      * chain passes through untouched (its providers are unknown to the empty catalog).
      */

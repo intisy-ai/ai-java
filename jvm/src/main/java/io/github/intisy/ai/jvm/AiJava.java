@@ -34,7 +34,7 @@ import java.util.function.Supplier;
 /**
  * Configurable JVM assembly: a server picks its {@link Store}/{@link HttpClient}/
  * {@link JsonCodec}/etc. implementations through {@link Builder} instead of being forced into
- * any one of them. The single hard requirement is {@link Builder#storage(Store)} — every other
+ * any one of them. The single hard requirement is {@link Builder#storage(Store)}; every other
  * dependency has a sane JVM default, but storage never silently defaults to JSON files (or
  * anything else): the caller must choose via {@link Storage#file}, {@link Storage#memory},
  * {@link Storage#jdbc}, or its own {@link Store} implementation.
@@ -43,7 +43,7 @@ import java.util.function.Supplier;
  * {@code shared} objects so a server never has to thread the individual SPIs through by hand.
  *
  * <p>{@link AiJava} owns the {@link #providerRegistry()} it builds (and the
- * {@link java.net.URLClassLoader} that registry keeps open for its provider jars — see
+ * {@link java.net.URLClassLoader} that registry keeps open for its provider jars; see
  * {@link ProviderRegistry}), so it implements {@link Closeable}: call {@link #close()} once this
  * {@link AiJava} instance is discarded (e.g. before rebuilding a fresh one to pick up swapped
  * provider jars) so that loader's resources are released. Never call {@link #close()} while a
@@ -140,12 +140,12 @@ public class AiJava implements Closeable {
 
     /**
      * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier,
-     * whose handlers come from this {@link AiJava}'s {@link #providerRegistry()} — the
+     * whose handlers come from this {@link AiJava}'s {@link #providerRegistry()} (the
      * {@link ProviderRegistry} discovered from {@link Builder#providersDir(Path)}, injected
-     * directly via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one, replacing
-     * the hand-wired test resolvers callers previously had to assemble themselves. Use the
-     * three-argument {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead
-     * when a caller needs to supply its own {@link HandlerResolver} (e.g. a test double).
+     * directly via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one), so
+     * callers don't need to hand-assemble a resolver themselves. Use the three-argument
+     * {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead when a caller
+     * needs to supply its own {@link HandlerResolver} (e.g. a test double).
      */
     public WiredRouter router(RoutingProfile profile) {
         return router(profile, providerRegistry.asHandlerResolver(), providerRegistry::listProviderIds);
@@ -175,7 +175,7 @@ public class AiJava implements Closeable {
     /**
      * An {@link AccountManager} pre-wired with this {@link AiJava}'s store/httpClient/clock/
      * random/json. {@code oauth} is per-provider (each provider has its own token endpoint), so
-     * it's layered onto a copy of the builder's {@link ManagerOptions} rather than mutating it —
+     * it's layered onto a copy of the builder's {@link ManagerOptions} rather than mutating it:
      * calling this repeatedly for different providers never lets one provider's oauth config
      * leak into another's.
      */
@@ -213,7 +213,7 @@ public class AiJava implements Closeable {
     /**
      * Thin wrapper over {@link Router#route}: {@code shared}'s {@link Router} is a stateless
      * utility class (a static {@code route(request, options)} method, no instance state), so
-     * there is nothing to "construct" there — this holds the {@link RouterOptions} this
+     * there is nothing to "construct" there; this holds the {@link RouterOptions} this
      * {@link AiJava} wired up and exposes them as an instance-shaped {@code route(request)} call.
      */
     public static final class WiredRouter {
@@ -247,10 +247,10 @@ public class AiJava implements Closeable {
         private Logger logger;
         private Random random;
         private Env env;
-        private Notifier notifier; // resolved lazily in build() — depends on the chosen store
+        private Notifier notifier; // resolved lazily in build(): depends on the chosen store
         private ManagerOptions managerOptions;
         private Path providersDir; // unset -> ProviderRegistry.empty(), never forced/guessed
-        private ProviderRegistry providerRegistry; // Task 4
+        private ProviderRegistry providerRegistry;
 
         private Builder() {
         }
@@ -310,7 +310,7 @@ public class AiJava implements Closeable {
         /**
          * Directory {@link ProviderRegistry#fromDirectory} scans for provider {@code *.jar}s at
          * {@link #build()} time, backing the zero-arg {@link AiJava#router(RoutingProfile)}.
-         * Unset (default) yields an empty registry — no directory is guessed or forced.
+         * Unset (default) yields an empty registry; no directory is guessed or forced.
          */
         public Builder providersDir(Path providersDir) {
             this.providersDir = providersDir;

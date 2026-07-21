@@ -34,7 +34,7 @@ public final class CustomSpiDemo {
 
     private static final String CONFIG_FILE = "examples-custom-spi.json";
 
-    /** Fixed clock origin and random draw — chosen so the deterministic backoff below is reproducible. */
+    /** Fixed clock origin and random draw, chosen so the deterministic backoff below is reproducible. */
     public static final long CLOCK_START_MS = 1_700_000_000_000L;
     public static final double RANDOM_VALUE = 0.5d;
 

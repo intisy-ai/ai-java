@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 
 /**
  * Builds the {@link RoutingProfile}s the demos route against. A profile is the single object that
- * parameterizes the whole routing engine — tier keywords, how a native model id maps to a tier
+ * parameterizes the whole routing engine: tier keywords, how a native model id maps to a tier
  * (via {@code tierRegex}), and how to synthesize a native-shaped 429 when every model in a tier is
  * exhausted. Centralizing it here keeps the demos readable and lets the integration tests route
  * against the exact same fixture the demos print.
@@ -22,7 +22,7 @@ public final class DemoProfiles {
     /**
      * A realistic multi-tier profile: {@code opus}/{@code sonnet}/{@code haiku}, mapping any
      * {@code claude-<tier>-N} model id onto the matching tier. Its {@code nativeRateLimit} builds an
-     * Anthropic-shaped {@code rate_limit_error} body — what a client sees when the whole tier is
+     * Anthropic-shaped {@code rate_limit_error} body, what a client sees when the whole tier is
      * rate-limited. The store's model map (see {@link DemoSeeds}) decides which providers back each
      * tier; this profile only describes the tier vocabulary and the exhaustion response.
      */

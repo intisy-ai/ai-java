@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * Makes the server's {@link ProxyRegistry} swappable at runtime: a proxy installed on disk after
  * startup becomes usable without a restart via {@link #refresh(Path)}. Proxy-side mirror of
- * {@code ProviderRegistryHolder} — same volatile-swap discipline, keyed by proxy id instead of
+ * {@code ProviderRegistryHolder}: same volatile-swap discipline, keyed by proxy id instead of
  * provider id. Proxies don't resolve handlers, so unlike its provider counterpart this holder has
  * no {@code asHandlerResolver()}.
  */
@@ -47,8 +47,8 @@ public final class ProxyRegistryHolder {
      * jars) is deliberately NOT closed: a request already in flight may still be routing through
      * one of its proxies, and closing the loader out from under it would risk a
      * {@link NoClassDefFoundError}. The cost is a leaked classloader per install, which is
-     * acceptable for a demo server — a long-lived production variant would need a reference-counted
-     * or quiesce-then-close strategy instead.
+     * acceptable for a demo server (a long-lived production variant would need a reference-counted
+     * or quiesce-then-close strategy instead).
      */
     public void refresh(Path proxiesDir) {
         this.current = ProxyRegistry.fromDirectory(proxiesDir);
@@ -60,9 +60,9 @@ public final class ProxyRegistryHolder {
      * the CURRENT registry before touching the jar: on Windows, {@code Files.delete} on a jar still
      * held open by a {@link java.net.URLClassLoader} fails with a sharing violation, so the loader
      * must release its file handle first. This does carry the same in-flight-request risk {@link
-     * #refresh} accepts for its leaked-classloader tradeoff, just in the other direction — a request
+     * #refresh} accepts for its leaked-classloader tradeoff, just in the other direction: a request
      * already routing through this proxy when uninstall runs may fail with {@link
-     * NoClassDefFoundError} — acceptable for a demo server's explicit, operator-initiated uninstall.
+     * NoClassDefFoundError}, acceptable for a demo server's explicit, operator-initiated uninstall.
      */
     public synchronized boolean uninstall(String proxyId, Path proxiesDir) {
         Path jar = current.jarFor(proxyId);

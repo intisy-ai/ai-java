@@ -166,13 +166,14 @@ class JdbcStoreTest {
     }
 
     // Regression test for the lost-update bug: SELECT ... FOR UPDATE locks nothing when the
-    // key's row doesn't exist yet, so two concurrent update() calls on an absent key both used
-    // to read null, both compute from null, and one's UPDATE silently clobbered the other's
-    // already-committed INSERT with no exception. This key is NEVER pre-put - it starts (and,
-    // for the whole first round of racing updates, stays) absent, which is exactly the gap that
-    // ensure-row-then-lock closes: update() now inserts a NULL-v placeholder row before the
-    // FOR UPDATE select, so there is always a real row for every concurrent update() to lock
-    // and serialize on, even the very first one on a never-written key.
+    // key's row doesn't exist yet, so without ensure-row-then-lock, two concurrent update()
+    // calls on an absent key could both read null, both compute from null, and one's UPDATE
+    // could silently clobber the other's already-committed INSERT with no exception. This key
+    // is NEVER pre-put - it starts (and, for the whole first round of racing updates, stays)
+    // absent, which is exactly the gap ensure-row-then-lock closes: update() inserts a NULL-v
+    // placeholder row before the FOR UPDATE select, so there is always a real row for every
+    // concurrent update() to lock and serialize on, even the very first one on a never-written
+    // key.
     @Test
     void concurrentUpdatesOnAnAbsentKeyDoNotLoseWrites() throws InterruptedException {
         JdbcStore store = new JdbcStore(newH2DataSource());
@@ -213,9 +214,9 @@ class JdbcStoreTest {
         assertEquals(threads * incrementsPerThread, n, "lost update on absent key: " + finalValue);
     }
 
-    // put() used to run its own UPDATE-then-INSERT upsert outside update()'s locking, so a
-    // race between two put()s on the SAME never-written key could throw a spurious primary-key
-    // violation (both miss the UPDATE, both attempt the INSERT). put() now delegates to
+    // A separate UPDATE-then-INSERT upsert for put() outside update()'s locking would let a
+    // race between two put()s on the SAME never-written key throw a spurious primary-key
+    // violation (both miss the UPDATE, both attempt the INSERT). put() instead delegates to
     // update()'s ensure-row-then-lock path, which serializes these instead of racing them.
     @Test
     void concurrentPutsOnAnAbsentKeyDoNotThrow() throws InterruptedException {
@@ -269,12 +270,12 @@ class JdbcStoreTest {
         assertNull(store.get("boom.json"));
     }
 
-    // SQLite has no "SELECT ... FOR UPDATE" syntax (unlike H2/MySQL/PostgreSQL above), which
-    // used to make every update()/put() call throw a SQLiteException. This regression-tests
-    // JdbcStore's dialect detection (supportsRowLocking) against a real SQLite file DB: the
-    // atomic update path must work the same as it does for H2, including under concurrency,
-    // where correctness now comes from SQLite's own whole-database write lock instead of a
-    // per-row FOR UPDATE lock.
+    // SQLite has no "SELECT ... FOR UPDATE" syntax (unlike H2/MySQL/PostgreSQL above); without
+    // dialect detection, every update()/put() call would throw a SQLiteException. This
+    // regression-tests JdbcStore's dialect detection (supportsRowLocking) against a real
+    // SQLite file DB: the atomic update path must work the same as it does for H2, including
+    // under concurrency, where correctness comes from SQLite's own whole-database write lock
+    // instead of a per-row FOR UPDATE lock.
     @Test
     void sqliteBackedStoreRoundTripsAndUpdatesAtomically(@TempDir Path dir) throws InterruptedException {
         SQLiteDataSource ds = new SQLiteDataSource();

@@ -17,10 +17,8 @@ import java.util.Map;
 
 /**
  * {@code HttpURLConnection}-backed {@link HttpClient}: the real JVM implementation of the
- * HTTP boundary SPI (blocking-shaped; no extra HTTP client dependency needed). Reference:
- * the old {@code core} module's {@code UrlConnectionFetcher}
- * ({@code core/src/main/java/.../manager/UrlConnectionFetcher.java}, used for the OAuth
- * token-refresh POST) — generalized here to any method/headers/body, not just form POSTs.
+ * HTTP boundary SPI (blocking-shaped; no extra HTTP client dependency needed), generalized to
+ * any method/headers/body rather than just form POSTs.
  */
 public class UrlConnectionHttpClient implements HttpClient {
     private static final int CONNECT_TIMEOUT_MS = 15_000;

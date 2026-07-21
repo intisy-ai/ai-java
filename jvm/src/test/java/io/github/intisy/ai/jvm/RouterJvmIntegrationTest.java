@@ -28,13 +28,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * End-to-end test (Task 7): wires the pure {@code shared} {@link Router} onto the REAL JVM
+ * End-to-end test: wires the pure {@code shared} {@link Router} onto the REAL JVM
  * SPI implementations ({@link FileStore} + {@link GsonJsonCodec}) instead of the in-memory
- * test doubles {@code shared} itself uses ({@code InMemoryStore}/{@code TestJsonCodec} — see
- * {@code shared}'s {@code RouterTest}). Same fallback/exhaustion scenarios the old
- * {@code proxy} module's {@code ProxyServerTest} covered, now proving the shared routing
- * logic works against a real config directory on disk (seeded via {@link FileStore} +
- * {@link GsonJsonCodec}, not hand-written JSON strings).
+ * test doubles {@code shared} itself uses ({@code InMemoryStore}/{@code TestJsonCodec}, see
+ * {@code shared}'s {@code RouterTest}). Proves the fallback/exhaustion scenarios and the
+ * shared routing logic work against a real config directory on disk (seeded via
+ * {@link FileStore} + {@link GsonJsonCodec}, not hand-written JSON strings).
  */
 class RouterJvmIntegrationTest {
 
@@ -129,7 +128,7 @@ class RouterJvmIntegrationTest {
         assertEquals(200, resp.status);
         assertEquals("served m-ok", resp.body);
 
-        // The fallback notice went through the JVM JsonlNotifier — assert the JSONL file
+        // The fallback notice went through the JVM JsonlNotifier; assert the JSONL file
         // that a real deployment's PostToolUse hook would drain actually landed on disk.
         Path notifications = tmp.resolve("cache").resolve("auth-notifications.jsonl");
         assertTrue(Files.exists(notifications), "expected auth-notifications.jsonl to be written");

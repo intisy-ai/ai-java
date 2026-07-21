@@ -39,14 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Phase 7 (part 1) e2e: proves the {@code install-from-org -> discover -> classload -> DIRECT
+ * E2E test proving the {@code install-from-org -> discover -> classload -> DIRECT
  * invoke} chain works with the REAL, out-of-band-built {@code antigravity-provider.jar}/{@code
  * claude-provider.jar} (staged at {@code exampleserver.orgProvidersDir}, default
  * {@code build/orgProviders} -- see {@code example-server/build.gradle}), mirroring {@link
  * ProviderInstallIntegrationTest} but with a real jar's own {@code Provider} discovered through a
  * dedicated {@link java.net.URLClassLoader} instead of the in-repo echo fixture.
  *
- * <p>Deterministic and network-free by design (see {@code .superpowers/sdd/phase-7-brief.md}): each
+ * <p>Deterministic and network-free by design: each
  * test posts straight to the just-installed provider's own {@code /api/providers/{id}/messages}
  * (console chat = a DIRECT {@link MessagesAdmin#send} call, never a router match -- there is no
  * model-&gt;provider resolution to seed here at all). NO account is ever seeded, so each provider's
@@ -55,7 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it is what proves the request reached the INSTALLED provider.
  *
  * <p>Skips (via {@link Assumptions}) when the two jars aren't staged -- e.g. in CI, where ai-java
- * cannot build the provider repos itself (see the interface map's §6 cross-repo constraint).
+ * cannot build the provider repos itself.
  */
 class ProviderOrgInstallServeE2ETest {
 
@@ -85,7 +85,7 @@ class ProviderOrgInstallServeE2ETest {
 
         // FILE store so HandlerCtx.configDir == configDir -- the installed provider's own
         // ClaudeBackend/AntigravityBackend.forConfigDir(ctx.configDir) opens a FileStore at the
-        // SAME directory, converging on one accounts.json on disk (map §4b).
+        // SAME directory, converging on one accounts.json on disk.
         ai = AiJava.builder().storage(Storage.file(configDir)).build();
         store = ai.store();
         json = ai.jsonCodec();
@@ -136,6 +136,17 @@ class ProviderOrgInstallServeE2ETest {
         // noAccountConfigured_returnsSyntheticInvalidRequestError): 400, x-hub-chat-error: 1,
         // an invalid_request_error body -- proving the DIRECT call reached the INSTALLED provider
         // (console chat, POST /api/providers/{id}/messages, never a router match).
+        //
+        // MessagesAdmin tries ClaudeProvider#handleIr FIRST; the jar staged at
+        // exampleserver.orgProvidersDir has no handleIr method (verified via javap: only the
+        // legacy typed-capability-SPI shape), so it hits Provider#handleIr's own default, which
+        // throws UnsupportedOperationException -- MessagesAdmin falls back to the legacy handle()
+        // call below, reproducing this exact response. This assertion is therefore tied to the
+        // currently staged jar; once the org provider jars are rebuilt to implement handleIr, the
+        // no-account case will instead surface as a flat 502 carrying "claude handleIr: synthetic
+        // error response (status 400)" (handleIr's SYNTHETIC branch throws rather than returning
+        // that body -- see Provider#handleIr's own contract), and this test will need updating to
+        // match.
         String body = "{\"model\":\"" + CLAUDE_MODEL + "\",\"messages\":[]}";
         Response messages = post("/api/providers/claude/messages", body);
         assertEquals(400, messages.status, messages.body);
@@ -168,6 +179,16 @@ class ProviderOrgInstallServeE2ETest {
         // rate_limit_error), body mentioning "No available antigravity account" -- the provider's
         // OWN wording, proving the DIRECT call reached the INSTALLED provider (console chat, POST
         // /api/providers/{id}/messages, never a router match).
+        //
+        // MessagesAdmin tries AntigravityProvider#handleIr FIRST; the staged jar has no
+        // handleIr method (see installRoutesToClaudeProvider's comment, verified via javap), so
+        // it hits Provider#handleIr's own default (UnsupportedOperationException) and
+        // MessagesAdmin falls back to the legacy handle() call below. Once the org
+        // provider jars are rebuilt with handleIr, this will instead surface as a flat
+        // 502 (handleIr's SYNTHETIC branch throws a RuntimeException carrying this SAME message
+        // text, extracted from the synthesized body via extractGeminiErrorMessage, so the "No
+        // available antigravity account" assertion below survives that future change unmodified --
+        // only the status/x-hub-chat-error expectations would need revisiting).
         String body = "{\"model\":\"" + ANTIGRAVITY_MODEL + "\",\"messages\":[]}";
         Response messages = post("/api/providers/antigravity/messages", body);
         assertEquals(503, messages.status, messages.body);

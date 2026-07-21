@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * String-contains checks on the dashboard's classpath resource ({@code /dashboard/index.html}),
- * proving the update-detection UI pieces from the E-J brief actually shipped in the page: the
+ * proving the update-detection UI pieces actually shipped in the page: the
  * server call the Update button makes, the version badge, and the button itself. Mirrors the
  * "the dashboard is a single self-contained resource, not a build output" approach the rest of
  * this server's tests take (see {@link Dashboard}) -- no browser, just the raw HTML/JS text.
@@ -55,7 +55,7 @@ class DashboardUpdateMarkersTest {
         assertTrue(!html.contains("—"), "no em dashes allowed anywhere in the dashboard");
     }
 
-    // E-K: the installed<->available join must be by asset name (the jar on disk), not by
+    // The installed<->available join must be by asset name (the jar on disk), not by
     // assuming a provider's registered id matches its org repo name -- that assumption breaks for
     // stub/antigravity (id "stub"/"antigravity" vs. repo "stub-auth"/"antigravity-auth").
     @Test
@@ -77,9 +77,9 @@ class DashboardUpdateMarkersTest {
                 "the name line must prefer the repo name over the bare id");
     }
 
-    // E-L: an empty provider list gave no reason -- an anonymous org scan hits GitHub's 60
-    // req/hour limit and returns empty with no explanation. The empty-state row must now hint at
-    // the fix (GITHUB_TOKEN/GH_TOKEN) instead of just saying nothing was found.
+    // An anonymous org scan hits GitHub's 60 req/hour limit and returns empty with no
+    // explanation, so the empty-state row must hint at the fix (GITHUB_TOKEN/GH_TOKEN) instead
+    // of just saying nothing was found.
     @Test
     void emptyProviderListHintsAtTheGithubTokenCause() throws IOException {
         String html = loadDashboardHtml();
@@ -87,7 +87,7 @@ class DashboardUpdateMarkersTest {
         assertTrue(html.contains("No providers found."), "the empty-state row must still read as a clear empty state");
     }
 
-    // E-M: connect a GitHub token from the console (gh CLI auto-detect or manual) so the org scan
+    // Connect a GitHub token from the console (gh CLI auto-detect or manual) so the org scan
     // is authenticated instead of anonymously rate-limited.
     @Test
     void dashboardRendersTheGithubConnectPanel() throws IOException {

@@ -24,31 +24,28 @@ import java.util.function.UnaryOperator;
 /**
  * nio-backed {@link Store}: the real JVM implementation of the key/value JSON-string
  * boundary SPI. A key (e.g. {@code accounts.json}, {@code models.json}, {@code auth.json})
- * is a filename directly under the {@code configFolder} passed to the constructor —
- * the store location is EXPLICIT (this is a server; no CLI-style home-directory sniffing
- * as the primary path). {@link #update} is atomic: mutual exclusion is enforced two ways —
+ * is a filename directly under the {@code configFolder} passed to the constructor; the
+ * store location is EXPLICIT (this is a server; no CLI-style home-directory sniffing
+ * as the primary path). {@link #update} is atomic: mutual exclusion is enforced two ways:
  * a per-key {@link ReentrantLock} serializes threads within this JVM, and a real OS-level
  * {@link FileChannel#lock()} on a per-key {@code .lock} file serializes across processes.
  * The new content is written to a temp file then {@code ATOMIC_MOVE}d into place, so a
  * concurrent reader never observes a partial write.
  *
  * <p>Neither lock ever degrades to running unlocked: both are acquired with blocking calls,
- * so a caller either gets exclusive access or blocks — it never silently loses a write.
- * {@code FileChannel.lock()} is released automatically if the JVM holding it dies, so (unlike
- * the old sentinel-file-{@code createFile} approach this replaced) there is no stale-lock
- * problem to work around.
+ * so a caller either gets exclusive access or blocks; it never silently loses a write.
+ * {@code FileChannel.lock()} is released automatically if the JVM holding it dies, so there
+ * is no stale-lock file to clean up after a crash.
  *
- * <p>Reference: the old {@code core} module's {@code AccountStore}
- * ({@code core/src/main/java/.../store/AccountStore.java}) {@code withLock}/{@code writeStore}
- * — ported here at the generic per-file level (that class's own {@code providers} JSON
- * document merging now lives in {@code shared}'s {@code AccountStore}, layered on top of
- * this {@link Store}). No {@code LEGACY_FILE} fallback — that migration path is retired.
+ * <p>Higher-level per-provider JSON document merging is handled by {@code shared}'s
+ * {@code AccountStore}, layered on top of this {@link Store}; this class implements only
+ * the generic per-file, per-key operations.
  */
 public class FileStore implements Store {
 
     // Per-key in-process locks, shared across all FileStore instances so two instances
     // pointing at the same underlying file still serialize correctly within this JVM
-    // (a FileChannel lock alone is not reliable for that — see FileChannel.lock() javadoc).
+    // (a FileChannel lock alone is not reliable for that; see FileChannel.lock() javadoc).
     // Keyed by the absolute lock-file path so different configFolders never collide.
     private static final ConcurrentHashMap<String, ReentrantLock> KEY_LOCKS = new ConcurrentHashMap<>();
 
@@ -66,7 +63,7 @@ public class FileStore implements Store {
     /**
      * Convenience factory: resolves {@code <HUB_CONFIG_DIR>/config} if {@code HUB_CONFIG_DIR}
      * is set, else {@code <user.home>/.ai-java/config}. The env-based dir is a CONVENIENCE,
-     * not the primary path — servers should prefer {@link #FileStore(Path)} with an explicit
+     * not the primary path; servers should prefer {@link #FileStore(Path)} with an explicit
      * directory.
      */
     public static FileStore fromEnv() {
@@ -155,7 +152,7 @@ public class FileStore implements Store {
         try {
             if (!Files.exists(configFolder)) Files.createDirectories(configFolder);
         } catch (IOException ignored) {
-            // best-effort, mirrors the old AccountStore's unguarded-mkdir-only-failure-point note
+            // best-effort: if this fails, the subsequent file write surfaces the real error
         }
     }
 
@@ -177,7 +174,7 @@ public class FileStore implements Store {
     }
 
     /**
-     * Exclusive per-key lock — never degrades to running unlocked. Two layers, both acquired
+     * Exclusive per-key lock: never degrades to running unlocked. Two layers, both acquired
      * with blocking calls:
      * <ol>
      *   <li>a {@link ReentrantLock} keyed by this file's absolute path, serializing threads

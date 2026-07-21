@@ -147,7 +147,7 @@ class RoutingApiIntegrationTest {
     }
 
     /** A second, distinct installed proxy -- used to prove app-scoped model-map storage is
-     *  independent PER INSTALLED PROXY now that there is no default/"Server" profile to compare
+     *  independent PER INSTALLED PROXY, because there is no default/"Server" profile to compare
      *  against (see {@link #modelMapIsAppScoped}). */
     public static final class SecondAppFixtureProxyPlugin implements ProxyPlugin {
         @Override public String id() { return SECOND_APP_PROXY_ID; }

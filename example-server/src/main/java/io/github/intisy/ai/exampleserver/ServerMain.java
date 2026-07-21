@@ -30,19 +30,19 @@ import java.nio.file.Paths;
  * Boots the example server. Demonstrates "completely customizable backend": the store is chosen
  * from one place ({@code -Dexampleserver.store=sqlite|memory|file|jdbc}) and composed into a {@link Backend}
  * the whole server runs on. Provider jars are discovered via {@link ProviderDiscovery} from
- * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task) — startup only ever
+ * {@code -Dexampleserver.providersDir} (set by the Gradle {@code run} task): startup only ever
  * reads whatever's already on disk, never the network. That registry is held in a
  * {@link ProviderRegistryHolder} so it can be refreshed after a provider is installed on demand
  * without restarting the process. This server has NO router/{@code /v1} of its own: the console
  * (its own dashboard, running in this SAME JVM) reaches an installed provider by a DIRECT Java
  * call through the admin classes wired below ({@code MessagesAdmin} for chat, {@code
- * ConfigAdmin}/{@code QuotaAdmin}/{@code OAuthAdmin} for the rest) — all resolved through the
+ * ConfigAdmin}/{@code QuotaAdmin}/{@code OAuthAdmin} for the rest), all resolved through the
  * holder, so every request sees the current registry. Routing-over-HTTP for OUT-OF-PROCESS apps
  * (Claude Code, OpenCode) is a separate concern: each proxy {@code proxyManager} starts runs its
  * OWN {@link io.github.intisy.ai.exampleserver.ProxyServer} on its own port and serves that app's
  * {@code /v1/messages} there. The port comes from {@code -Dexampleserver.port} (default 8787). On
  * top of this, the server wires the {@code /api} management endpoints and the {@code /} dashboard.
- * The running server starts with NO fake/demo providers or accounts seeded —
+ * The running server starts with NO fake/demo providers or accounts seeded:
  * {@code -Dexampleserver.providersDir} points at an empty directory by default (see {@code
  * build.gradle}'s {@code run} task), and every real provider/account comes only from an on-demand
  * install via the API/dashboard (backed by {@link GithubOrgProviderSource}). Tests that need the
@@ -149,16 +149,16 @@ public final class ServerMain {
                 return Storage.jdbc(new DriverManagerDataSource(location, user, password));
             }
             default:
-                // Unrecognized kind used to silently fall back to Storage.memory() (ephemeral),
-                // which would quietly discard every write for an operator who asked for a
-                // persistent store (or made a typo) - fail loud instead.
+                // An unrecognized kind must fail loud rather than silently falling back to
+                // Storage.memory() (ephemeral), which would quietly discard every write for an
+                // operator who asked for a persistent store (or made a typo).
                 throw new IllegalArgumentException(
                         "unknown exampleserver.store: " + kind + " (expected sqlite|memory|file|jdbc)");
         }
     }
 
     private static Store chooseStore() {
-        // DEFAULT is now "sqlite" (persistent) so caching (accounts/quota/models/proxies/routing)
+        // DEFAULT is "sqlite" (persistent) so caching (accounts/quota/models/proxies/routing)
         // survives restarts out of the box; memory/file/jdbc remain selectable.
         String kind = System.getProperty("exampleserver.store", "sqlite");
         String location;

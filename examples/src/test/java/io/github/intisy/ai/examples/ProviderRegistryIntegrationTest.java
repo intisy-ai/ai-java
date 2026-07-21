@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Proves the real {@code :examples-provider} jar (staged into the providers directory by Gradle) is
- * discovered purely via {@code ServiceLoader} — both providers from one jar — and routes a real
+ * discovered purely via {@code ServiceLoader} (both providers from one jar) and routes a real
  * request. Also proves the {@code close()} lifecycle releases the jar classloader: a fresh AiJava
  * over the same directory re-discovers cleanly after the first was closed.
  */

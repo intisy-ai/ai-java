@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
  * A routing-only HTTP listener: converts each {@link HttpExchange} into the shared
  * {@link HttpRequest}, hands it to a pre-wired {@link AiJava.WiredRouter}, and writes the buffered
  * {@link HttpResponse} back. Unlike {@link ExampleServer} it registers ONLY {@code /healthz} and
- * {@code /v1} — it deliberately does NOT serve the dashboard ({@code /}) or the management API
+ * {@code /v1}: it deliberately does NOT serve the dashboard ({@code /}) or the management API
  * ({@code /api}), because a proxy port must never expose the management console.
  */
 public final class ProxyServer {
@@ -51,7 +51,7 @@ public final class ProxyServer {
             }
         });
         http.createContext("/v1", exchange -> handleRouted(exchange, router));
-        // NOTE: no "/" and no "/api" — routing-only by design.
+        // NOTE: no "/" and no "/api": routing-only by design.
         ExecutorService executor = Executors.newFixedThreadPool(8);
         http.setExecutor(executor);
         http.start();

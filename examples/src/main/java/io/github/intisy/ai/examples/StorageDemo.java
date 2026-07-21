@@ -17,8 +17,8 @@ import java.io.IOException;
 
 /**
  * Shows that storage is an EXPLICIT, swappable choice. The exact same store-usage routine runs
- * unchanged against all three built-in backends — {@code Storage.file}, {@code Storage.memory},
- * {@code Storage.jdbc} — and produces identical results, and building without any storage fails
+ * unchanged against all three built-in backends ({@code Storage.file}, {@code Storage.memory},
+ * {@code Storage.jdbc}) and produces identical results, and building without any storage fails
  * fast rather than silently defaulting to files.
  */
 public final class StorageDemo {
@@ -69,7 +69,7 @@ public final class StorageDemo {
 
     /**
      * The backend-agnostic routine both the demo and the parity test run: a put/update/get round
-     * trip plus a routed request. Nothing here mentions a specific backend — only the {@link Store}
+     * trip plus a routed request. Nothing here mentions a specific backend, only the {@link Store}
      * passed in differs.
      */
     public static Result roundTrip(Store store) {

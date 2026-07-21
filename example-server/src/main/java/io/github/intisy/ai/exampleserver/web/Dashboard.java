@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
  * from the classpath resource {@code /dashboard/index.html}. Registered at the {@code /} context;
  * because {@code com.sun.net.httpserver} matches the longest registered prefix, the {@code /api}
  * context wins over this one and is never seen here. Anything else under {@code /} that isn't the
- * exact root path is a 404 — this handler owns no other routes (there is no {@code /v1} context on
+ * exact root path is a 404: this handler owns no other routes (there is no {@code /v1} context on
  * this server at all; see {@link io.github.intisy.ai.exampleserver.ExampleServer}'s javadoc).
  */
 public final class Dashboard implements HttpHandler {

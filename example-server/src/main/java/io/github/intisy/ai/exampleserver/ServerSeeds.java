@@ -13,7 +13,7 @@ import java.util.Map;
  * Seeds the store a real deployment's core-auth would otherwise populate on login: a per-provider
  * catalog ({@code models.json}) and the tier &rarr; ordered {provider, model} chains. Arranged so
  * {@code haiku=[echo]} serves straight, {@code opus=[ratelimited,echo]} falls back to echo, and
- * {@code sonnet=[ratelimited]} exhausts to a synthesized 429 — the same fixture the demos use.
+ * {@code sonnet=[ratelimited]} exhausts to a synthesized 429, the same fixture the demos use.
  */
 public final class ServerSeeds {
 

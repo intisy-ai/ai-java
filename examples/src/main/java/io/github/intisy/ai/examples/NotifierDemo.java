@@ -20,7 +20,7 @@ import java.nio.file.Path;
 /**
  * Shows the default notification path for a file-backed store: with no notifier injected, a
  * file-backed AiJava uses the real {@link JsonlNotifier}, which appends one JSON line per notice to
- * {@code <config>/../cache/auth-notifications.jsonl} — the queue a host app's hook drains into a
+ * {@code <config>/../cache/auth-notifications.jsonl}, the queue a host app's hook drains into a
  * user-visible toast. Triggering a routing fallback produces a notice; this demo prints the line the
  * notifier wrote.
  */

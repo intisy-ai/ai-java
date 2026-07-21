@@ -9,7 +9,7 @@ import java.util.function.UnaryOperator;
 
 /**
  * Thread-safe, ephemeral {@link Store}: a {@link ConcurrentHashMap} with no I/O and no
- * persistence. For servers/tests that want a non-file {@link Store} backend — e.g. a
+ * persistence. For servers/tests that want a non-file {@link Store} backend, e.g. a
  * short-lived server process, or a default when no {@code configFolder} is configured.
  * All state is lost when the process exits.
  *
@@ -52,7 +52,7 @@ public class InMemoryStore implements Store {
         // duration of the remapping function, so no concurrent update on the same key
         // can interleave and lose a write. ConcurrentHashMap.compute() removes the
         // mapping if the function returns null, but FileStore.update() treats a null
-        // result as writing an empty string (the key keeps existing) — match that here.
+        // result as writing an empty string (the key keeps existing); match that here.
         data.compute(key, (k, current) -> {
             String next = mutator.apply(current);
             return next != null ? next : "";

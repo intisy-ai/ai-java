@@ -5,7 +5,7 @@ import io.github.intisy.ai.examples.support.ProvidersDirectory;
 import java.nio.file.Path;
 
 /**
- * Runs every demo in order, top to bottom — read this file first, then follow each demo class. A
+ * Runs every demo in order, top to bottom (read this file first, then follow each demo class). A
  * newcomer embedding ai-java in a server can trace, in one run: choosing a storage backend, swapping
  * every platform SPI, discovering provider jars, routing (fallback / rewrite / exhaustion /
  * {@code /v1/models}), managing accounts (acquire / cooldown / backoff / refresh / revoke), and the

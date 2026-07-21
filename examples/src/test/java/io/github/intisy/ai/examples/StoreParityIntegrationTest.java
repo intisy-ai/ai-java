@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Runs {@link StorageDemo#roundTrip} — the one backend-agnostic put/update/get + routed-request
- * routine — against all three real backends ({@code file}, {@code memory}, {@code jdbc}/H2) and
+ * Runs {@link StorageDemo#roundTrip} (the one backend-agnostic put/update/get + routed-request
+ * routine) against all three real backends ({@code file}, {@code memory}, {@code jdbc}/H2) and
  * asserts each produces the identical stored value and routed response. This is the proof that
  * storage is genuinely swappable: nothing in the routine or its result depends on which backend
  * was chosen.

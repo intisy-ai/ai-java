@@ -82,7 +82,7 @@ import java.util.function.Supplier;
  * </pre>
  *
  * Path segments ({@code id}/{@code accId}) are URL-decoded exactly once. The whole handler body
- * is wrapped so an unexpected exception never leaks a stack trace to the client — it degrades to
+ * is wrapped so an unexpected exception never leaks a stack trace to the client: it degrades to
  * a plain 500 JSON error instead.
  *
  * <p>{@code available}/{@code install} are reserved single-segment names under {@code /api/providers/}
@@ -126,17 +126,13 @@ public final class ManagementApi implements HttpHandler {
     private final GithubAuth githubAuth;
     private final GithubOrgScan githubScan;
 
-    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json) {
-        this(providerIds, admin, json, null, null, null, null, null);
-    }
-
     /**
      * Adds the on-demand install surface ({@code GET /api/providers/available} and
      * {@code POST /api/providers/install}) on top of the base account-admin routes.
      * {@code source} lists/downloads installable provider jars, {@code providersDir} is where they
      * land on disk, and {@code holder} is refreshed after a successful download so the newly
      * installed provider becomes routable without a restart. No {@link RoutingAdmin}/{@link
-     * QuotaAdmin} — the {@code /api/routing/*}, discover, and quota/refresh routes 404 (see the
+     * QuotaAdmin}: the {@code /api/routing/*}, discover, and quota/refresh routes 404 (see the
      * full 8-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -145,19 +141,8 @@ public final class ManagementApi implements HttpHandler {
     }
 
     /**
-     * Adds the routing surface ({@code POST .../models/discover}, {@code GET/PUT
-     * /api/routing/*}) backed by {@code routing}. No {@link QuotaAdmin} — {@code quota/refresh}
-     * 404s (see the full 8-arg constructor for the full wiring).
-     */
-    public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
-                          ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
-                          RoutingAdmin routing) {
-        this(providerIds, admin, json, source, providersDir, holder, routing, null);
-    }
-
-    /**
      * Adds the quota surface ({@code POST .../quota/refresh}) backed by {@code quota}. No
-     * {@link ConfigAdmin} — {@code /api/providers/{id}/config} 404s (see the full 9-arg
+     * {@link ConfigAdmin}: {@code /api/providers/{id}/config} 404s (see the full 9-arg
      * constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -168,7 +153,7 @@ public final class ManagementApi implements HttpHandler {
 
     /**
      * Adds the provider-config surface ({@code GET/PUT /api/providers/{id}/config}) backed by
-     * {@code config}. No {@link OAuthAdmin} — the {@code /oauth/*} routes 404 (see the full 10-arg
+     * {@code config}. No {@link OAuthAdmin}: the {@code /oauth/*} routes 404 (see the full 10-arg
      * constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -179,7 +164,7 @@ public final class ManagementApi implements HttpHandler {
 
     /**
      * Adds the OAuth-login surface ({@code POST .../oauth/authorize}, {@code POST
-     * .../oauth/complete}) backed by {@code oauth}. No {@link ProxyAdmin} — the
+     * .../oauth/complete}) backed by {@code oauth}. No {@link ProxyAdmin}: the
      * {@code /api/proxies*} routes 404 (see the full 11-arg constructor for the full wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -190,7 +175,7 @@ public final class ManagementApi implements HttpHandler {
 
     /**
      * Adds the proxy-management surface ({@code /api/proxies*}) backed by {@code proxy}. No
-     * {@link ProxySource}/{@link ProxyRegistryHolder} — the proxy install/available/uninstall
+     * {@link ProxySource}/{@link ProxyRegistryHolder}: the proxy install/available/uninstall
      * routes 404, and an {@code ?app=} query on {@code /api/routing/model-map} always 400s (see the
      * full constructor below for the full wiring).
      */
@@ -206,8 +191,8 @@ public final class ManagementApi implements HttpHandler {
      * Adds the proxy install/available/uninstall surface backed by {@code proxySource}/{@code
      * proxyHolder} (jars land in {@code proxiesDir}), and makes {@code ?app=} on {@code
      * /api/routing/model-map} resolve against an installed proxy's {@link RoutingProfile} via
-     * {@code proxyHolder.profileFor} instead of a hardcoded per-app table. No {@link MessagesAdmin}
-     * — {@code /api/providers/{id}/messages} 404s (see the full 15-arg constructor for the full
+     * {@code proxyHolder.profileFor} instead of a hardcoded per-app table. No {@link MessagesAdmin}:
+     * {@code /api/providers/{id}/messages} 404s (see the full 15-arg constructor for the full
      * wiring).
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
@@ -636,7 +621,7 @@ public final class ManagementApi implements HttpHandler {
 
     /**
      * Seeds an account from a pasted OAuth refresh token (the JVM login MVP). Body:
-     * {@code {"refresh":..,"email":..,"id":..,"projectId":..,"managedProjectId":..}} — only
+     * {@code {"refresh":..,"email":..,"id":..,"projectId":..,"managedProjectId":..}}: only
      * {@code refresh} plus one of {@code email}/{@code id} are required. This only becomes
      * visible to an installed provider when the server runs against a {@code FileStore} shared
      * with that provider ({@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>});

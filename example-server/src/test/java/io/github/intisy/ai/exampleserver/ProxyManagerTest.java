@@ -32,12 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * {@link ProxyManager} is now generic: it runs one proxy per proxy plugin INSTALLED (discovered
+ * {@link ProxyManager} is generic: it runs one proxy per proxy plugin INSTALLED (discovered
  * via {@link ProxyRegistryHolder}), not a hardcoded app list. {@link #stageProxyJar} packages two
  * already-compiled {@link ProxyPlugin} fixtures (a real staged echo-tiers profile, and a
  * null-profile passthrough) into an actual jar with a {@code META-INF/services} registration,
  * mirroring how {@code ProviderRegistryTest#writeStubProviderJar} proves {@code ProviderRegistry}
- * discovery — same shape, proxy-side.
+ * discovery, same shape, proxy-side.
  */
 class ProxyManagerTest {
 
@@ -178,7 +178,7 @@ class ProxyManagerTest {
      * Packages the already-compiled {@link RoutingProxyPlugin}/{@link NoRoutingProxyPlugin}
      * {@code .class} files (compiled as a normal part of this module's test-compile step) plus a
      * real {@code META-INF/services} registration into an actual jar, dropped into a "proxies"
-     * directory — exactly the shape a real proxy plugin ships. No new Gradle staging is required:
+     * directory, exactly the shape a real proxy plugin ships. No new Gradle staging is required:
      * unlike the provider fixture (built by the separate {@code :examples-provider} project), this
      * jar is assembled inline from classes already on the test classpath.
      */
@@ -211,7 +211,7 @@ class ProxyManagerTest {
         @Override public RoutingProfile profile() { return ServerProfile.echoTiers("proxy-manager-test-routing.json"); }
     }
 
-    /** Fixture proxy declaring no routing profile — the start() guard path. */
+    /** Fixture proxy declaring no routing profile: the start() guard path. */
     public static final class NoRoutingProxyPlugin implements ProxyPlugin {
         @Override public String id() { return NO_ROUTING_ID; }
         @Override public String displayName() { return "No Routing Proxy"; }
