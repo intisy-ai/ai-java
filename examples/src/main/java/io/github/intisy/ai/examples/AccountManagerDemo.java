@@ -132,7 +132,7 @@ public final class AccountManagerDemo {
             clock.advanceBy(RATE_LIMIT_MS); // step past the rate-limit reset
             result.acquireSucceededAfterReset = manager.acquire(LANE) != null;
 
-            manager.reportError("user@example.com", 0, "simulated transient error");
+            manager.reportError("user@example.com", LANE, 0, "simulated transient error");
             result.nextAvailableAfterBackoff = manager.nextAvailableAt(LANE);
 
             manager.reportSuccess("user@example.com");

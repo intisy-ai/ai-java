@@ -107,7 +107,7 @@ public final class CustomSpiDemo {
         // one resume time (clock.now() + jittered backoff), reproducible on every run.
         AccountManager manager = app.accountManager("demo-provider", null);
         seedAccount(store, app.jsonCodec());
-        manager.reportError("acct-1", 0, "simulated transient error");
+        manager.reportError("acct-1", null, 0, "simulated transient error");
         Account account = firstAccount(store, app.jsonCodec());
 
         return new Result(logger.lines(), notifier.notices(),
