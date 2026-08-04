@@ -16,7 +16,6 @@ dependencies {
     // public surface (AiJava) does not expose IR types itself, it only needs to PROVIDE them.
     implementation project(":ir")
     api "com.google.code.gson:gson:2.10.1"
-    githubApi "intisy:simple-logger:1.12.7"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).

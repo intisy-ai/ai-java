@@ -1,25 +1,28 @@
 package io.github.intisy.ai.jvm.backend.log;
 
-import com.github.WildePizza.SimpleLogger;
 import io.github.intisy.ai.shared.spi.Logger;
 
+import java.util.logging.Level;
+
 /**
- * Routes the shared {@link Logger} SPI to {@code intisy:simple-logger}'s {@link SimpleLogger}
- * (package {@code com.github.WildePizza} at the pinned {@code 1.12.7} tag).
+ * Routes the shared {@link Logger} SPI to {@code java.util.logging} (built into the JDK, zero
+ * external dependency). The SPI exposes a single untyped {@link Logger#log(String)} call with no
+ * level parameter, so every message is emitted at {@link Level#INFO} through a JUL logger named
+ * after this class; JUL's own default console handler prints it.
  */
 public class SimpleLoggerAdapter implements Logger {
-    private final SimpleLogger logger;
+    private final java.util.logging.Logger logger;
 
     public SimpleLoggerAdapter() {
-        this(new SimpleLogger());
+        this(java.util.logging.Logger.getLogger(SimpleLoggerAdapter.class.getName()));
     }
 
-    public SimpleLoggerAdapter(SimpleLogger logger) {
+    public SimpleLoggerAdapter(java.util.logging.Logger logger) {
         this.logger = logger;
     }
 
     @Override
     public void log(String msg) {
-        logger.log(msg);
+        logger.log(Level.INFO, msg);
     }
 }
