@@ -40,6 +40,27 @@ shadowJar {
     archiveVersion = ""
 }
 
+// The consumable Maven Central-style coordinate for the whole library. shadowJar bundles
+// :routing + :accounts (api deps) and :ir (implementation dep) into one jar, so consumers get
+// io.github.intisy.ai.shared.spi.* (Provider/HandlerCtx SPI), io.github.intisy.ai.shared.select.*
+// (QuotaHealth), io.github.intisy.ai.jvm.backend.* and the IR types from a single dependency,
+// replacing the generic-named io.github.intisy:accounts / io.github.intisy:jvm coordinates and
+// the pinned githubCompileOnly "intisy-ai:ai-java:<v>:standalone" fetch-from-release model.
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = "ai-java"
+            artifact(shadowJar) {
+                classifier = null
+            }
+            pom {
+                name = display_name
+                description = artifact_description
+            }
+        }
+    }
+}
+
 publishGithub {
     // :jvm is a subproject with no .git of its own, so publishGithub's default git-remote lookup
     // fails ("No git remote 'origin' found in .../jvm"). Set owner/repo explicitly to bypass it.
