@@ -16,7 +16,6 @@ dependencies {
     // public surface (AiJava) does not expose IR types itself, it only needs to PROVIDE them.
     implementation project(":ir")
     api "com.google.code.gson:gson:2.10.1"
-    githubApi "intisy:simple-logger:1.12.7"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).
@@ -39,6 +38,27 @@ jar {
 shadowJar {
     archiveClassifier = "standalone"
     archiveVersion = ""
+}
+
+// The consumable Maven Central-style coordinate for the whole library. shadowJar bundles
+// :routing + :accounts (api deps) and :ir (implementation dep) into one jar, so consumers get
+// io.github.intisy.ai.shared.spi.* (Provider/HandlerCtx SPI), io.github.intisy.ai.shared.select.*
+// (QuotaHealth), io.github.intisy.ai.jvm.backend.* and the IR types from a single dependency,
+// replacing the generic-named io.github.intisy:accounts / io.github.intisy:jvm coordinates and
+// the pinned githubCompileOnly "intisy-ai:ai-java:<v>:standalone" fetch-from-release model.
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = "ai-java"
+            artifact(shadowJar) {
+                classifier = null
+            }
+            pom {
+                name = display_name
+                description = artifact_description
+            }
+        }
+    }
 }
 
 publishGithub {

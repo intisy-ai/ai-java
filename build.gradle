@@ -13,6 +13,7 @@ subprojects {
     apply plugin: "java-library"
     apply plugin: "com.github.johnrengelman.shadow"
     apply plugin: "io.github.intisy.github-gradle"
+    apply plugin: "maven-publish"
 
     group = artifact_group
     // publishGithub (used by the publish-dependency workflow) requires a concrete version.
@@ -58,5 +59,22 @@ subprojects {
     // aggregate publish succeeds by publishing only the library artifact.
     tasks.matching { it.name == "publishGithub" }.configureEach {
         onlyIf { project.path == ":jvm" }
+    }
+
+    // GitHub Packages Maven repository, shared across every subproject so a plain `./gradlew
+    // publish` resolves it. Only :jvm actually declares a `publishing.publications` block (see
+    // jvm/build.gradle); subprojects with no publication just get a no-op publish, mirroring the
+    // publishGithub onlyIf-scoping above.
+    publishing {
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = "https://maven.pkg.github.com/intisy-ai/ai-java"
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gpr.user")
+                    password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gpr.token")
+                }
+            }
+        }
     }
 }
