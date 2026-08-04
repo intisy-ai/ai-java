@@ -4,7 +4,7 @@ Archives containing JAR files are available as [releases](https://github.com/int
 
 ## What is ai-java?
 
-Server-side AI library for Java: providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
+Server-side AI library for Java — providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
 
 ## Usage in private projects
 
@@ -18,7 +18,7 @@ Server-side AI library for Java: providers, accounts/quota, and a routing proxy,
   <dependency>
       <groupId>io.github.intisy</groupId>
       <artifactId>ai-java</artifactId>
-      <version>1.0.7</version>
+      <version>1.0.9</version>
   </dependency>
 ```
 
@@ -45,7 +45,7 @@ Server-side AI library for Java: providers, accounts/quota, and a routing proxy,
       }
   }
   dependencies {
-      implementation 'io.github.intisy:ai-java:1.0.7'
+      implementation 'io.github.intisy:ai-java:1.0.9'
   }
 ```
 
@@ -57,7 +57,7 @@ Server-side AI library for Java: providers, accounts/quota, and a routing proxy,
       id "io.github.intisy.github-gradle" version "1.3.7"
   }
   dependencies {
-      githubImplementation "intisy:ai-java:1.0.7"
+      githubImplementation "intisy:ai-java:1.0.9"
   }
 ```
 
