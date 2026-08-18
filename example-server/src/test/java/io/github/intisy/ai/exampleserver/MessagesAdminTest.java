@@ -117,8 +117,19 @@ class MessagesAdminTest {
         HttpResponse resp = messages.send("handleir-ratelimited", "{\"model\":\"x\",\"messages\":[]}");
         assertEquals(429, resp.status);
         assertEquals("7", resp.headers.get("retry-after"), resp.headers.toString());
+        assertEquals("45000", resp.headers.get("x-hub-retry-after-ms"), resp.headers.toString());
         assertEquals("{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\","
                 + "\"message\":\"handleIr rate limited\"}}", resp.body);
+    }
+
+    // HandleIrPresetRetryHeaderProvider's HandleIrException already sets x-hub-retry-after-ms
+    // itself; the reconstruction must leave that value alone rather than overwriting it with its
+    // own retryAfterMs (a different value here, so a clobber would be caught).
+    @Test
+    void sendDoesNotOverwriteAnAlreadyPresentRetryAfterMsHeader() {
+        HttpResponse resp = messages.send("handleir-retry-header-preset", "{\"model\":\"x\",\"messages\":[]}");
+        assertEquals(429, resp.status);
+        assertEquals("999", resp.headers.get("x-hub-retry-after-ms"), resp.headers.toString());
     }
 
     // MessagesAdmin resolves its translator fresh per instance (see loadTranslator()'s

@@ -3,3 +3,4 @@ io.github.intisy.ai.examples.provider.AlwaysRateLimitedProvider
 io.github.intisy.ai.examples.provider.CtxCapturingProvider
 io.github.intisy.ai.examples.provider.ThrowingProvider
 io.github.intisy.ai.examples.provider.HandleIrRateLimitedProvider
+io.github.intisy.ai.examples.provider.HandleIrPresetRetryHeaderProvider
