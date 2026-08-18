@@ -46,6 +46,8 @@ def stageTranslators = tasks.register("stageTranslators", Copy) {
 
 def runProvidersDir = layout.buildDirectory.dir("run-providers")
 def runProxiesDir = layout.buildDirectory.dir("run-proxies")
+// Never staged by design (no installer seam yet): a real `run` serves 503 no_translator for
+// every console chat send until an operator drops a translator jar here themselves.
 def runTranslatorsDir = layout.buildDirectory.dir("run-translators")
 
 tasks.named("run") {

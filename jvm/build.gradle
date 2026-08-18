@@ -12,8 +12,11 @@ dependencies {
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
     // (see ProviderRegistry#fromDirectory), so a provider's handleIr resolving io.github.intisy.
     // ai.ir.IrRequest/IrResponse at runtime depends on THIS classpath actually carrying :ir's
-    // classes for that parent-first delegation to find. implementation (not api): :jvm's own
-    // public surface (AiJava) does not expose IR types itself, it only needs to PROVIDE them.
+    // classes for that parent-first delegation to find. implementation (not api): TranslatorRegistry
+    // (also part of :jvm's public surface) DOES return Translator, but that stays an explicit,
+    // deliberate opt-in -- a consumer that never touches translators shouldn't inherit :ir
+    // transitively just for using ProviderRegistry/handlers. Consumers that DO use
+    // TranslatorRegistry declare their own project(":ir"), as example-server does.
     implementation project(":ir")
     api "com.google.code.gson:gson:2.10.1"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.

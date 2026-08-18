@@ -28,12 +28,12 @@ import java.util.Map;
  * ConfigAdmin}/{@link QuotaAdmin}'s shape (encapsulates the {@link Store}; {@code ManagementApi}
  * never sees it directly).
  *
- * <p>This is the console's own IR front-door. {@code send} decodes the inbound Anthropic-shaped
- * {@code body} into IR via this admin's own {@link #translator} (console chat has no {@code
- * RoutingProfile} -- it is a fixed, always-Anthropic wire format, not a per-app concern), calls the
- * resolved provider's {@link Provider#handleIr}, and encodes the result back to wire JSON --
- * mirroring core-proxy's Router#route one level up, without a router in between. A
- * provider with no IR path (the {@link Provider#handleIr} default) throws {@link
+ * <p>This is the console's own IR front-door. {@code send} decodes the inbound {@code body} into
+ * IR via this admin's own {@link #translator} (console chat has no {@code RoutingProfile} -- its
+ * wire format is whichever {@link Translator} the staged translators directory provides, not a
+ * per-app concern), calls the resolved provider's {@link Provider#handleIr}, and encodes the
+ * result back to wire JSON -- mirroring core-proxy's Router#route one level up, without a router
+ * in between. A provider with no IR path (the {@link Provider#handleIr} default) throws {@link
  * UnsupportedOperationException}; that specific exception falls back to the legacy {@link
  * Provider#handle} call unchanged, exactly like Router's own fallback -- so a provider (or
  * in-tree fixture) without an IR implementation keeps working with zero changes here.
@@ -45,6 +45,7 @@ public final class MessagesAdmin {
     private final String configDir;
     private final Store store;
     private final Translator translator;
+    private final String translatorError; // set only when MORE THAN ONE translator was found
 
     public MessagesAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
@@ -52,37 +53,61 @@ public final class MessagesAdmin {
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
         this.store = store;
-        this.translator = loadTranslator();
+        TranslatorResolution resolution = resolveTranslator();
+        this.translator = resolution.translator;
+        this.translatorError = resolution.error;
     }
 
     /**
-     * @implNote A {@code null} result (no translator jar staged) is NOT treated as fatal here,
-     * unlike {@code ServerProfile}: this admin also serves provider-agnostic dashboard actions
-     * that don't need a translator at all, so {@link #send} degrades with an explicit error at
-     * request time instead of failing every console feature at construction. Resolved fresh per
-     * instance (no caching): {@code MessagesAdmin} is constructed once per server process, so
-     * re-scanning costs nothing, and staying uncached keeps it honest about whatever directory
-     * {@code exampleserver.translatorsDir} currently points at.
+     * @implNote Zero found (no translator jar staged) is NOT treated as fatal here, unlike {@code
+     * ServerProfile}: this admin also serves provider-agnostic dashboard actions that don't need a
+     * translator at all, so {@link #send} degrades with an explicit error at request time instead
+     * of failing every console feature at construction. MORE THAN ONE found is also non-fatal here
+     * for the same reason, but is distinguished from "none" so {@link #send} can report the real
+     * cause (an ambiguous directory) instead of the misleading "no translator" message. Resolved
+     * fresh per instance (no caching): {@code MessagesAdmin} is constructed once per server
+     * process, so re-scanning costs nothing, and staying uncached keeps it honest about whatever
+     * directory {@code exampleserver.translatorsDir} currently points at.
      */
-    private static Translator loadTranslator() {
+    private static TranslatorResolution resolveTranslator() {
         File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
         List<Translator> found = TranslatorRegistry.fromDirectory(dir.toPath()).translators();
-        return found.isEmpty() ? null : found.get(0);
+        if (found.size() > 1) {
+            // File.listFiles order is unspecified -- picking one arbitrarily here would be a
+            // silent, nondeterministic misconfiguration instead of a loud one.
+            return new TranslatorResolution(null, "found " + found.size()
+                    + " Translator implementations in " + dir.getAbsolutePath()
+                    + "; stage exactly one translator jar");
+        }
+        return new TranslatorResolution(found.isEmpty() ? null : found.get(0), null);
+    }
+
+    private static final class TranslatorResolution {
+        final Translator translator;
+        final String error;
+
+        TranslatorResolution(Translator translator, String error) {
+            this.translator = translator;
+            this.error = error;
+        }
     }
 
     /**
-     * Resolves {@code providerId} and serves {@code body} (an Anthropic {@code /v1/messages}-shaped
-     * request) -- NO router, NO model-&gt;provider resolution, NO fallback chain. The provider id
-     * comes from the URL; the concrete model the caller wants is read out of {@code body.model} and
-     * threaded through {@link HandlerCtx#model}, exactly like the router does for an
-     * already-resolved assignment.
+     * Resolves {@code providerId} and serves {@code body} (a request shaped for whichever {@link
+     * Translator} is staged) -- NO router, NO model-&gt;provider resolution, NO fallback chain. The
+     * provider id comes from the URL; the concrete model the caller wants is read out of {@code
+     * body.model} and threaded through {@link HandlerCtx#model}, exactly like the router does for
+     * an already-resolved assignment.
      */
     public HttpResponse send(String providerId, String body) {
-        // No translator jar staged: fail visibly here rather than silently falling through to
-        // decodeIr() returning null, which would look identical to an ordinary malformed body.
+        // No (or ambiguous) translator staged: fail visibly here rather than silently falling
+        // through to decodeIr() returning null, which would look identical to an ordinary
+        // malformed body.
         if (translator == null) {
-            return errorResponse(503, "no_translator",
-                    "no Translator implementation is staged; console chat needs a translator jar (see :examples-translator)");
+            return translatorError != null
+                    ? errorResponse(503, "ambiguous_translator", translatorError)
+                    : errorResponse(503, "no_translator",
+                            "no Translator implementation is staged; console chat needs a translator jar (see :examples-translator)");
         }
 
         Provider p = holder.get(providerId);
@@ -127,8 +152,8 @@ public final class MessagesAdmin {
     }
 
     // Decodes body through this admin's own translator; null (never throws) on any decode failure
-    // (malformed/non-Anthropic-shaped JSON, or no body at all) so the caller falls back to the
-    // legacy handle() path, the same "decode failure -> legacy path" convention core-proxy's
+    // (malformed/not-this-translator's-shaped JSON, or no body at all) so the caller falls back to
+    // the legacy handle() path, the same "decode failure -> legacy path" convention core-proxy's
     // Router#decodeIr uses.
     private IrRequest decodeIr(String body) {
         if (body == null || body.isEmpty()) return null;

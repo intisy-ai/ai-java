@@ -34,7 +34,7 @@ public final class TranslatorRegistry implements Closeable {
     private final URLClassLoader classLoader; // null when no translator jars were found
 
     private TranslatorRegistry(List<Translator> translators, URLClassLoader classLoader) {
-        this.translators = translators;
+        this.translators = Collections.unmodifiableList(translators);
         this.classLoader = classLoader;
     }
 
