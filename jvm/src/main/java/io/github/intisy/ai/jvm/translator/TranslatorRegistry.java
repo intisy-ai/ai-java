@@ -36,11 +36,16 @@ public final class TranslatorRegistry {
      * Scans {@code directory} for {@code *.jar} files and discovers every {@link Translator} they
      * register via {@code ServiceLoader}. A missing or empty directory yields an empty list (not
      * an error): zero translators installed is a valid, common state.
+     *
+     * <p>{@code synchronized} (with {@link #close()}): the click-to-install path this registry
+     * serves rescans the directory repeatedly, and both methods read-then-write the same static
+     * {@code classLoader}, so an unsynchronized pair could race on which loader ends up open.
      */
-    public static List<Translator> load(File directory) {
+    public static synchronized List<Translator> load(File directory) {
+        closeExistingLoader();
+
         File[] jarFiles = directory.isDirectory() ? directory.listFiles((dir, name) -> name.endsWith(".jar")) : null;
         if (jarFiles == null || jarFiles.length == 0) {
-            classLoader = null;
             return Collections.emptyList();
         }
 
@@ -64,8 +69,27 @@ public final class TranslatorRegistry {
         return loaded;
     }
 
+    /**
+     * Closes whatever loader a previous {@link #load} left open before this call replaces (or
+     * clears) it, so a repeated {@code load} against a directory whose jar was swapped never
+     * leaks the old jar's file handle (fatal on Windows: an open handle blocks deleting or
+     * overwriting that jar). A close failure is propagated rather than swallowed -- swallowing it
+     * would hide a real handle problem and still discard the only reference able to retry it, so
+     * on failure the field is deliberately left pointing at the not-fully-closed loader instead
+     * of being overwritten, and the caller sees the exception instead of a silently masked leak.
+     */
+    private static void closeExistingLoader() {
+        if (classLoader == null) return;
+        try {
+            classLoader.close();
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to close previous translator classloader", e);
+        }
+        classLoader = null;
+    }
+
     /** Releases the {@link URLClassLoader} backing the most recent {@link #load}, if any. */
-    public static void close() throws IOException {
+    public static synchronized void close() throws IOException {
         if (classLoader != null) {
             classLoader.close();
             classLoader = null;

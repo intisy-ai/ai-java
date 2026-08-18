@@ -49,6 +49,29 @@ class TranslatorRegistryTest {
         }
     }
 
+    @Test
+    void load_calledAgain_closesThePreviousClassLoader_soTheOldJarCanBeDeleted(@TempDir Path tmp) throws IOException {
+        Path firstDir = tmp.resolve("translators-1");
+        Path secondDir = tmp.resolve("translators-2");
+        Files.createDirectory(firstDir);
+        Files.createDirectory(secondDir);
+        Path firstJar = firstDir.resolve("stub-translator.jar");
+        writeStubTranslatorJar(firstJar);
+        writeStubTranslatorJar(secondDir.resolve("stub-translator.jar"));
+
+        try {
+            assertEquals(1, TranslatorRegistry.load(firstDir.toFile()).size());
+            assertEquals(1, TranslatorRegistry.load(secondDir.toFile()).size());
+
+            // An open URLClassLoader handle on Windows blocks deleting the jar it was opened
+            // from; this delete only succeeds if the first load()'s loader was closed before the
+            // second load() replaced it, rather than being overwritten and leaked.
+            Files.delete(firstJar);
+        } finally {
+            TranslatorRegistry.close();
+        }
+    }
+
     private static void writeStubTranslatorJar(Path jarPath) throws IOException {
         String className = StubTranslator.class.getName();
         String classResourcePath = className.replace('.', '/') + ".class";
