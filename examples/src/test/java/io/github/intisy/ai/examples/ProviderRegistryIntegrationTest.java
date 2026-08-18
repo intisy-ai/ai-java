@@ -13,9 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Proves the real {@code :examples-provider} jar (staged into the providers directory by Gradle) is
- * discovered purely via {@code ServiceLoader} (all four providers from one jar) and routes a real
- * request. Also proves the {@code close()} lifecycle releases the jar classloader: a fresh AiJava
- * over the same directory re-discovers cleanly after the first was closed.
+ * discovered purely via {@code ServiceLoader} (every provider registered in that jar) and routes a
+ * real request. Also proves the {@code close()} lifecycle releases the jar classloader: a fresh
+ * AiJava over the same directory re-discovers cleanly after the first was closed.
+ *
+ * @implNote Asserts membership per known fixture rather than an exact {@code ids.size()}: the
+ *     services file this reads is shared with other {@code :examples-provider} fixtures, so a new
+ *     fixture there must not force an edit here to keep this test green.
  */
 class ProviderRegistryIntegrationTest {
 
@@ -28,7 +32,8 @@ class ProviderRegistryIntegrationTest {
         assertTrue(ids.contains("ratelimited"), "ratelimited provider should be discovered from the jar: " + ids);
         assertTrue(ids.contains("ctx-capture"), "ctx-capture provider should be discovered from the jar: " + ids);
         assertTrue(ids.contains("throwing"), "throwing provider should be discovered from the jar: " + ids);
-        assertEquals(4, ids.size(), "exactly the four example providers should be discovered: " + ids);
+        assertTrue(ids.contains("handleir-ratelimited"), "handleir-ratelimited provider should be discovered from the jar: " + ids);
+        assertTrue(ids.contains("handleir-retry-header-preset"), "handleir-retry-header-preset provider should be discovered from the jar: " + ids);
 
         // Route a real request through the jar-loaded provider (RoutingDemo builds+closes its AiJava).
         RoutingDemo.Result routed = RoutingDemo.execute(providersDir);
