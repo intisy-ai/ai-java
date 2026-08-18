@@ -7,6 +7,9 @@
 // purely via ServiceLoader.
 dependencies {
     compileOnly project(":routing")
+    // HandleIrRateLimitedProvider's handleIr override references IrRequest/IrResponse
+    // (defined in :ir, not re-exported by :routing's own compileOnly :ir dependency).
+    compileOnly project(":ir")
 }
 
 // Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.

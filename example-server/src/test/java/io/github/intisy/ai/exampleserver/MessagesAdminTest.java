@@ -108,6 +108,19 @@ class MessagesAdminTest {
         assertTrue(resp.body.contains("simulated upstream classloader failure"), resp.body);
     }
 
+    // A provider whose handleIr() THROWS HandleIrException (a typed transport error carrying a
+    // real upstream status/headers/body/retryAfterMs) -- HandleIrRateLimitedProvider (packaged in
+    // the same staged jar) always throws a 429 this way. The response must preserve that status
+    // and header/body, not collapse to a flat 502.
+    @Test
+    void sendPreservesStatusHeadersAndBodyFromAThrownHandleIrException() {
+        HttpResponse resp = messages.send("handleir-ratelimited", "{\"model\":\"x\",\"messages\":[]}");
+        assertEquals(429, resp.status);
+        assertEquals("7", resp.headers.get("retry-after"), resp.headers.toString());
+        assertEquals("{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\","
+                + "\"message\":\"handleIr rate limited\"}}", resp.body);
+    }
+
     // MessagesAdmin resolves its translator fresh per instance (see loadTranslator()'s
     // @implNote), so pointing exampleserver.translatorsDir at an empty directory before
     // constructing a SEPARATE instance here is enough to force the no-translator path, with no

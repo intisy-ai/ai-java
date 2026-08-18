@@ -6,6 +6,7 @@ import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
+import io.github.intisy.ai.shared.routing.HandleIrException;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.spi.JsonCodec;
@@ -105,15 +106,10 @@ public final class MessagesAdmin {
             } catch (UnsupportedOperationException notIrCapable) {
                 // This provider has no IR path (Provider#handleIr's own default) -- fall through
                 // to the legacy handle() call below, unchanged.
+            } catch (HandleIrException hie) {
+                return responseFromHandleIrException(hie);
             } catch (Throwable e) {
-                // A provider's handleIr THROWS instead of returning an error
-                // IrResponse for any outcome that can't be expressed as a served IR message (a
-                // non-2xx upstream response, a synthesized error, ...) -- see Provider#handleIr's
-                // own contract. No structured status/body travels with that exception (only its
-                // message text does), so surface the exception itself verbatim rather than
-                // collapsing it to an opaque wrapper -- exactly mirroring core-proxy's own
-                // Router#route, which treats ANY handleIr exception identically: a flat
-                // 502 whose message is the thrown exception's own text.
+                // Unexpected/non-typed throw -- a genuine bug with no structured payload.
                 return errorResponse(502, "api_error", "chat failed: " + e);
             }
         }
@@ -141,6 +137,32 @@ public final class MessagesAdmin {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * @implNote Mirrors core-proxy's {@code Router#route} {@code HandleIrException} handling:
+     * reconstructs the provider's real upstream status/headers/body instead of collapsing to a
+     * flat 502, and surfaces {@link HandleIrException#retryAfterMs} as {@code
+     * x-hub-retry-after-ms} (only when the provider didn't already set it) so rate-limit
+     * information isn't silently dropped.
+     */
+    private HttpResponse responseFromHandleIrException(HandleIrException hie) {
+        HttpResponse resp = new HttpResponse();
+        resp.status = hie.status;
+        Map<String, String> headers = hie.headers != null ? new LinkedHashMap<>(hie.headers) : new LinkedHashMap<>();
+        if (hie.retryAfterMs != null && !hasHeaderIgnoreCase(headers, "x-hub-retry-after-ms")) {
+            headers.put("x-hub-retry-after-ms", String.valueOf(hie.retryAfterMs));
+        }
+        resp.headers = headers;
+        resp.body = hie.body;
+        return resp;
+    }
+
+    private static boolean hasHeaderIgnoreCase(Map<String, String> headers, String name) {
+        for (String key : headers.keySet()) {
+            if (key != null && key.equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     private HttpResponse wireResponse(String wireJson) {
