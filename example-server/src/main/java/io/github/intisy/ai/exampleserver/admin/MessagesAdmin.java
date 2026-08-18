@@ -38,9 +38,6 @@ import java.util.Map;
  * in-tree fixture) without an IR implementation keeps working with zero changes here.
  */
 public final class MessagesAdmin {
-    private static Translator cachedTranslator;
-    private static boolean translatorLoadAttempted;
-
     private final ProviderRegistryHolder holder;
     private final JsonCodec json;
     private final Logger log;
@@ -58,23 +55,18 @@ public final class MessagesAdmin {
     }
 
     /**
-     * @implNote Cached (including a cached {@code null}) after the first attempt: {@link
-     * TranslatorRegistry#load} keeps ONE static classloader open and closes the previous one on
-     * every call, so re-scanning per {@code MessagesAdmin} instance would strand a translator
-     * already handed to an earlier instance the moment a later one loads. A {@code null} result
-     * (no translator jar staged) is NOT treated as fatal here, unlike {@code ServerProfile}: this
-     * admin also serves provider-agnostic dashboard actions that don't need a translator at all,
-     * so {@link #send} degrades with an explicit error at request time instead of failing every
-     * console feature at construction.
+     * @implNote A {@code null} result (no translator jar staged) is NOT treated as fatal here,
+     * unlike {@code ServerProfile}: this admin also serves provider-agnostic dashboard actions
+     * that don't need a translator at all, so {@link #send} degrades with an explicit error at
+     * request time instead of failing every console feature at construction. Resolved fresh per
+     * instance (no caching): {@code MessagesAdmin} is constructed once per server process, so
+     * re-scanning costs nothing, and staying uncached keeps it honest about whatever directory
+     * {@code exampleserver.translatorsDir} currently points at.
      */
-    private static synchronized Translator loadTranslator() {
-        if (!translatorLoadAttempted) {
-            File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
-            List<Translator> found = TranslatorRegistry.load(dir);
-            cachedTranslator = found.isEmpty() ? null : found.get(0);
-            translatorLoadAttempted = true;
-        }
-        return cachedTranslator;
+    private static Translator loadTranslator() {
+        File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
+        List<Translator> found = TranslatorRegistry.fromDirectory(dir.toPath()).translators();
+        return found.isEmpty() ? null : found.get(0);
     }
 
     /**

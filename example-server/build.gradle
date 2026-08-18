@@ -6,9 +6,8 @@ apply plugin: "application"
 dependencies {
     // Consume :jvm's public facade (it re-exports :routing + :accounts via `api`).
     implementation project(":jvm")
-    // core-ir's IR types + the Translator interface; implementations are discovered from jars at
-    // runtime (see stageTranslators below), never named here. :jvm's own dependency on :ir is
-    // `implementation` (non-transitive), so this module needs its own.
+    // core-ir's IR types + the Translator interface, needed directly since :jvm's own :ir
+    // dependency is `implementation` (non-transitive); implementations load from jars at runtime.
     implementation project(":ir")
     // Deliberately NO project(":examples-provider") dependency: the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.

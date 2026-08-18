@@ -107,4 +107,27 @@ class MessagesAdminTest {
         assertTrue(resp.body.contains("NoClassDefFoundError"), resp.body);
         assertTrue(resp.body.contains("simulated upstream classloader failure"), resp.body);
     }
+
+    // MessagesAdmin resolves its translator fresh per instance (see loadTranslator()'s
+    // @implNote), so pointing exampleserver.translatorsDir at an empty directory before
+    // constructing a SEPARATE instance here is enough to force the no-translator path, with no
+    // risk of a stale cache from another test's instance.
+    @Test
+    void sendWithNoTranslatorStagedIs503(@TempDir Path emptyTranslatorsDir) {
+        String previous = System.getProperty("exampleserver.translatorsDir");
+        System.setProperty("exampleserver.translatorsDir", emptyTranslatorsDir.toString());
+        try {
+            MessagesAdmin noTranslator = new MessagesAdmin(store, json, holder, msg -> { });
+            HttpResponse resp = noTranslator.send("echo", "{\"model\":\"x\",\"messages\":[]}");
+            assertEquals(503, resp.status);
+            assertTrue(resp.body.contains("\"type\":\"error\""), resp.body);
+            assertTrue(resp.body.contains("no_translator"), resp.body);
+        } finally {
+            if (previous != null) {
+                System.setProperty("exampleserver.translatorsDir", previous);
+            } else {
+                System.clearProperty("exampleserver.translatorsDir");
+            }
+        }
+    }
 }

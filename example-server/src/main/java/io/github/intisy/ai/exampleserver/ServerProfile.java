@@ -58,19 +58,17 @@ public final class ServerProfile {
     }
 
     /**
-     * @implNote Cached after the first successful load: {@link TranslatorRegistry#load} keeps
-     * ONE static classloader open and closes the previous one on every call, so re-scanning on
-     * every {@code echoTiers} call would strand a translator already handed to an earlier profile
-     * the moment a later call replaces the loader -- any class it still needs to define lazily
-     * (e.g. an anonymous {@code StreamDecoder}) would then fail with {@link NoClassDefFoundError}.
-     * Fails fast rather than leaving {@link RoutingProfile#translator} {@code null}: a null
-     * translator would silently skip the IR front door for every request built from this profile
-     * instead of surfacing the missing jar.
+     * @implNote Cached after the first successful load, purely to avoid re-scanning the directory
+     * and opening a fresh {@link TranslatorRegistry} classloader on every {@code echoTiers} call
+     * -- each call's registry is independent, so this is an efficiency choice, not a correctness
+     * requirement. Fails fast rather than leaving {@link RoutingProfile#translator} {@code null}:
+     * a null translator would silently skip the IR front door for every request built from this
+     * profile instead of surfacing the missing jar.
      */
     private static synchronized Translator translator() {
         if (translator == null) {
             File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
-            List<Translator> found = TranslatorRegistry.load(dir);
+            List<Translator> found = TranslatorRegistry.fromDirectory(dir.toPath()).translators();
             if (found.isEmpty()) {
                 throw new IllegalStateException(
                         "no Translator implementation found in " + dir.getAbsolutePath()

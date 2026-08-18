@@ -4,14 +4,12 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -25,11 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class TranslatorDiscoveryTest {
 
-    @AfterEach
-    void tearDown() throws IOException {
-        TranslatorRegistry.close();
-    }
-
     @Test
     void discoversAndRunsTheRealEchoTranslatorJar(@TempDir Path dir) throws IOException {
         String staged = System.getProperty("exampleserver.translatorsDir");
@@ -41,15 +34,16 @@ class TranslatorDiscoveryTest {
         assertNotNull(src, "a translator jar must be staged");
         Files.copy(src, dir.resolve(src.getFileName()));
 
-        List<Translator> found = TranslatorRegistry.load(dir.toFile());
-        assertEquals(1, found.size(), found.toString());
-        Translator translator = found.get(0);
+        try (TranslatorRegistry registry = TranslatorRegistry.fromDirectory(dir)) {
+            assertEquals(1, registry.translators().size(), registry.translators().toString());
+            Translator translator = registry.translators().get(0);
 
-        IrRequest decoded = translator.decodeRequest("{\"model\":\"whatever-the-caller-sent\"}");
-        assertEquals("echo-model", decoded.model, "EchoTranslator always echoes its own fixed model id");
+            IrRequest decoded = translator.decodeRequest("{\"model\":\"whatever-the-caller-sent\"}");
+            assertEquals("echo-model", decoded.model, "EchoTranslator always echoes its own fixed model id");
 
-        IrResponse response = new IrResponse();
-        response.model = "some-other-model";
-        assertEquals("{\"model\":\"echo-model\"}", translator.encodeResponse(response));
+            IrResponse response = new IrResponse();
+            response.model = "some-other-model";
+            assertEquals("{\"model\":\"echo-model\"}", translator.encodeResponse(response));
+        }
     }
 }
