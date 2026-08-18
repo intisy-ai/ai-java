@@ -2,11 +2,13 @@ package io.github.intisy.ai.jvm.translator;
 
 import io.github.intisy.ai.ir.spi.Translator;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -20,33 +22,32 @@ import java.util.ServiceLoader;
  * translator jar registers itself the usual JVM way: {@code
  * META-INF/services/io.github.intisy.ai.ir.spi.Translator} listing its implementation class.
  *
- * <p>{@link #load} hands back the discovered translators directly rather than a wrapping
- * registry object, so the backing {@link URLClassLoader} lives in static state until {@link
- * #close()} releases it -- {@code ProviderRegistry}'s equivalent discipline (loader stays open
- * for the whole usage window, closed once by the caller) with no instance to hang it off.
+ * <p>Mirrors {@code ProviderRegistry} one level up: each {@link #fromDirectory} call returns its
+ * OWN instance holding its OWN {@link URLClassLoader}, so one caller's {@link #close()} can never
+ * strand a translator a different caller already obtained from a different instance -- unlike a
+ * single shared static loader, where closing on behalf of one caller silently breaks another's
+ * already-handed-out translator the moment it needs to resolve a class it hasn't touched yet.
  */
-public final class TranslatorRegistry {
+public final class TranslatorRegistry implements Closeable {
 
-    private static URLClassLoader classLoader;
+    private final List<Translator> translators;
+    private final URLClassLoader classLoader; // null when no translator jars were found
 
-    private TranslatorRegistry() {
+    private TranslatorRegistry(List<Translator> translators, URLClassLoader classLoader) {
+        this.translators = translators;
+        this.classLoader = classLoader;
     }
 
     /**
      * Scans {@code directory} for {@code *.jar} files and discovers every {@link Translator} they
-     * register via {@code ServiceLoader}. A missing or empty directory yields an empty list (not
-     * an error): zero translators installed is a valid, common state.
-     *
-     * <p>{@code synchronized} (with {@link #close()}): the click-to-install path this registry
-     * serves rescans the directory repeatedly, and both methods read-then-write the same static
-     * {@code classLoader}, so an unsynchronized pair could race on which loader ends up open.
+     * register via {@code ServiceLoader}. A missing or empty directory yields an empty registry
+     * (not an error): zero translators installed is a valid, common state.
      */
-    public static synchronized List<Translator> load(File directory) {
-        closeExistingLoader();
-
-        File[] jarFiles = directory.isDirectory() ? directory.listFiles((dir, name) -> name.endsWith(".jar")) : null;
+    public static TranslatorRegistry fromDirectory(Path directory) {
+        File dir = directory.toFile();
+        File[] jarFiles = dir.isDirectory() ? dir.listFiles((d, name) -> name.endsWith(".jar")) : null;
         if (jarFiles == null || jarFiles.length == 0) {
-            return Collections.emptyList();
+            return new TranslatorRegistry(Collections.emptyList(), null);
         }
 
         URL[] urls = new URL[jarFiles.length];
@@ -58,41 +59,42 @@ public final class TranslatorRegistry {
             }
         }
 
-        // Deliberately NOT try-with-resources: the loader must stay open until close() is called
-        // (see the class javadoc), so a translator referencing a class only from a not-yet-run
-        // code path can still have it defined on demand.
-        classLoader = new URLClassLoader(urls, TranslatorRegistry.class.getClassLoader());
+        // Deliberately NOT try-with-resources: the loader must stay open for this registry's
+        // whole lifetime so a translator referencing a class only from a not-yet-run code path
+        // can still have it defined on demand. The caller closes it via close() once THIS
+        // registry is discarded; that can never affect any other registry's own loader.
+        URLClassLoader classLoader = new URLClassLoader(urls, TranslatorRegistry.class.getClassLoader());
         List<Translator> loaded = new ArrayList<>();
         for (Translator translator : ServiceLoader.load(Translator.class, classLoader)) {
             loaded.add(translator);
         }
-        return loaded;
+        return new TranslatorRegistry(loaded, classLoader);
+    }
+
+    /** No translators directory configured (or none found yet): a valid, zero-translator state. */
+    public static TranslatorRegistry empty() {
+        return new TranslatorRegistry(Collections.emptyList(), null);
+    }
+
+    /** Every {@link Translator} this registry discovered, in discovery order. */
+    public List<Translator> translators() {
+        return translators;
     }
 
     /**
-     * Closes whatever loader a previous {@link #load} left open before this call replaces (or
-     * clears) it, so a repeated {@code load} against a directory whose jar was swapped never
-     * leaks the old jar's file handle (fatal on Windows: an open handle blocks deleting or
-     * overwriting that jar). A close failure is propagated rather than swallowed -- swallowing it
-     * would hide a real handle problem and still discard the only reference able to retry it, so
-     * on failure the field is deliberately left pointing at the not-fully-closed loader instead
-     * of being overwritten, and the caller sees the exception instead of a silently masked leak.
+     * Releases the {@link URLClassLoader} backing this registry's jar-discovered translators, if
+     * any. Safe to call on a registry with no translator jars (e.g. {@link #empty()}): a no-op in
+     * that case. Callers should only close a registry once nothing still needs its translators:
+     * closing releases the loader's open jar handles (letting the jar be deleted/replaced on
+     * Windows) without unloading classes it already defined, so already-running requests are
+     * unaffected, but any NOT-yet-executed code path that still needs to define a new class from
+     * the jar (e.g. a translator's lazily-referenced anonymous {@code StreamDecoder}) will fail
+     * once the loader is closed.
      */
-    private static void closeExistingLoader() {
-        if (classLoader == null) return;
-        try {
-            classLoader.close();
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to close previous translator classloader", e);
-        }
-        classLoader = null;
-    }
-
-    /** Releases the {@link URLClassLoader} backing the most recent {@link #load}, if any. */
-    public static synchronized void close() throws IOException {
+    @Override
+    public void close() throws IOException {
         if (classLoader != null) {
             classLoader.close();
-            classLoader = null;
         }
     }
 }

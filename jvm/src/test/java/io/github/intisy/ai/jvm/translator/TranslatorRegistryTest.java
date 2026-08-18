@@ -22,10 +22,10 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.Collections;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -37,16 +37,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class TranslatorRegistryTest {
 
     @Test
-    void load_discoversJarTranslator_andEncodeRequestRoundTrips(@TempDir Path tmp) throws IOException {
+    void fromDirectory_discoversJarTranslator_andEncodeRequestRoundTrips(@TempDir Path tmp) throws IOException {
         Path translatorsDir = tmp.resolve("translators");
         Files.createDirectory(translatorsDir);
         writeStubTranslatorJar(translatorsDir.resolve("stub-translator.jar"));
 
-        List<Translator> translators = TranslatorRegistry.load(translatorsDir.toFile());
+        TranslatorRegistry registry = TranslatorRegistry.fromDirectory(translatorsDir);
         try {
-            assertEquals(1, translators.size());
+            assertEquals(1, registry.translators().size());
 
-            Translator translator = translators.get(0);
+            Translator translator = registry.translators().get(0);
             IrRequest request = new IrRequest();
             request.model = StubTranslator.MODEL;
 
@@ -54,72 +54,90 @@ class TranslatorRegistryTest {
             IrRequest decoded = translator.decodeRequest(wire);
             assertEquals(StubTranslator.MODEL, decoded.model);
         } finally {
-            TranslatorRegistry.close();
+            registry.close();
         }
     }
 
     /**
      * Windows-only signal, kept as a cheap smoke check but NOT the sole proof of the fix: an
      * open {@link URLClassLoader} handle on Windows blocks deleting the jar it was opened from,
-     * so the delete below only succeeds if the first {@code load()}'s loader was actually closed.
-     * On Linux, unlinking a still-open file succeeds regardless, so this test cannot fail there
-     * even with the leak reintroduced -- see
-     * {@link #load_calledAgain_closesThePreviousClassLoader_soALazyInnerClassCannotBeDefined} for
-     * the platform-independent proof.
+     * so the delete below only succeeds if {@link TranslatorRegistry#close()} actually released
+     * it. On Linux, unlinking a still-open file succeeds regardless, so this test cannot fail
+     * there even with the release broken -- see
+     * {@link #close_releasesTheLoader_soALazyInnerClassCannotBeDefinedAfterwards} for the
+     * platform-independent proof.
      */
     @Test
-    void load_calledAgain_closesThePreviousClassLoader_soTheOldJarCanBeDeleted(@TempDir Path tmp) throws IOException {
-        Path firstDir = tmp.resolve("translators-1");
-        Path secondDir = tmp.resolve("translators-2");
-        Files.createDirectory(firstDir);
-        Files.createDirectory(secondDir);
-        Path firstJar = firstDir.resolve("stub-translator.jar");
-        writeStubTranslatorJar(firstJar);
-        writeStubTranslatorJar(secondDir.resolve("stub-translator.jar"));
+    void close_releasesTheJarHandle_soTheJarCanBeDeleted(@TempDir Path tmp) throws IOException {
+        Path dir = tmp.resolve("translators");
+        Files.createDirectory(dir);
+        Path jar = dir.resolve("stub-translator.jar");
+        writeStubTranslatorJar(jar);
 
-        try {
-            assertEquals(1, TranslatorRegistry.load(firstDir.toFile()).size());
-            assertEquals(1, TranslatorRegistry.load(secondDir.toFile()).size());
-            Files.delete(firstJar);
-        } finally {
-            TranslatorRegistry.close();
-        }
+        TranslatorRegistry registry = TranslatorRegistry.fromDirectory(dir);
+        assertEquals(1, registry.translators().size());
+        registry.close();
+
+        Files.delete(jar);
     }
 
     /**
-     * Platform-independent proof, unlike {@link
-     * #load_calledAgain_closesThePreviousClassLoader_soTheOldJarCanBeDeleted} above: a closed
-     * {@link URLClassLoader} can still serve classes it already defined, but can never define a
-     * NEW one, and that is observable on every OS. {@link #writeJarOnlyTranslatorJar} compiles
-     * {@code JarOnlyTranslator} fresh into a scratch directory never on this test's own
-     * classpath, so the only loader that can ever resolve it (or the anonymous {@code
-     * StreamDecoder} its {@code newStreamDecoder()} defines lazily on first call, mirroring
-     * {@code EchoTranslator}'s own {@code $1}/{@code $2} anonymous inner classes) is the loader
-     * {@link TranslatorRegistry#load} built for the directory it came from -- a nested class of
-     * THIS test (like {@link StubTranslator}) would be parent-resolvable and prove nothing, per
-     * {@code ProviderRegistryTest}'s equivalent jar-only fixture.
+     * Platform-independent proof, unlike {@link #close_releasesTheJarHandle_soTheJarCanBeDeleted}
+     * above: a closed {@link URLClassLoader} can still serve classes it already defined, but can
+     * never define a NEW one, and that is observable on every OS. {@link
+     * #writeJarOnlyTranslatorJar} compiles {@code JarOnlyTranslator} fresh into a scratch
+     * directory never on this test's own classpath, so the only loader that can ever resolve it
+     * (or the anonymous {@code StreamDecoder} its {@code newStreamDecoder()} defines lazily on
+     * first call, mirroring {@code EchoTranslator}'s own {@code $1}/{@code $2} anonymous inner
+     * classes) is the loader {@link TranslatorRegistry#fromDirectory} built for the directory it
+     * came from -- a nested class of THIS test (like {@link StubTranslator}) would be
+     * parent-resolvable and prove nothing, per {@code ProviderRegistryTest}'s equivalent jar-only
+     * fixture.
      */
     @Test
-    void load_calledAgain_closesThePreviousClassLoader_soALazyInnerClassCannotBeDefined(@TempDir Path tmp) throws IOException {
-        Path firstDir = tmp.resolve("translators-1");
-        Path secondDir = tmp.resolve("translators-2");
-        Files.createDirectory(firstDir);
-        Files.createDirectory(secondDir);
-        writeJarOnlyTranslatorJar(firstDir.resolve("jar-only-translator.jar"), tmp.resolve("compile-work"));
-        writeStubTranslatorJar(secondDir.resolve("stub-translator.jar"));
+    void close_releasesTheLoader_soALazyInnerClassCannotBeDefinedAfterwards(@TempDir Path tmp) throws IOException {
+        Path dir = tmp.resolve("translators");
+        Files.createDirectory(dir);
+        writeJarOnlyTranslatorJar(dir.resolve("jar-only-translator.jar"), tmp.resolve("compile-work"));
 
-        List<Translator> first = TranslatorRegistry.load(firstDir.toFile());
-        assertEquals(1, first.size());
-        Translator jarOnlyTranslator = first.get(0);
+        TranslatorRegistry registry = TranslatorRegistry.fromDirectory(dir);
+        assertEquals(1, registry.translators().size());
+        Translator jarOnlyTranslator = registry.translators().get(0);
+
+        registry.close();
+
+        assertThrows(NoClassDefFoundError.class, jarOnlyTranslator::newStreamDecoder,
+                "closing this registry's loader should prevent it from defining the "
+                        + "lazily-referenced anonymous StreamDecoder it hasn't touched yet");
+    }
+
+    /**
+     * The defect a shared static loader had: two INDEPENDENT callers discovering the SAME
+     * directory must not be able to break each other. Each {@link TranslatorRegistry#fromDirectory}
+     * call opens its OWN {@link URLClassLoader} over its own copy of the directory's jars, so
+     * closing one registry must leave a translator obtained from a DIFFERENT registry (even one
+     * built from the identical directory) fully able to resolve a class it hasn't touched yet.
+     */
+    @Test
+    void twoRegistriesFromTheSameDirectory_closingOneDoesNotAffectTheOther(@TempDir Path tmp) throws IOException {
+        Path dir = tmp.resolve("translators");
+        Files.createDirectory(dir);
+        writeJarOnlyTranslatorJar(dir.resolve("jar-only-translator.jar"), tmp.resolve("compile-work"));
+
+        TranslatorRegistry registry1 = TranslatorRegistry.fromDirectory(dir);
+        TranslatorRegistry registry2 = TranslatorRegistry.fromDirectory(dir);
+        assertEquals(1, registry1.translators().size());
+        assertEquals(1, registry2.translators().size());
+        Translator translator2 = registry2.translators().get(0);
+
+        registry1.close();
 
         try {
-            assertEquals(1, TranslatorRegistry.load(secondDir.toFile()).size());
-
-            assertThrows(NoClassDefFoundError.class, jarOnlyTranslator::newStreamDecoder,
-                    "the first load()'s loader should have been closed by the second load(), "
-                            + "so it can no longer define the lazily-referenced anonymous StreamDecoder");
+            assertDoesNotThrow(translator2::newStreamDecoder,
+                    "closing registry1's loader must not affect registry2's, even though both "
+                            + "were built from the same directory");
         } finally {
-            TranslatorRegistry.close();
+            registry2.close();
         }
     }
 
