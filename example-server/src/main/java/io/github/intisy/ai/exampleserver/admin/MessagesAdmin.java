@@ -1,12 +1,11 @@
 package io.github.intisy.ai.exampleserver.admin;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
-import io.github.intisy.ai.exampleserver.ir.RoutingJsonCodecAdapter;
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.spi.Translator;
-import io.github.intisy.ai.ir.translators.anthropic.AnthropicTranslator;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
 import io.github.intisy.ai.shared.routing.HandlerCtx;
 import io.github.intisy.ai.shared.routing.Provider;
 import io.github.intisy.ai.shared.spi.JsonCodec;
@@ -15,7 +14,9 @@ import io.github.intisy.ai.shared.spi.Store;
 import io.github.intisy.ai.shared.spi.http.HttpRequest;
 import io.github.intisy.ai.shared.spi.http.HttpResponse;
 
+import java.io.File;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,6 +38,9 @@ import java.util.Map;
  * in-tree fixture) without an IR implementation keeps working with zero changes here.
  */
 public final class MessagesAdmin {
+    private static Translator cachedTranslator;
+    private static boolean translatorLoadAttempted;
+
     private final ProviderRegistryHolder holder;
     private final JsonCodec json;
     private final Logger log;
@@ -50,7 +54,27 @@ public final class MessagesAdmin {
         this.log = log;
         this.configDir = store instanceof FileStore ? ((FileStore) store).configFolder().toString() : "";
         this.store = store;
-        this.translator = new AnthropicTranslator(new RoutingJsonCodecAdapter(json));
+        this.translator = loadTranslator();
+    }
+
+    /**
+     * @implNote Cached (including a cached {@code null}) after the first attempt: {@link
+     * TranslatorRegistry#load} keeps ONE static classloader open and closes the previous one on
+     * every call, so re-scanning per {@code MessagesAdmin} instance would strand a translator
+     * already handed to an earlier instance the moment a later one loads. A {@code null} result
+     * (no translator jar staged) is NOT treated as fatal here, unlike {@code ServerProfile}: this
+     * admin also serves provider-agnostic dashboard actions that don't need a translator at all,
+     * so {@link #send} degrades with an explicit error at request time instead of failing every
+     * console feature at construction.
+     */
+    private static synchronized Translator loadTranslator() {
+        if (!translatorLoadAttempted) {
+            File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
+            List<Translator> found = TranslatorRegistry.load(dir);
+            cachedTranslator = found.isEmpty() ? null : found.get(0);
+            translatorLoadAttempted = true;
+        }
+        return cachedTranslator;
     }
 
     /**
@@ -61,6 +85,13 @@ public final class MessagesAdmin {
      * already-resolved assignment.
      */
     public HttpResponse send(String providerId, String body) {
+        // No translator jar staged: fail visibly here rather than silently falling through to
+        // decodeIr() returning null, which would look identical to an ordinary malformed body.
+        if (translator == null) {
+            return errorResponse(503, "no_translator",
+                    "no Translator implementation is staged; console chat needs a translator jar (see :examples-translator)");
+        }
+
         Provider p = holder.get(providerId);
         if (p == null) {
             return errorResponse(404, "not_found", "unknown provider: " + providerId);

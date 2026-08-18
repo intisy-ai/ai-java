@@ -6,9 +6,9 @@ apply plugin: "application"
 dependencies {
     // Consume :jvm's public facade (it re-exports :routing + :accounts via `api`).
     implementation project(":jvm")
-    // core-ir's IR types + vendor translators (AnthropicTranslator), needed directly by
-    // ServerProfile (profile.translator) and MessagesAdmin (console chat's IR front-door). :jvm's
-    // own dependency on :ir is `implementation` (non-transitive), so this module needs its own.
+    // core-ir's IR types + the Translator interface; implementations are discovered from jars at
+    // runtime (see stageTranslators below), never named here. :jvm's own dependency on :ir is
+    // `implementation` (non-transitive), so this module needs its own.
     implementation project(":ir")
     // Deliberately NO project(":examples-provider") dependency: the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
@@ -36,17 +36,30 @@ def stageProviders = tasks.register("stageProviders", Copy) {
     into(providersDir)
 }
 
+// Stage :examples-translator's built jar into a translators/ directory, exactly like
+// stageProviders above -- TranslatorRegistry (see ServerProfile, MessagesAdmin) discovers it
+// from disk via ServiceLoader, never from a compile-time dependency on the translator module.
+def translatorsDir = layout.buildDirectory.dir("translators")
+def stageTranslators = tasks.register("stageTranslators", Copy) {
+    from(project(":examples-translator").tasks.named("jar"))
+    into(translatorsDir)
+}
+
 def runProvidersDir = layout.buildDirectory.dir("run-providers")
 def runProxiesDir = layout.buildDirectory.dir("run-proxies")
+def runTranslatorsDir = layout.buildDirectory.dir("run-translators")
 
 tasks.named("run") {
     systemProperty("exampleserver.providersDir", runProvidersDir.get().asFile.absolutePath)
     systemProperty("exampleserver.proxiesDir", runProxiesDir.get().asFile.absolutePath)
+    systemProperty("exampleserver.translatorsDir", runTranslatorsDir.get().asFile.absolutePath)
 }
 
 tasks.named("test") {
     dependsOn(stageProviders)
+    dependsOn(stageTranslators)
     systemProperty("exampleserver.providersDir", providersDir.get().asFile.absolutePath)
+    systemProperty("exampleserver.translatorsDir", translatorsDir.get().asFile.absolutePath)
     // The two REAL provider jars (antigravity/claude) are pre-built out-of-band in their own
     // repos (ai-java cannot includeBuild them) and staged here manually. Default to
     // build/orgProviders (empty in CI); the e2e test skips via Assumptions when the jars aren't

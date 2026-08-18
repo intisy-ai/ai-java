@@ -1,0 +1,55 @@
+package io.github.intisy.ai.exampleserver;
+
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.ir.spi.Translator;
+import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+/**
+ * Proves the REAL {@code :examples-translator} jar (staged by Gradle's {@code stageTranslators}
+ * task, see build.gradle) is discoverable via {@link TranslatorRegistry} and its {@code
+ * EchoTranslator} actually runs -- {@code TranslatorRegistryTest} (in {@code :jvm}) only proves
+ * discovery against an inline stub fixture, never the real jar {@code ServerProfile}/{@code
+ * MessagesAdmin} depend on. Mirrors {@link ProviderDiscoveryTest}'s staged-jar-copy shape.
+ */
+class TranslatorDiscoveryTest {
+
+    @AfterEach
+    void tearDown() throws IOException {
+        TranslatorRegistry.close();
+    }
+
+    @Test
+    void discoversAndRunsTheRealEchoTranslatorJar(@TempDir Path dir) throws IOException {
+        String staged = System.getProperty("exampleserver.translatorsDir");
+        assertNotNull(staged, "exampleserver.translatorsDir must be set by the Gradle test task");
+        Path src = null;
+        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+            if (p.getFileName().toString().endsWith(".jar")) { src = p; break; }
+        }
+        assertNotNull(src, "a translator jar must be staged");
+        Files.copy(src, dir.resolve(src.getFileName()));
+
+        List<Translator> found = TranslatorRegistry.load(dir.toFile());
+        assertEquals(1, found.size(), found.toString());
+        Translator translator = found.get(0);
+
+        IrRequest decoded = translator.decodeRequest("{\"model\":\"whatever-the-caller-sent\"}");
+        assertEquals("echo-model", decoded.model, "EchoTranslator always echoes its own fixed model id");
+
+        IrResponse response = new IrResponse();
+        response.model = "some-other-model";
+        assertEquals("{\"model\":\"echo-model\"}", translator.encodeResponse(response));
+    }
+}

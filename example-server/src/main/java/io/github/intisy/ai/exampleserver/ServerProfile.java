@@ -1,10 +1,10 @@
 package io.github.intisy.ai.exampleserver;
 
-import io.github.intisy.ai.exampleserver.ir.RoutingJsonCodecAdapter;
-import io.github.intisy.ai.ir.translators.anthropic.AnthropicTranslator;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
+import io.github.intisy.ai.ir.spi.Translator;
+import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +21,8 @@ import java.util.regex.Pattern;
  * front-door for both.
  */
 public final class ServerProfile {
+
+    private static Translator translator;
 
     private ServerProfile() {
     }
@@ -51,7 +53,31 @@ public final class ServerProfile {
         // translator activates the IR front-door for either: Router prefers a resolved handler's
         // handleIr whenever the profile also carries a translator, falling back to legacy handle()
         // otherwise (see core-proxy's Router#route).
-        profile.translator = new AnthropicTranslator(new RoutingJsonCodecAdapter(new GsonJsonCodec()));
+        profile.translator = translator();
         return profile;
+    }
+
+    /**
+     * @implNote Cached after the first successful load: {@link TranslatorRegistry#load} keeps
+     * ONE static classloader open and closes the previous one on every call, so re-scanning on
+     * every {@code echoTiers} call would strand a translator already handed to an earlier profile
+     * the moment a later call replaces the loader -- any class it still needs to define lazily
+     * (e.g. an anonymous {@code StreamDecoder}) would then fail with {@link NoClassDefFoundError}.
+     * Fails fast rather than leaving {@link RoutingProfile#translator} {@code null}: a null
+     * translator would silently skip the IR front door for every request built from this profile
+     * instead of surfacing the missing jar.
+     */
+    private static synchronized Translator translator() {
+        if (translator == null) {
+            File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
+            List<Translator> found = TranslatorRegistry.load(dir);
+            if (found.isEmpty()) {
+                throw new IllegalStateException(
+                        "no Translator implementation found in " + dir.getAbsolutePath()
+                                + " -- stage a translator jar (see :examples-translator) before building a RoutingProfile");
+            }
+            translator = found.get(0);
+        }
+        return translator;
     }
 }
