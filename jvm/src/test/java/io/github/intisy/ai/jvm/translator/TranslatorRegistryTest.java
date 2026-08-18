@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -160,7 +161,13 @@ class TranslatorRegistryTest {
     private static byte[] readClassBytes(String classResourcePath) throws IOException {
         try (InputStream in = TranslatorRegistryTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
             if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
-            return in.readAllBytes();
+            ByteArrayOutputStream classBytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                classBytes.write(buffer, 0, read);
+            }
+            return classBytes.toByteArray();
         }
     }
 

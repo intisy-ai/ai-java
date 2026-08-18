@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,7 +24,7 @@ class ProviderRegistryHolderTest {
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path jar = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { jar = p; break; }
         }
         Files.copy(jar, dir.resolve(jar.getFileName()));
@@ -44,7 +45,7 @@ class ProviderRegistryHolderTest {
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path jar = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { jar = p; break; }
         }
         Files.copy(jar, dir.resolve(jar.getFileName()));
@@ -67,7 +68,7 @@ class ProviderRegistryHolderTest {
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path srcJar = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { srcJar = p; break; }
         }
         Path jar = dir.resolve(srcJar.getFileName());
@@ -96,7 +97,7 @@ class ProviderRegistryHolderTest {
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path srcJar = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { srcJar = p; break; }
         }
         Path jar = dir.resolve(srcJar.getFileName());

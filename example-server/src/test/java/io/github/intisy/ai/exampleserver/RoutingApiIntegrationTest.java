@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -107,7 +109,7 @@ class RoutingApiIntegrationTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;
@@ -128,7 +130,13 @@ class RoutingApiIntegrationTest {
             try (InputStream in = RoutingApiIntegrationTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
                 if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
                 jar.putNextEntry(new JarEntry(classResourcePath));
-                jar.write(in.readAllBytes());
+                ByteArrayOutputStream classBytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    classBytes.write(buffer, 0, read);
+                }
+                jar.write(classBytes.toByteArray());
                 jar.closeEntry();
             }
             jar.putNextEntry(new JarEntry("META-INF/services/" + ProxyPlugin.class.getName()));

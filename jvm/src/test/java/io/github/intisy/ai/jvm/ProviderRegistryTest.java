@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -81,13 +83,13 @@ class ProviderRegistryTest {
         // registry's whole lifetime (the very fix under test), which on Windows keeps the jar's
         // file handle open until closed -- close() both before @TempDir tries to delete the jar.
         try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
-            assertEquals(List.of("stub"), registry.listProviderIds());
+            assertEquals(Arrays.asList("stub"), registry.listProviderIds());
 
             Store store = Storage.memory();
             seedModelMap(store);
 
             try (AiJava app = AiJava.builder().storage(store).providersDir(providersDir).build()) {
-                assertEquals(List.of("stub"), app.providerRegistry().listProviderIds(),
+                assertEquals(Arrays.asList("stub"), app.providerRegistry().listProviderIds(),
                         "AiJava.builder().providersDir(...) should discover the same jar-provided Provider");
 
                 AiJava.WiredRouter router = app.router(profile());
@@ -107,13 +109,13 @@ class ProviderRegistryTest {
         writeJarOnlyProviderJar(providersDir.resolve("jar-only-provider.jar"), tmp.resolve("compile-work"));
 
         try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
-            assertEquals(List.of("jaronly"), registry.listProviderIds());
+            assertEquals(Arrays.asList("jaronly"), registry.listProviderIds());
 
             Store store = Storage.memory();
             seedModelMapFor(store, "jaronly", "m-jaronly");
 
             try (AiJava app = AiJava.builder().storage(store).providersDir(providersDir).build()) {
-                assertEquals(List.of("jaronly"), app.providerRegistry().listProviderIds());
+                assertEquals(Arrays.asList("jaronly"), app.providerRegistry().listProviderIds());
 
                 AiJava.WiredRouter router = app.router(profileFor("jaronly"));
 
@@ -154,7 +156,7 @@ class ProviderRegistryTest {
         writeJarOnlyIrProviderJar(providersDir.resolve("jar-only-ir-provider.jar"), tmp.resolve("compile-work-ir"));
 
         try (ProviderRegistry registry = ProviderRegistry.fromDirectory(providersDir)) {
-            assertEquals(List.of("jaronlyir"), registry.listProviderIds());
+            assertEquals(Arrays.asList("jaronlyir"), registry.listProviderIds());
             Provider provider = registry.get("jaronlyir");
 
             IrRequest request = new IrRequest();
@@ -248,7 +250,7 @@ class ProviderRegistryTest {
         assignment.put("provider", provider);
         assignment.put("model", model);
         Map<String, Object> doc = new HashMap<>();
-        doc.put("modelMap", Collections.singletonMap("opus", List.of(assignment)));
+        doc.put("modelMap", Collections.singletonMap("opus", Arrays.asList(assignment)));
         store.put(CONFIG_FILE, json.stringify(doc));
     }
 
@@ -280,7 +282,13 @@ class ProviderRegistryTest {
     private static byte[] readClassBytes(String classResourcePath) throws IOException {
         try (InputStream in = ProviderRegistryTest.class.getClassLoader().getResourceAsStream(classResourcePath)) {
             if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + classResourcePath);
-            return in.readAllBytes();
+            ByteArrayOutputStream classBytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                classBytes.write(buffer, 0, read);
+            }
+            return classBytes.toByteArray();
         }
     }
 

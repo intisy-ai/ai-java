@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.List;
@@ -58,7 +59,7 @@ class ProviderUpdateIntegrationTest {
         String staged = System.getProperty("exampleserver.providersDir");
         assertTrue(staged != null, "exampleserver.providersDir must be set by the Gradle test task");
         Path target = targetDir.resolve("echo-provider.jar");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, target);
                 return target;
@@ -76,7 +77,7 @@ class ProviderUpdateIntegrationTest {
         String staged = System.getProperty("exampleserver.providersDir");
         assertTrue(staged != null, "exampleserver.providersDir must be set by the Gradle test task");
         Path target = targetDir.resolve(assetName);
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, target);
                 return target;
@@ -205,7 +206,7 @@ class ProviderUpdateIntegrationTest {
         ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-        ProviderSource source = new FakeVersionedProviderSource(Path.of(System.getProperty("exampleserver.providersDir")),
+        ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(), source, providersDir, holder);
         ExampleServer server = ExampleServer.start(0, api);
@@ -233,7 +234,7 @@ class ProviderUpdateIntegrationTest {
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
         ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-        ProviderSource source = new FakeVersionedProviderSource(Path.of(System.getProperty("exampleserver.providersDir")),
+        ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(), source, providersDir, holder);
         ExampleServer server = ExampleServer.start(0, api);
@@ -263,7 +264,7 @@ class ProviderUpdateIntegrationTest {
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
         ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
-        ProviderSource source = new FakeVersionedProviderSource(Path.of(System.getProperty("exampleserver.providersDir")),
+        ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(), source, providersDir, holder);
         ExampleServer server = ExampleServer.start(0, api);
@@ -301,7 +302,7 @@ class ProviderUpdateIntegrationTest {
         accountStore.add("echo", account("acc1", "acc1@example.com"));
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
-        ProviderSource source = new FakeVersionedProviderSource(Path.of(System.getProperty("exampleserver.providersDir")),
+        ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, json, source, providersDir, holder);
         ExampleServer server = ExampleServer.start(0, api);
@@ -348,7 +349,7 @@ class ProviderUpdateIntegrationTest {
                 "provider id is read from the jar content, not its file name");
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new MismatchedNameProviderSource(
-                Path.of(System.getProperty("exampleserver.providersDir")),
+                Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-auth", "echo-auth-provider.jar", "1.1.0");
         ManagementApi api = new ManagementApi(holder::listProviderIds, admin, ai.jsonCodec(), source, providersDir, holder);
         ExampleServer server = ExampleServer.start(0, api);

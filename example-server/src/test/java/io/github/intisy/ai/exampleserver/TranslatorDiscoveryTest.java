@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -28,7 +29,7 @@ class TranslatorDiscoveryTest {
         String staged = System.getProperty("exampleserver.translatorsDir");
         assertNotNull(staged, "exampleserver.translatorsDir must be set by the Gradle test task");
         Path src = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { src = p; break; }
         }
         assertNotNull(src, "a translator jar must be staged");

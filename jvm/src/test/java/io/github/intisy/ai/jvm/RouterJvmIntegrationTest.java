@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +91,7 @@ class RouterJvmIntegrationTest {
         opts.log = msg -> {
         };
         opts.notify = new JsonlNotifier(store.configFolder());
-        opts.listProviders = () -> List.of("rl", "ok");
+        opts.listProviders = () -> Arrays.asList("rl", "ok");
         opts.configDir = store.configFolder().toString();
         return opts;
     }
@@ -118,7 +119,7 @@ class RouterJvmIntegrationTest {
         opusFallback.put("provider", "ok");
         opusFallback.put("model", "m-ok");
         Map<String, Object> doc = new HashMap<>();
-        doc.put("modelMap", Collections.singletonMap("opus", List.of(opus, opusFallback)));
+        doc.put("modelMap", Collections.singletonMap("opus", Arrays.asList(opus, opusFallback)));
         store.put(CONFIG_FILE, json.stringify(doc));
 
         RouterOptions opts = optionsOn(store);
@@ -142,7 +143,7 @@ class RouterJvmIntegrationTest {
         rl.put("provider", "rl");
         rl.put("model", "m-rl");
         Map<String, Object> doc = new HashMap<>();
-        doc.put("modelMap", Collections.singletonMap("opus", List.of(rl)));
+        doc.put("modelMap", Collections.singletonMap("opus", Arrays.asList(rl)));
         store.put(CONFIG_FILE, json.stringify(doc));
 
         RouterOptions opts = optionsOn(store);

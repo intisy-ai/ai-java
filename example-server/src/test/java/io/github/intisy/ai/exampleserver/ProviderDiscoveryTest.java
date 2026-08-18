@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,7 +21,7 @@ class ProviderDiscoveryTest {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by Gradle test task");
         Path src = null;
-        for (Path p : (Iterable<Path>) Files.list(Path.of(staged))::iterator) {
+        for (Path p : (Iterable<Path>) Files.list(Paths.get(staged))::iterator) {
             if (p.getFileName().toString().endsWith(".jar")) { src = p; break; }
         }
         assertNotNull(src, "a provider jar must be staged");

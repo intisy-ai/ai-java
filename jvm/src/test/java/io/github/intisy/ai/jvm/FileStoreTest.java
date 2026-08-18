@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -59,7 +60,7 @@ class FileStoreTest {
         assertEquals("{\"n\":1}", store.get("counter.json"));
         // no leftover .tmp/.lock files after a clean update
         List<String> keys = store.listKeys("");
-        assertEquals(List.of("counter.json"), keys);
+        assertEquals(Arrays.asList("counter.json"), keys);
     }
 
     @Test
@@ -82,7 +83,7 @@ class FileStoreTest {
 
         List<String> keys = store.listKeys("acc");
 
-        assertEquals(List.of("accounts.json"), keys);
+        assertEquals(Arrays.asList("accounts.json"), keys);
     }
 
     @Test
