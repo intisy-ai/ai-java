@@ -1,5 +1,12 @@
 name: Build And Upload
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and publish; empty takes the ref the run was started from'
+        required: false
+        type: string
+        default: ''
   push:
     tags:
       - "v*"
@@ -30,7 +37,7 @@ jobs:
       # is what `githubApi "intisy-ai:ai-java:<version>"` consumers resolve. publishGithub is scoped
       # to :jvm by the root build's onlyIf guard. GITHUB_TOKEN is what the github{} extension reads.
       - name: Build and publish :jvm as a github-gradle package
-        run: ./gradlew :jvm:build :jvm:shadowJar publishGithub -Partifact_version=${{ github.ref_name }}
+        run: ./gradlew :jvm:build :jvm:shadowJar publishGithub -Partifact_version=${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
           GH_TOKEN: ${{ secrets.PAT }}

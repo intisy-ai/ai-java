@@ -1,5 +1,12 @@
 name: Publish to GitHub Packages
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and publish; empty takes the ref the run was started from'
+        required: false
+        type: string
+        default: ''
   push:
     tags:
       - "v*"
@@ -28,7 +35,7 @@ jobs:
       # Maven (see jvm/build.gradle's publishing block). This is separate from build.yml's
       # github-gradle release, which stays in place for now.
       - name: Publish ai-java to GitHub Packages
-        run: ./gradlew publish -Partifact_version=${{ github.ref_name }}
+        run: ./gradlew publish -Partifact_version=${{ inputs.tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
