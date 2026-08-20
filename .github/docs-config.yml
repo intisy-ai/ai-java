@@ -1,0 +1,3 @@
+kind: java-library
+description: Server-side AI library for Java: providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
+maven_group: io.github.intisy

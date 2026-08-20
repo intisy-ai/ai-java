@@ -1,14 +1,13 @@
-name: Update Dependency README
+name: Generate README
 on:
   release:
     types: [published]
 permissions:
   contents: write
 jobs:
-  call-reusable-workflow:
-    uses: intisy/workflows/.github/workflows/readme-dependency.yml@main
+  readme:
+    uses: intisy/workflows/.github/workflows/readme.yml@main
     with:
       repository: ${{ github.repository }}
-      actor: ${{ github.actor }}
     secrets:
       envPAT: ${{ secrets.PAT }}
