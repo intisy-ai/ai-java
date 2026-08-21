@@ -28,12 +28,23 @@ project(":routing").projectDir = file("core-proxy/java/routing")
 include ":teavm"
 project(":teavm").projectDir = file("core-proxy/java/teavm")
 
+// :spi and :js-base - the plugin-to-host contract the routing engine routes against, and the TeaVM
+// implementations of its host-injected services. They live in core-contracts, reached here through
+// core-proxy's own clone of it rather than as a submodule of ai-java, exactly as :ir is reached
+// through core-proxy/core-ir below. :routing declares an `api` dependency on :spi, so :accounts and
+// :jvm see the contract transitively and their own Java source needs no change.
+include ":spi"
+project(":spi").projectDir = file("core-proxy/core-contracts/java/spi")
+
+include ":js-base"
+project(":js-base").projectDir = file("core-proxy/core-contracts/java/js-base")
+
 // :ir - core-ir's canonical IR types + vendor translators (AnthropicTranslator/GeminiTranslator),
 // aliased in the same way as :routing/:teavm above. core-ir is nested as core-proxy's OWN
 // submodule (core-proxy/core-ir, pinned per core-proxy/.gitmodules), not a direct submodule of
-// ai-java. :routing's Provider/RoutingProfile reference core-ir's Translator/IrRequest/
-// IrResponse types, so any build that includes :routing must also include :ir at this exact path
-// for `project(":ir")` to resolve (see core-proxy/java/routing/build.gradle's compileOnly/
+// ai-java. :spi's Provider/RoutingProfile reference core-ir's Translator/IrRequest/
+// IrResponse types, so any build that includes :spi must also include :ir at this exact path
+// for `project(":ir")` to resolve (see core-contracts/java/spi/build.gradle's compileOnly/
 // testImplementation project(":ir")).
 include ":ir"
 project(":ir").projectDir = file("core-proxy/core-ir/java/ir")
