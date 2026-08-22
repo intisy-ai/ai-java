@@ -1,5 +1,6 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.exampleserver.admin.MessagesAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -10,9 +11,9 @@ import io.github.intisy.ai.ir.spi.StreamEncoder;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,7 @@ class MessagesAdminTest {
         holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
 
-        messages = new MessagesAdmin(store, json, holder, msg -> { });
+        messages = new MessagesAdmin(store, json, holder, NoopLogger.INSTANCE);
     }
 
     @AfterEach
@@ -154,7 +155,7 @@ class MessagesAdminTest {
         String previous = System.getProperty("exampleserver.translatorsDir");
         System.setProperty("exampleserver.translatorsDir", emptyTranslatorsDir.toString());
         try {
-            MessagesAdmin noTranslator = new MessagesAdmin(store, json, holder, msg -> { });
+            MessagesAdmin noTranslator = new MessagesAdmin(store, json, holder, NoopLogger.INSTANCE);
             HttpResponse resp = noTranslator.send("echo", "{\"model\":\"x\",\"messages\":[]}");
             assertEquals(503, resp.status);
             assertTrue(resp.body.contains("\"type\":\"error\""), resp.body);
@@ -184,7 +185,7 @@ class MessagesAdminTest {
         String previous = System.getProperty("exampleserver.translatorsDir");
         System.setProperty("exampleserver.translatorsDir", ambiguousTranslatorsDir.toString());
         try {
-            MessagesAdmin ambiguous = new MessagesAdmin(store, json, holder, msg -> { });
+            MessagesAdmin ambiguous = new MessagesAdmin(store, json, holder, NoopLogger.INSTANCE);
             HttpResponse resp = ambiguous.send("echo", "{\"model\":\"x\",\"messages\":[]}");
             assertEquals(503, resp.status);
             assertTrue(resp.body.contains("\"type\":\"error\""), resp.body);

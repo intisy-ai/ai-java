@@ -6,14 +6,14 @@ import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
-import io.github.intisy.ai.shared.routing.HandleIrException;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.io.File;
 import java.util.LinkedHashMap;
@@ -115,46 +115,28 @@ public final class MessagesAdmin {
             return errorResponse(404, "not_found", "unknown provider: " + providerId);
         }
 
-        String model = modelOf(body);
-        HttpRequest req = new HttpRequest();
-        req.method = "POST";
-        req.url = "/v1/messages";
-        req.headers = new LinkedHashMap<>();
-        req.body = body;
-        HandlerCtx ctx = new HandlerCtx(configDir, store, log, model);
-
         IrRequest irRequest = decodeIr(body);
-        if (irRequest != null) {
-            try {
-                IrResponse irResponse = p.handleIr(irRequest, ctx);
-                return wireResponse(translator.encodeResponse(irResponse));
-            } catch (UnsupportedOperationException notIrCapable) {
-                // This provider has no IR path (Provider#handleIr's own default) -- fall through
-                // to the legacy handle() call below, unchanged.
-            } catch (HandleIrException hie) {
-                return responseFromHandleIrException(hie);
-            } catch (Throwable e) {
-                // Unexpected/non-typed throw -- a genuine bug with no structured payload.
-                return errorResponse(502, "api_error", "chat failed: " + e);
-            }
+        if (irRequest == null) {
+            return errorResponse(400, "invalid_request_error",
+                    "body did not decode as the staged translator's wire format");
         }
 
+        HandlerCtx ctx = new HandlerCtx(configDir, store, log, modelOf(body));
         try {
-            return p.handle(req, ctx);
+            return wireResponse(translator.encodeResponse(p.handleIr(irRequest, ctx)));
+        } catch (HandleIrException hie) {
+            return responseFromHandleIrException(hie);
         } catch (Throwable e) {
             // Throwable, not Exception: a provider on the real upstream path can throw a
             // LinkageError/NoClassDefFoundError (e.g. a classloader mismatch), and letting that
-            // escape drops the HTTP connection -- the browser then shows a bare "NetworkError"
-            // with no clue what actually failed. Catching it here turns it into a readable
-            // Anthropic-shaped 502 instead, same as an ordinary provider Exception.
+            // escape drops the HTTP connection, which the browser shows as a bare "NetworkError"
+            // with no clue what actually failed.
             return errorResponse(502, "api_error", "chat failed: " + e);
         }
     }
 
-    // Decodes body through this admin's own translator; null (never throws) on any decode failure
-    // (malformed/not-this-translator's-shaped JSON, or no body at all) so the caller falls back to
-    // the legacy handle() path, the same "decode failure -> legacy path" convention core-proxy's
-    // Router#decodeIr uses.
+    // Decodes body through this admin's own translator; null (never throws) on any decode failure,
+    // whether the body is malformed, shaped for a different translator, or absent.
     private IrRequest decodeIr(String body) {
         if (body == null || body.isEmpty()) return null;
         try {

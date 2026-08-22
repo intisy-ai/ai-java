@@ -2,7 +2,7 @@ package io.github.intisy.ai.exampleserver.discovery;
 
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.auth.contracts.Provider;
 
 import java.io.IOException;
 import java.nio.file.Files;

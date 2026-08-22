@@ -1,12 +1,13 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class QuotaAdminTest {
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
         assertTrue(holder.listProviderIds().contains("ratelimited"), holder.listProviderIds().toString());
 
-        quota = new QuotaAdmin(store, json, holder, msg -> { });
+        quota = new QuotaAdmin(store, json, holder, NoopLogger.INSTANCE);
     }
 
     @AfterEach

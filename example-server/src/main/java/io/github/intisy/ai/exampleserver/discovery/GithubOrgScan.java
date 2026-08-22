@@ -1,6 +1,6 @@
 package io.github.intisy.ai.exampleserver.discovery;
 
-import io.github.intisy.ai.shared.spi.JsonCodec;
+import io.github.intisy.ai.api.seam.JsonCodec;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

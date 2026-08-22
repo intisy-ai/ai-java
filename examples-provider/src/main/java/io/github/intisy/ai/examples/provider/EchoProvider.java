@@ -6,15 +6,19 @@ import io.github.intisy.ai.shared.routing.ConfigField;
 import io.github.intisy.ai.shared.routing.ConfigGroup;
 import io.github.intisy.ai.shared.routing.ConfigSchema;
 import io.github.intisy.ai.shared.routing.ConfigurableProvider;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
 import io.github.intisy.ai.shared.routing.ModelCatalogProvider;
 import io.github.intisy.ai.shared.routing.ModelInfo;
 import io.github.intisy.ai.shared.routing.OAuthProvider;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.auth.contracts.Provider;
 import io.github.intisy.ai.shared.routing.QuotaBar;
 import io.github.intisy.ai.shared.routing.QuotaProvider;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.ir.Block;
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.ir.IrStopReason;
+import io.github.intisy.ai.ir.IrUsage;
+import io.github.intisy.ai.ir.TextBlock;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -54,16 +58,18 @@ public final class EchoProvider implements Provider, ConfigurableProvider, Model
     }
 
     @Override
-    public HttpResponse handle(HttpRequest request, HandlerCtx ctx) {
+    public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
         String servedModel = ctx != null && ctx.model != null && !ctx.model.isEmpty()
                 ? ctx.model
                 : "echo-default";
 
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = anthropicMessageBody(servedModel);
+        IrResponse response = new IrResponse();
+        response.id = "msg_echo_0001";
+        response.model = servedModel;
+        response.content = Collections.<Block>singletonList(
+                new TextBlock(ASSISTANT_TEXT + " (served by " + servedModel + ")"));
+        response.stopReason = IrStopReason.END_TURN;
+        response.usage = new IrUsage(1, 8, null, null);
         return response;
     }
 
@@ -167,48 +173,6 @@ public final class EchoProvider implements Provider, ConfigurableProvider, Model
             else if (c == '"') break;
             else sb.append(c);
         }
-        return sb.toString();
-    }
-
-    // { id, type, role, model, content:[{type,text}], stop_reason, stop_sequence,
-    //   usage:{input_tokens, output_tokens} } -- the non-streaming Anthropic messages shape.
-    private static String anthropicMessageBody(String model) {
-        String text = ASSISTANT_TEXT + " (served by " + model + ")";
-        return "{"
-                + "\"id\":\"msg_echo_0001\","
-                + "\"type\":\"message\","
-                + "\"role\":\"assistant\","
-                + "\"model\":" + quote(model) + ","
-                + "\"content\":[{\"type\":\"text\",\"text\":" + quote(text) + "}],"
-                + "\"stop_reason\":\"end_turn\","
-                + "\"stop_sequence\":null,"
-                + "\"usage\":{\"input_tokens\":1,\"output_tokens\":9}"
-                + "}";
-    }
-
-    private static String quote(String value) {
-        StringBuilder sb = new StringBuilder(value.length() + 2);
-        sb.append('"');
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"': sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default:
-                    if (c < 0x20) {
-                        sb.append("\\u");
-                        String hex = Integer.toHexString(c);
-                        for (int pad = hex.length(); pad < 4; pad++) sb.append('0');
-                        sb.append(hex);
-                    } else {
-                        sb.append(c);
-                    }
-            }
-        }
-        sb.append('"');
         return sb.toString();
     }
 }

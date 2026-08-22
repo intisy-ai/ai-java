@@ -1,5 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
+import io.github.intisy.ai.examplestranslator.EchoTranslator;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 
 import java.util.Arrays;
@@ -31,6 +32,9 @@ public final class DemoProfiles {
         profile.configFile = configFile;
         profile.routingKey = "providerRouting";
         profile.tierSourceProvider = tierSourceProvider;
+        // A provider serves canonical IR only, so the profile's translator is what turns an app-wire
+        // request into IR and the reply back again. Without one the router has nothing to route.
+        profile.translator = new EchoTranslator();
         List<String> tiers = Arrays.asList("opus", "sonnet", "haiku");
         profile.tierOrder = tiers;
         profile.tierFallback = tiers;

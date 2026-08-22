@@ -9,6 +9,8 @@ dependencies {
     // core-ir's IR types + the Translator interface, needed directly since :jvm's own :ir
     // dependency is `implementation` (non-transitive); implementations load from jars at runtime.
     implementation project(":ir")
+    // api's seam implementations, for the NoopLogger the admin tests inject.
+    testImplementation project(":seam")
     // Deliberately NO project(":examples-provider") dependency: the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
     // Default store backend: a real JDBC driver so ServerMain's default `sqlite` store (via

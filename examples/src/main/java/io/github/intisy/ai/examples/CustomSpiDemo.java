@@ -17,7 +17,7 @@ import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.manager.AccountManager;
 import io.github.intisy.ai.shared.model.Account;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.util.Collections;
@@ -114,7 +114,7 @@ public final class CustomSpiDemo {
                 app.env().get("APP_REGION"), account.coolingDownUntil, json.parseCount());
     }
 
-    private static void seedAccount(Store store, io.github.intisy.ai.shared.spi.JsonCodec json) {
+    private static void seedAccount(Store store, io.github.intisy.ai.api.seam.JsonCodec json) {
         Account account = new Account();
         account.id = "acct-1";
         account.email = "acct-1@example.com";
@@ -122,7 +122,7 @@ public final class CustomSpiDemo {
         new AccountStore(store, json).add("demo-provider", account);
     }
 
-    private static Account firstAccount(Store store, io.github.intisy.ai.shared.spi.JsonCodec json) {
+    private static Account firstAccount(Store store, io.github.intisy.ai.api.seam.JsonCodec json) {
         return new AccountStore(store, json).list("demo-provider").get(0);
     }
 }

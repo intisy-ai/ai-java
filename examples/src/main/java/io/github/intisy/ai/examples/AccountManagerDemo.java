@@ -16,8 +16,8 @@ import io.github.intisy.ai.shared.model.Account;
 import io.github.intisy.ai.shared.oauth.OAuthConfig;
 import io.github.intisy.ai.shared.oauth.TokenRefreshError;
 import io.github.intisy.ai.shared.select.Strategy;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.io.IOException;

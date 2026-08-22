@@ -1,5 +1,6 @@
 package io.github.intisy.ai.jvm;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.jvm.backend.clock.SystemClock;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
@@ -11,8 +12,8 @@ import io.github.intisy.ai.shared.logic.RouterOptions;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,7 +78,7 @@ class RouterJvmIntegrationTest {
             resp.body = "served " + ctx.model;
             return resp;
         });
-        return HandlerResolvers.fromRegistry(registry);
+        return HandlerResolvers.fromWireHandlers(registry);
     }
 
     private static RouterOptions optionsOn(FileStore store) {
@@ -87,8 +88,7 @@ class RouterJvmIntegrationTest {
         opts.store = store;
         opts.json = new GsonJsonCodec();
         opts.clock = new SystemClock();
-        opts.log = msg -> {
-        };
+        opts.log = NoopLogger.INSTANCE;
         opts.notify = new JsonlNotifier(store.configFolder());
         opts.listProviders = () -> Arrays.asList("rl", "ok");
         opts.configDir = store.configFolder().toString();

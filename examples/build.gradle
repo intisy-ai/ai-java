@@ -10,6 +10,9 @@ dependencies {
     // real in-memory SQL database. It is a demo/runtime concern of THIS module only -- :jvm's
     // JdbcStore takes any javax.sql.DataSource, so the library itself never depends on H2.
     implementation "com.h2database:h2:2.2.224"
+    // The front-door translator the demo profiles route through. Reused rather than restated here:
+    // a provider serves canonical IR only, so a profile without a translator cannot serve at all.
+    implementation project(":examples-translator")
 
     // NOTE: :examples deliberately does NOT depend on project(":examples-provider"). The provider
     // must be discovered from its JAR on disk via ServiceLoader (see ProviderRegistryDemo), so its

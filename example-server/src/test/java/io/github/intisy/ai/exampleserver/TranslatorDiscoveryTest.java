@@ -1,7 +1,9 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.ir.Block;
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.ir.TextBlock;
 import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -40,11 +43,17 @@ class TranslatorDiscoveryTest {
             Translator translator = registry.translators().get(0);
 
             IrRequest decoded = translator.decodeRequest("{\"model\":\"whatever-the-caller-sent\"}");
-            assertEquals("echo-model", decoded.model, "EchoTranslator always echoes its own fixed model id");
+            assertEquals("whatever-the-caller-sent", decoded.model);
+
+            IrRequest modelless = translator.decodeRequest("{}");
+            assertEquals("echo-model", modelless.model, "falls back to its own id when the wire names no model");
 
             IrResponse response = new IrResponse();
+            response.id = "some-id";
             response.model = "some-other-model";
-            assertEquals("{\"model\":\"echo-model\"}", translator.encodeResponse(response));
+            response.content = Collections.<Block>singletonList(new TextBlock("served text"));
+            assertEquals("{\"id\":\"some-id\",\"model\":\"some-other-model\",\"text\":\"served text\"}",
+                    translator.encodeResponse(response));
         }
     }
 }

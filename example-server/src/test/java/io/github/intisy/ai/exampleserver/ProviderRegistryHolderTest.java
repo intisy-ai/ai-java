@@ -2,7 +2,7 @@ package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.auth.contracts.Provider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

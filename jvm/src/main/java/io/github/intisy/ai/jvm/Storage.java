@@ -3,7 +3,7 @@ package io.github.intisy.ai.jvm;
 import io.github.intisy.ai.jvm.backend.store.FileStore;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
 import io.github.intisy.ai.jvm.backend.store.JdbcStore;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 
 import javax.sql.DataSource;
 import java.nio.file.Path;

@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm.backend.clock;
 
-import io.github.intisy.ai.shared.spi.Clock;
+import io.github.intisy.ai.api.seam.Clock;
 
 /** {@code System.currentTimeMillis()}-backed {@link Clock}: the real JVM implementation of the clock SPI. */
 public class SystemClock implements Clock {

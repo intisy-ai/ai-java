@@ -12,9 +12,9 @@ import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -169,7 +169,7 @@ class AiJavaTest {
             resp.body = "served " + ctx.model;
             return resp;
         });
-        return HandlerResolvers.fromRegistry(registry);
+        return HandlerResolvers.fromWireHandlers(registry);
     }
 
     private static void seedFallbackModelMap(Store store, GsonJsonCodec json) {

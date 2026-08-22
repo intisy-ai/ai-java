@@ -2,9 +2,9 @@ package io.github.intisy.ai.examples.provider;
 
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
-import io.github.intisy.ai.shared.routing.HandleIrException;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
 
 import java.util.Collections;
 
@@ -18,7 +18,7 @@ import java.util.Collections;
  *
  * <p>Packaged in the SAME jar as {@link EchoProvider}/{@link AlwaysRateLimitedProvider}/{@link
  * CtxCapturingProvider}/{@link ThrowingProvider} (all listed in
- * {@code META-INF/services/io.github.intisy.ai.shared.routing.Provider}).
+ * {@code META-INF/services/io.github.intisy.ai.auth.contracts.Provider}).
  */
 public final class HandleIrRateLimitedProvider implements Provider {
 

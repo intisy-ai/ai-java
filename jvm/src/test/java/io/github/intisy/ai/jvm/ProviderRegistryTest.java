@@ -4,12 +4,12 @@ import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -165,11 +165,6 @@ class ProviderRegistryTest {
             IrResponse response = provider.handleIr(request, ctx);
             assertEquals("m-jaronlyir", response.model);
             assertEquals("jaronlyir-ir-ok", response.id);
-
-            // The legacy handle() path still works unchanged on the SAME jar-loaded instance.
-            HttpResponse legacy = provider.handle(post("/v1/messages", "{}"), ctx);
-            assertEquals(200, legacy.status);
-            assertEquals("jaronlyir-legacy:m-jaronlyir", legacy.body);
         }
     }
 
@@ -297,16 +292,16 @@ class ProviderRegistryTest {
 
     private static final String JAR_ONLY_PROVIDER_SOURCE =
             "package " + JAR_ONLY_PACKAGE + ";\n"
-            + "import io.github.intisy.ai.shared.routing.HandlerCtx;\n"
-            + "import io.github.intisy.ai.shared.routing.Provider;\n"
-            + "import io.github.intisy.ai.shared.spi.http.HttpRequest;\n"
-            + "import io.github.intisy.ai.shared.spi.http.HttpResponse;\n"
+            + "import io.github.intisy.ai.ir.IrRequest;\n"
+            + "import io.github.intisy.ai.ir.IrResponse;\n"
+            + "import io.github.intisy.ai.ir.spi.HandlerCtx;\n"
+            + "import io.github.intisy.ai.auth.contracts.Provider;\n"
             + "public final class JarOnlyProvider implements Provider {\n"
             + "    @Override public String id() { return \"jaronly\"; }\n"
-            + "    @Override public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {\n"
+            + "    @Override public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {\n"
             // JarOnlyHelper is referenced ONLY here, never during construction/ServiceLoader
             // instantiation, so the JVM resolves (and thus needs to load) it lazily, the first
-            // time handle(...) actually runs: exactly the classloader-lifetime scenario this
+            // time handleIr(...) actually runs: exactly the classloader-lifetime scenario this
             // test guards against.
             + "        return JarOnlyHelper.respond(ctx.model);\n"
             + "    }\n"
@@ -314,15 +309,13 @@ class ProviderRegistryTest {
 
     private static final String JAR_ONLY_HELPER_SOURCE =
             "package " + JAR_ONLY_PACKAGE + ";\n"
-            + "import io.github.intisy.ai.shared.spi.http.HttpResponse;\n"
-            + "import java.util.HashMap;\n"
+            + "import io.github.intisy.ai.ir.IrResponse;\n"
             + "final class JarOnlyHelper {\n"
             + "    private JarOnlyHelper() {}\n"
-            + "    static HttpResponse respond(String model) {\n"
-            + "        HttpResponse resp = new HttpResponse();\n"
-            + "        resp.status = 200;\n"
-            + "        resp.headers = new HashMap<>();\n"
-            + "        resp.body = \"jaronly-ok:\" + model;\n"
+            + "    static IrResponse respond(String model) {\n"
+            + "        IrResponse resp = new IrResponse();\n"
+            + "        resp.id = \"jaronly-ok:\" + model;\n"
+            + "        resp.model = model;\n"
             + "        return resp;\n"
             + "    }\n"
             + "}\n";
@@ -410,20 +403,10 @@ class ProviderRegistryTest {
             "package " + JAR_ONLY_IR_PACKAGE + ";\n"
             + "import io.github.intisy.ai.ir.IrRequest;\n"
             + "import io.github.intisy.ai.ir.IrResponse;\n"
-            + "import io.github.intisy.ai.shared.routing.HandlerCtx;\n"
-            + "import io.github.intisy.ai.shared.routing.Provider;\n"
-            + "import io.github.intisy.ai.shared.spi.http.HttpRequest;\n"
-            + "import io.github.intisy.ai.shared.spi.http.HttpResponse;\n"
-            + "import java.util.HashMap;\n"
+            + "import io.github.intisy.ai.ir.spi.HandlerCtx;\n"
+            + "import io.github.intisy.ai.auth.contracts.Provider;\n"
             + "public final class JarOnlyIrProvider implements Provider {\n"
             + "    @Override public String id() { return \"jaronlyir\"; }\n"
-            + "    @Override public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {\n"
-            + "        HttpResponse resp = new HttpResponse();\n"
-            + "        resp.status = 200;\n"
-            + "        resp.headers = new HashMap<>();\n"
-            + "        resp.body = \"jaronlyir-legacy:\" + ctx.model;\n"
-            + "        return resp;\n"
-            + "    }\n"
             // The whole point: IrRequest/IrResponse are referenced ONLY here, never bundled into
             // this jar (mirrors a real thin provider jar's compileOnly project(":ir")) -- resolving
             // them at runtime depends entirely on the host classloader (this module's own) already
@@ -504,11 +487,10 @@ class ProviderRegistryTest {
         }
 
         @Override
-        public HttpResponse handle(HttpRequest req, HandlerCtx ctx) {
-            HttpResponse resp = new HttpResponse();
-            resp.status = 200;
-            resp.headers = new HashMap<>();
-            resp.body = "stub-ok:" + ctx.model;
+        public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
+            IrResponse resp = new IrResponse();
+            resp.id = "stub-ok:" + ctx.model;
+            resp.model = ctx.model;
             return resp;
         }
     }

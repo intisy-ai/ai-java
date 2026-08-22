@@ -20,7 +20,7 @@ import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.jvm.backend.Backend;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.nio.file.Path;

@@ -2,9 +2,9 @@ package io.github.intisy.ai.examples.provider;
 
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
-import io.github.intisy.ai.shared.routing.HandleIrException;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,7 +18,7 @@ import java.util.Map;
  *
  * <p>Packaged in the SAME jar as {@link EchoProvider}/{@link AlwaysRateLimitedProvider}/{@link
  * CtxCapturingProvider}/{@link ThrowingProvider}/{@link HandleIrRateLimitedProvider} (all listed
- * in {@code META-INF/services/io.github.intisy.ai.shared.routing.Provider}).
+ * in {@code META-INF/services/io.github.intisy.ai.auth.contracts.Provider}).
  */
 public final class HandleIrPresetRetryHeaderProvider implements Provider {
 

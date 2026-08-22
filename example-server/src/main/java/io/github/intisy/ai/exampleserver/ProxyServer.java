@@ -3,8 +3,8 @@ package io.github.intisy.ai.exampleserver;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.github.intisy.ai.jvm.AiJava;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

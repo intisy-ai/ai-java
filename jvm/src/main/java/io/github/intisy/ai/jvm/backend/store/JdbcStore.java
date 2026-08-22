@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm.backend.store;
 
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 
 import javax.sql.DataSource;
 import java.sql.Connection;

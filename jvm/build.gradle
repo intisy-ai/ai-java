@@ -7,6 +7,9 @@ dependencies {
     // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
     api project(":routing")
     api project(":accounts")
+    // The provider vocabulary ProviderRegistry discovers implementations of. api, not
+    // implementation: it appears in this module's own public surface.
+    api project(":auth-contracts")
     // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
@@ -22,6 +25,8 @@ dependencies {
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).
+    // api's seam implementations, for the NoopLogger the router tests inject.
+    testImplementation project(":seam")
     testImplementation "com.h2database:h2:2.2.224"
     // Test-only: proves JdbcStore's SQLite dialect handling (no FOR UPDATE support) against a
     // real SQLite file DataSource, same rationale as the H2 dependency above.

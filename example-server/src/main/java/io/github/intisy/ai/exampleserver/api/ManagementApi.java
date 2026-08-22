@@ -17,8 +17,8 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxySource;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
