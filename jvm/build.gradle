@@ -10,6 +10,9 @@ dependencies {
     // The provider vocabulary ProviderRegistry discovers implementations of. api, not
     // implementation: it appears in this module's own public surface.
     api project(":auth-contracts")
+    // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
+    // them and stay thin, rather than every jar embedding its own copy.
+    api project(":seam")
     // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader

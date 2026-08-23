@@ -121,7 +121,7 @@ class ProviderOrgInstallServeE2ETest {
 
         Response afterList = get("/api/providers");
         assertEquals(200, afterList.status);
-        assertTrue(afterList.body.contains("\"claude\""), afterList.body);
+        assertTrue(afterList.body.contains("\"claude-code-auth\""), afterList.body);
 
         // /api/providers/available lists every FakeOrgProviderSource entry regardless of install
         // state, so a plain "contains claude" check is tautological -- assert the entry's OWN
@@ -148,7 +148,7 @@ class ProviderOrgInstallServeE2ETest {
         // that body -- see Provider#handleIr's own contract), and this test will need updating to
         // match.
         String body = "{\"model\":\"" + CLAUDE_MODEL + "\",\"messages\":[]}";
-        Response messages = post("/api/providers/claude/messages", body);
+        Response messages = post("/api/providers/claude-code-auth/messages", body);
         assertEquals(400, messages.status, messages.body);
         assertEquals("1", messages.headers.get("x-hub-chat-error"), messages.body);
         assertTrue(messages.body.contains("invalid_request_error"), messages.body);
@@ -201,7 +201,7 @@ class ProviderOrgInstallServeE2ETest {
         Response install = post("/api/providers/install", "{\"name\":\"claude\"}");
         assertEquals(200, install.status, install.body);
 
-        Response add = post("/api/providers/claude/accounts",
+        Response add = post("/api/providers/claude-code-auth/accounts",
                 "{\"refresh\":\"raw-refresh-xyz\",\"email\":\"e2e@x.com\"}");
         assertEquals(200, add.status, add.body);
         assertFalse(add.body.contains("raw-refresh-xyz"), "the admin view must never echo the raw refresh token");
@@ -214,7 +214,7 @@ class ProviderOrgInstallServeE2ETest {
         assertTrue(Files.exists(accountsFile), "accounts.json must be written under the shared configDir");
         String raw = new String(Files.readAllBytes(accountsFile), StandardCharsets.UTF_8);
 
-        Map<String, Object> account = accountFor(raw, "claude");
+        Map<String, Object> account = accountFor(raw, "claude-code-auth");
         assertEquals("raw-refresh-xyz", account.get("refresh"), "refresh must be stored RAW, not packed");
         assertEquals(Boolean.TRUE, account.get("enabled"));
     }
