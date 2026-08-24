@@ -4,11 +4,11 @@ Archives containing JAR files are available as [releases](https://github.com/int
 
 ## What is ai-java?
 
-Server-side AI library for Java — providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
+Server-side AI library for Java: providers, accounts/quota, and a routing proxy, ported from the intisy TypeScript AI stack.
 
 ## Usage in private projects
 
- * Maven (inside the  file)
+ * Maven (inside the `pom.xml` file)
 ```xml
   <repository>
       <id>github</id>
@@ -18,11 +18,11 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
   <dependency>
       <groupId>io.github.intisy</groupId>
       <artifactId>ai-java</artifactId>
-      <version>1.0.9</version>
+      <version>1.1.0</version>
   </dependency>
 ```
 
- * Maven (inside the  file)
+ * Maven (inside the `settings.xml` file)
 ```xml
   <servers>
       <server>
@@ -33,7 +33,7 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
   </servers>
 ```
 
- * Gradle (inside the  or  file)
+ * Gradle (inside the `build.gradle.kts` or `build.gradle` file)
 ```groovy
   repositories {
       maven {
@@ -45,22 +45,21 @@ Server-side AI library for Java — providers, accounts/quota, and a routing pro
       }
   }
   dependencies {
-      implementation 'io.github.intisy:ai-java:1.0.9'
+      implementation 'io.github.intisy:ai-java:1.1.0'
   }
 ```
 
 ## Usage in public projects
 
- * Gradle (inside the  or  file)
+ * Gradle (inside the `build.gradle.kts` or `build.gradle` file)
 ```groovy
   plugins {
       id "io.github.intisy.github-gradle" version "1.3.7"
   }
   dependencies {
-      githubImplementation "intisy:ai-java:1.0.9"
+      githubImplementation "intisy-ai:ai-java:1.1.0"
   }
 ```
-
 
 Once you have it installed you can use it like so:
 
