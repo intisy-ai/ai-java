@@ -5,6 +5,9 @@ import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.ir.spi.StreamDecoder;
+import io.github.intisy.ai.ir.spi.StreamEncoder;
+import io.github.intisy.ai.ir.spi.Translator;
 import io.github.intisy.ai.auth.contracts.Provider;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 import io.github.intisy.ai.api.seam.Store;
@@ -215,6 +218,7 @@ class ProviderRegistryTest {
 
     private static RoutingProfile profileFor(String tierSourceProvider) {
         RoutingProfile p = new RoutingProfile();
+        p.translator = new IdEchoTranslator();
         p.configFile = CONFIG_FILE;
         p.routingKey = "providerRouting";
         p.tierSourceProvider = tierSourceProvider;
@@ -476,6 +480,49 @@ class ProviderRegistryTest {
             return new File(cs.getLocation().toURI()).getAbsolutePath();
         } catch (URISyntaxException e) {
             throw new IOException(e);
+        }
+    }
+
+    /**
+     * Test-only {@link Translator}, which the routed tests need because {@code Router} reaches
+     * {@code handleIr} only for a profile that decodes the inbound body into IR; a profile without
+     * one stays on the app-wire path, which a {@code handleIr}-only provider does not serve.
+     *
+     * @implNote {@code decodeRequest} leaves the model unset so the tier falls back to the seeded
+     * default, and {@code encodeResponse} is the identity on the response id, which is the marker
+     * each fixture provider writes and each routed test asserts on.
+     */
+    private static final class IdEchoTranslator implements Translator {
+        @Override
+        public IrRequest decodeRequest(String wireJson) {
+            return new IrRequest();
+        }
+
+        @Override
+        public String encodeRequest(IrRequest request) {
+            return "{}";
+        }
+
+        @Override
+        public IrResponse decodeResponse(String wireJson) {
+            IrResponse response = new IrResponse();
+            response.id = wireJson;
+            return response;
+        }
+
+        @Override
+        public String encodeResponse(IrResponse response) {
+            return response == null ? "" : response.id;
+        }
+
+        @Override
+        public StreamDecoder newStreamDecoder() {
+            throw new UnsupportedOperationException("streaming is covered by the translators' own tests");
+        }
+
+        @Override
+        public StreamEncoder newStreamEncoder() {
+            throw new UnsupportedOperationException("streaming is covered by the translators' own tests");
         }
     }
 
