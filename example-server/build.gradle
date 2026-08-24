@@ -13,6 +13,12 @@ dependencies {
     githubImplementation "intisy-ai:api:1.0.1:contract"
     // api's seam implementations, for the NoopLogger the admin tests inject.
     githubTestImplementation "intisy-ai:api:1.0.1:seam"
+    // A provider jar declares its first-party deps compileOnly so it stays thin, which makes
+    // supplying them the HOST's job (the same reason :ir is declared above). The org provider
+    // jars the e2e test stages name a vendor translator directly, and a ServiceLoader entry on
+    // disk cannot satisfy that: the class has to be on the classloader the jar loads under.
+    githubTestImplementation "intisy-ai:anthropic-translator:1.0.2:anthropic"
+    githubTestImplementation "intisy-ai:gemini-translator:1.0.2:gemini"
     // Deliberately NO project(":examples-provider") dependency: the provider is discovered from
     // its jar on disk via ServiceLoader; putting it on the classpath would mask jar loading.
     // Default store backend: a real JDBC driver so ServerMain's default `sqlite` store (via
