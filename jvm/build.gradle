@@ -5,14 +5,20 @@ dependencies {
     // build by the root settings.gradle (:routing/:accounts).
     // api (not implementation): AiJava's own public API exposes these types directly
     // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
-    api project(":routing")
-    api project(":accounts")
+    githubApi "intisy-ai:core-proxy:1.0.0:routing"
+    // The routing vocabulary :routing exports (RoutingProfile, HandlerResolver), named here because
+    // a release-asset jar carries no transitive metadata.
+    githubApi "intisy-ai:core-proxy:1.0.0:proxy-contracts"
+    githubApi "intisy-ai:core-auth:1.0.0:accounts"
     // The provider vocabulary ProviderRegistry discovers implementations of. api, not
     // implementation: it appears in this module's own public surface.
-    api project(":auth-contracts")
+    githubApi "intisy-ai:core-auth:1.0.0:auth-contracts"
     // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
     // them and stay thin, rather than every jar embedding its own copy.
-    api project(":seam")
+    githubApi "intisy-ai:api:1.0.1:seam"
+    // The seam INTERFACES those implement, which a release-asset jar does not export transitively.
+    // api for the same reason as the rest: AiJava's own signatures name them.
+    githubApi "intisy-ai:api:1.0.1:contract"
     // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
@@ -23,13 +29,13 @@ dependencies {
     // deliberate opt-in -- a consumer that never touches translators shouldn't inherit :ir
     // transitively just for using ProviderRegistry/handlers. Consumers that DO use
     // TranslatorRegistry declare their own project(":ir"), as example-server does.
-    implementation project(":ir")
+    githubImplementation "intisy-ai:core-ir:1.0.2:ir"
     api "com.google.code.gson:gson:2.10.1"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).
     // api's seam implementations, for the NoopLogger the router tests inject.
-    testImplementation project(":seam")
+    githubTestImplementation "intisy-ai:api:1.0.1:seam"
     testImplementation "com.h2database:h2:2.2.224"
     // Test-only: proves JdbcStore's SQLite dialect handling (no FOR UPDATE support) against a
     // real SQLite file DataSource, same rationale as the H2 dependency above.
