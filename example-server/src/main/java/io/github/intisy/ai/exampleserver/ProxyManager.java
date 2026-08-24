@@ -4,9 +4,9 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -99,7 +99,7 @@ public final class ProxyManager {
             return status(id, defs, null);
         } catch (RuntimeException e) {
             lastError.put(id, e.getMessage() != null ? e.getMessage() : "start failed");
-            if (log != null) log.log("proxy start failed for " + id + ": " + e.getMessage());
+            if (log != null) log.error("proxy start failed for " + id + ": " + e.getMessage());
             return status(id, defs, lastError.get(id));
         }
     }

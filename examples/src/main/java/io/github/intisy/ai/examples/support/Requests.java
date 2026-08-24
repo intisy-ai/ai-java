@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpRequest;
 
 import java.util.HashMap;
 

@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm.backend.store;
 
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.util.ArrayList;
 import java.util.List;

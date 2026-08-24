@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.Clock;
+import io.github.intisy.ai.api.seam.Clock;
 
 /**
  * A deterministic {@link Clock} whose "now" is fixed but can be moved forward explicitly. Swapping

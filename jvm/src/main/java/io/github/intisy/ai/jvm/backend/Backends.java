@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm.backend;
 
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 
 /**
  * Factory helpers for {@link Backend}. {@link #defaults(Store)} is the "just give me the JVM

@@ -29,13 +29,16 @@ subprojects {
     java {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
+
+        // 17 is which JDK COMPILES; options.release = 8 below is which JVM RUNS the output. The
+        // floor is 17 because TeaVM 0.15.0's artifacts publish minimum-JVM metadata above 8.
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
     }
 
-    // Validate the MAIN compilation against the Java 8 API surface (not just source syntax),
-    // so a Java 9+ API leak (e.g. java.lang.System.Logger) fails the build instead of only
-    // failing at runtime on a Java 8 JRE. compileTestJava is intentionally excluded: tests
-    // legitimately use newer JDK APIs (e.g. Files.readString, List.of).
-    tasks.matching { it.name == "compileJava" }.configureEach {
+    // All Java source, main and test alike, must stay within the JDK 1.8 API surface; javac enforces it.
+    tasks.matching { it.name == "compileJava" || it.name == "compileTestJava" }.configureEach {
         options.release = 8
     }
 

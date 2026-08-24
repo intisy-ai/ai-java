@@ -17,8 +17,8 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.exampleserver.discovery.ProxyRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProxySource;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -839,8 +839,8 @@ public final class ManagementApi implements HttpHandler {
 
     // Console chat: a DIRECT provider call (MessagesAdmin.send), never through a router. The
     // provider's HttpResponse is written back VERBATIM (status/headers/body) -- unlike every other
-    // route here it is NOT a {...} admin-result wrapped via respondJson, because an
-    // Anthropic-messages response (or the provider's own error shape/headers) already IS the wire
+    // route here it is NOT a {...} admin-result wrapped via respondJson, because a
+    // translator-encoded response (or the provider's own error shape/headers) already IS the wire
     // body.
     private void handleMessages(HttpExchange exchange, String providerId) throws IOException {
         if (messages == null) {

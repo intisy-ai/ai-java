@@ -1,7 +1,7 @@
 package io.github.intisy.ai.exampleserver;
 
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.util.ArrayList;
 import java.util.Arrays;

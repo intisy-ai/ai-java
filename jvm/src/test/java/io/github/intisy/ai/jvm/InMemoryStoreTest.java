@@ -3,6 +3,7 @@ package io.github.intisy.ai.jvm;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -83,7 +84,7 @@ class InMemoryStoreTest {
 
         List<String> keys = store.listKeys("acc");
 
-        assertEquals(List.of("accounts.json"), keys);
+        assertEquals(Arrays.asList("accounts.json"), keys);
     }
 
     @Test

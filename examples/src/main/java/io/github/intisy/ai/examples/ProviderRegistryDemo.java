@@ -7,8 +7,8 @@ import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.io.IOException;
 import java.nio.file.Path;

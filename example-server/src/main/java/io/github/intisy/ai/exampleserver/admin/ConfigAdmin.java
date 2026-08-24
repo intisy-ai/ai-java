@@ -6,11 +6,11 @@ import io.github.intisy.ai.shared.routing.ConfigField;
 import io.github.intisy.ai.shared.routing.ConfigGroup;
 import io.github.intisy.ai.shared.routing.ConfigSchema;
 import io.github.intisy.ai.shared.routing.ConfigurableProvider;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

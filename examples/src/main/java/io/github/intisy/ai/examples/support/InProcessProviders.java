@@ -3,7 +3,7 @@ package io.github.intisy.ai.examples.support;
 import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -38,7 +38,7 @@ public final class InProcessProviders {
             response.body = "served " + ctx.model;
             return response;
         });
-        return HandlerResolvers.fromRegistry(registry);
+        return HandlerResolvers.fromWireHandlers(registry);
     }
 
     public static List<String> ids() {

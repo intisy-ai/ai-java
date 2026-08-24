@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to promote, build and publish; empty takes the ref the run was started from'
+        required: false
+        type: string
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  merge:
+    uses: intisy/workflows/.github/workflows/merge.yml@main
+    with:
+      source: experimental
+      target: main
+      sync_back: true
+      generated_paths: 'README.md'
+
+  test:
+    needs: merge
+    uses: intisy/workflows/.github/workflows/test.yml@main
+    with:
+      ref: ${{ inputs.tag }}
+      gradle_test: build
+    secrets:
+      envPAT: ${{ secrets.PAT }}
+
+  publish:
+    needs: test
+    uses: intisy/workflows/.github/workflows/publish.yml@main
+    with:
+      tag: ${{ inputs.tag }}
+      publish_task: ':jvm:build :jvm:shadowJar publishGithub'
+    secrets:
+      envPAT: ${{ secrets.PAT }}

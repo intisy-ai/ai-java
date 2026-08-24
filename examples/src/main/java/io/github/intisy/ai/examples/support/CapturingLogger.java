@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.Logger;
+import io.github.intisy.ai.api.seam.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,8 +22,28 @@ public final class CapturingLogger implements Logger {
     }
 
     @Override
-    public void log(String message) {
+    public void info(String message) {
         lines.add(prefix + message);
+    }
+
+    @Override
+    public void warn(String message) {
+        lines.add(prefix + message);
+    }
+
+    @Override
+    public void debug(String message) {
+        lines.add(prefix + message);
+    }
+
+    @Override
+    public void error(String message) {
+        lines.add(prefix + message);
+    }
+
+    @Override
+    public void error(String message, Object cause) {
+        lines.add(prefix + message + " (" + cause + ")");
     }
 
     /** The captured lines (already prefixed), in order. */

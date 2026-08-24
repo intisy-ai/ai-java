@@ -1,11 +1,13 @@
 package io.github.intisy.ai.examples.provider;
 
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.ir.spi.HandleIrException;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * An always-rate-limited example {@link Provider}: every request gets a {@code 429} carrying the
@@ -16,7 +18,7 @@ import java.util.HashMap;
  * native-shaped 429 instead.
  *
  * <p>Packaged in the SAME jar as {@link EchoProvider} (both listed in
- * {@code META-INF/services/io.github.intisy.ai.shared.routing.Provider}) so the example proves the
+ * {@code META-INF/services/io.github.intisy.ai.auth.contracts.Provider}) so the example proves the
  * registry discovers multiple providers from one artifact.
  */
 public final class AlwaysRateLimitedProvider implements Provider {
@@ -34,18 +36,15 @@ public final class AlwaysRateLimitedProvider implements Provider {
     }
 
     @Override
-    public HttpResponse handle(HttpRequest request, HandlerCtx ctx) {
-        HttpResponse response = new HttpResponse();
-        response.status = 429;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.headers.put("x-hub-rate-limited", "1");
-        response.headers.put("x-hub-retry-after-ms", Long.toString(RETRY_AFTER_MS));
-        response.headers.put("retry-after", Long.toString(RETRY_AFTER_MS / 1000L));
-        response.body = "{"
+    public IrResponse handleIr(IrRequest request, HandlerCtx ctx) throws Exception {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("content-type", "application/json");
+        headers.put("x-hub-rate-limited", "1");
+        headers.put("x-hub-retry-after-ms", Long.toString(RETRY_AFTER_MS));
+        headers.put("retry-after", Long.toString(RETRY_AFTER_MS / 1000L));
+        throw new HandleIrException(429, headers, "{"
                 + "\"type\":\"error\","
                 + "\"error\":{\"type\":\"rate_limit_error\",\"message\":\"this example provider is always rate limited\"}"
-                + "}";
-        return response;
+                + "}", RETRY_AFTER_MS);
     }
 }

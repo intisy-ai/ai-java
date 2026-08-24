@@ -103,7 +103,7 @@ class ParityVectorsTest {
                     headers.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
                 }
             }
-            io.github.intisy.ai.shared.spi.http.HttpResponse resp = new io.github.intisy.ai.shared.spi.http.HttpResponse();
+            io.github.intisy.ai.api.seam.HttpResponse resp = new io.github.intisy.ai.api.seam.HttpResponse();
             resp.status = 200;
             resp.headers = headers;
             resp.body = "";

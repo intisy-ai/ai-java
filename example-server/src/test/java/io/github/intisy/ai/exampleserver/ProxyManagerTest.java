@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -165,7 +167,7 @@ class ProxyManagerTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> s = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> s = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : s) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;
@@ -199,7 +201,13 @@ class ProxyManagerTest {
         try (InputStream in = ProxyManagerTest.class.getClassLoader().getResourceAsStream(path)) {
             if (in == null) throw new IllegalStateException("missing compiled class on test classpath: " + path);
             jar.putNextEntry(new JarEntry(path));
-            jar.write(in.readAllBytes());
+            ByteArrayOutputStream classBytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                classBytes.write(buffer, 0, read);
+            }
+            jar.write(classBytes.toByteArray());
             jar.closeEntry();
         }
     }

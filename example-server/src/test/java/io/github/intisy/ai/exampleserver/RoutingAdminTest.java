@@ -1,5 +1,6 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.exampleserver.admin.RoutingAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
@@ -7,8 +8,8 @@ import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
 import io.github.intisy.ai.shared.logic.ModelMap;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -54,7 +56,7 @@ class RoutingAdminTest {
         assertTrue(holder.listProviderIds().contains("ratelimited"), holder.listProviderIds().toString());
 
         profile = ServerProfile.echoTiers(CONFIG_FILE);
-        routing = new RoutingAdmin(store, json, holder, msg -> { });
+        routing = new RoutingAdmin(store, json, holder, NoopLogger.INSTANCE);
     }
 
     @AfterEach
@@ -67,7 +69,7 @@ class RoutingAdminTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;
@@ -166,7 +168,7 @@ class RoutingAdminTest {
         // surface as a pre-configurable slot.
         profile.tierOrder = Arrays.asList("opus", "sonnet", "haiku", "fable");
 
-        RoutingAdmin unionRouting = new RoutingAdmin(unionStore, unionJson, holder, msg -> { });
+        RoutingAdmin unionRouting = new RoutingAdmin(unionStore, unionJson, holder, NoopLogger.INSTANCE);
         Map<String, Object> view = unionRouting.modelMapView(profile);
 
         assertEquals(Arrays.asList("opus", "sonnet", "haiku", "fable", "extra"), view.get("tiers"));

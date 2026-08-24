@@ -1,0 +1,15 @@
+// A thin, standalone Translator jar for the :examples showcase. Mirrors examples-provider's
+// shape one level up for the translator SPI: the Translator SPI is supplied by the HOST at
+// runtime (:jvm's TranslatorRegistry loads this jar on a URLClassLoader parented to its own,
+// which already has :ir's Translator/IrRequest/IrResponse/StreamDecoder/StreamEncoder loaded),
+// so :ir is compileOnly. `./gradlew :examples-translator:jar` must therefore NOT bundle any
+// io/github/intisy/ai/ir/** class inside the jar -- it stays a pure one-Translator +
+// META-INF/services artifact discovered purely via ServiceLoader.
+dependencies {
+    compileOnly project(":ir")
+}
+
+// Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}

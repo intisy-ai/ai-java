@@ -1,13 +1,14 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.exampleserver.admin.ConfigAdmin;
 import io.github.intisy.ai.exampleserver.admin.QuotaAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,7 +66,7 @@ class AdminStoreThreadingTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;
@@ -77,7 +79,7 @@ class AdminStoreThreadingTest {
     void quotaAdminThreadsServerStoreIntoProviderHandlerCtx() {
         assertNull(store.get("ctx-capture-marker"), "marker must not be pre-seeded");
 
-        new QuotaAdmin(store, json, holder, msg -> { }).refresh("ctx-capture");
+        new QuotaAdmin(store, json, holder, NoopLogger.INSTANCE).refresh("ctx-capture");
 
         assertEquals("seen", store.get("ctx-capture-marker"),
                 "QuotaAdmin must pass the server's injected Store into HandlerCtx.store, not just configDir");
@@ -87,7 +89,7 @@ class AdminStoreThreadingTest {
     void configAdminThreadsServerStoreIntoProviderHandlerCtx() {
         assertNull(store.get("ctx-capture-marker"), "marker must not be pre-seeded");
 
-        new ConfigAdmin(store, json, holder, msg -> { }).putConfig("ctx-capture", Collections.emptyMap());
+        new ConfigAdmin(store, json, holder, NoopLogger.INSTANCE).putConfig("ctx-capture", Collections.emptyMap());
 
         assertEquals("seen", store.get("ctx-capture-marker"),
                 "ConfigAdmin must pass the server's injected Store into HandlerCtx.store, not just configDir");

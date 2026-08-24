@@ -7,6 +7,12 @@
 // purely via ServiceLoader.
 dependencies {
     compileOnly project(":routing")
+    // The Provider vocabulary these examples implement. compileOnly, like :routing above: the
+    // host already has it loaded, so the shipped jar must not carry a copy.
+    compileOnly project(":auth-contracts")
+    // HandleIrRateLimitedProvider's handleIr override references IrRequest/IrResponse
+    // (defined in :ir, not re-exported by :routing's own compileOnly :ir dependency).
+    compileOnly project(":ir")
 }
 
 // Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.

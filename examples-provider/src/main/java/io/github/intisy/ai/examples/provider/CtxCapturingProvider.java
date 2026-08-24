@@ -3,14 +3,16 @@ package io.github.intisy.ai.examples.provider;
 import io.github.intisy.ai.shared.routing.AccountQuota;
 import io.github.intisy.ai.shared.routing.ConfigSchema;
 import io.github.intisy.ai.shared.routing.ConfigurableProvider;
-import io.github.intisy.ai.shared.routing.HandlerCtx;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.ir.spi.HandlerCtx;
+import io.github.intisy.ai.auth.contracts.Provider;
 import io.github.intisy.ai.shared.routing.QuotaProvider;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.ir.Block;
+import io.github.intisy.ai.ir.IrRequest;
+import io.github.intisy.ai.ir.IrResponse;
+import io.github.intisy.ai.ir.IrStopReason;
+import io.github.intisy.ai.ir.TextBlock;
 
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +26,7 @@ import java.util.Map;
  * any classloader-identity concerns (the marker travels through the store's own data, not object
  * identity across the jar's {@link java.net.URLClassLoader}). Packaged in the SAME jar as
  * {@link EchoProvider}/{@link AlwaysRateLimitedProvider} (all three listed in
- * {@code META-INF/services/io.github.intisy.ai.shared.routing.Provider}).
+ * {@code META-INF/services/io.github.intisy.ai.auth.contracts.Provider}).
  */
 public final class CtxCapturingProvider implements Provider, QuotaProvider, ConfigurableProvider {
 
@@ -43,15 +45,15 @@ public final class CtxCapturingProvider implements Provider, QuotaProvider, Conf
     }
 
     @Override
-    public HttpResponse handle(HttpRequest request, HandlerCtx ctx) {
+    public IrResponse handleIr(IrRequest request, HandlerCtx ctx) {
         if (ctx != null && ctx.store != null) {
             ctx.store.put(MARKER_KEY, MARKER_VALUE);
         }
-        HttpResponse response = new HttpResponse();
-        response.status = 200;
-        response.headers = new HashMap<>();
-        response.headers.put("content-type", "application/json");
-        response.body = "{}";
+        IrResponse response = new IrResponse();
+        response.id = "msg_ctx_capture";
+        response.model = ctx != null ? ctx.model : null;
+        response.content = Collections.<Block>singletonList(new TextBlock(""));
+        response.stopReason = IrStopReason.END_TURN;
         return response;
     }
 

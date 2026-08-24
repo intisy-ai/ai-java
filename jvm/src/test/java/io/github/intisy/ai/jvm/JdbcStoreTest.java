@@ -8,6 +8,7 @@ import org.sqlite.SQLiteDataSource;
 
 import javax.sql.DataSource;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -113,7 +114,7 @@ class JdbcStoreTest {
 
         List<String> keys = store.listKeys("acc");
 
-        assertEquals(List.of("accounts.json"), keys);
+        assertEquals(Arrays.asList("accounts.json"), keys);
     }
 
     @Test

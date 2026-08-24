@@ -1,6 +1,6 @@
 package io.github.intisy.ai.exampleserver;
 
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;

@@ -2,7 +2,8 @@ package io.github.intisy.ai.jvm.provider;
 
 import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
-import io.github.intisy.ai.shared.routing.Provider;
+import io.github.intisy.ai.auth.contracts.Provider;
+import io.github.intisy.ai.ir.spi.IrHandler;
 
 import java.io.Closeable;
 import java.io.File;
@@ -25,7 +26,7 @@ import java.util.stream.Collectors;
  * {@code Provider} implementation sees the exact same {@code Provider}/{@code ProxyHandler}/etc.
  * classes as the host, avoiding a classloader-identity mismatch), and discovers implementations
  * via {@code ServiceLoader.load(Provider.class, classLoader)}. A provider jar registers itself
- * the usual JVM way: {@code META-INF/services/io.github.intisy.ai.shared.routing.Provider}
+ * the usual JVM way: {@code META-INF/services/io.github.intisy.ai.auth.contracts.Provider}
  * listing its implementation class(es).
  *
  * <p>Dropping a new provider jar into the directory (and rebuilding the registry, see
@@ -126,9 +127,9 @@ public final class ProviderRegistry implements Closeable {
         return new ProviderRegistry(Collections.emptyList(), null, Collections.emptyMap());
     }
 
-    /** Adapts the discovered providers into a {@link HandlerResolver} via {@code fromProviders}. */
+    /** Adapts the discovered providers into a {@link HandlerResolver}. */
     public HandlerResolver asHandlerResolver() {
-        return HandlerResolvers.fromProviders(providers);
+        return HandlerResolvers.fromHandlers(new ArrayList<IrHandler>(providers));
     }
 
     /** The ids of every discovered provider, in discovery order. */

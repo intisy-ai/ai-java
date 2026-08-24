@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.JsonCodec;
+import io.github.intisy.ai.api.seam.JsonCodec;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

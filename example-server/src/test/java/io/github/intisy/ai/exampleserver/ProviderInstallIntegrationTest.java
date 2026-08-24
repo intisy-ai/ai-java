@@ -9,8 +9,8 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.exampleserver.discovery.ProviderSource;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -69,7 +70,7 @@ class ProviderInstallIntegrationTest {
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());
 
         String stagedDir = System.getProperty("exampleserver.providersDir");
-        ProviderSource fakeSource = new FakeProviderSource(Path.of(stagedDir));
+        ProviderSource fakeSource = new FakeProviderSource(Paths.get(stagedDir));
         MessagesAdmin messages = new MessagesAdmin(store, json, holder, ai.logger());
         RoutingAdmin routing = new RoutingAdmin(store, json, holder, ai.logger());
 

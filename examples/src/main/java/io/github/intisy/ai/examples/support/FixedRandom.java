@@ -1,6 +1,6 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.Random;
+import io.github.intisy.ai.api.seam.Random;
 
 /**
  * A {@link Random} that always returns the same value in {@code [0, 1)}. The account manager uses

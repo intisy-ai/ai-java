@@ -2,12 +2,12 @@ package io.github.intisy.ai.jvm.backend;
 
 import io.github.intisy.ai.jvm.backend.env.Env;
 import io.github.intisy.ai.shared.logic.Notifier;
-import io.github.intisy.ai.shared.spi.Clock;
-import io.github.intisy.ai.shared.spi.HttpClient;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Random;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Clock;
+import io.github.intisy.ai.api.seam.HttpClient;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Random;
+import io.github.intisy.ai.api.seam.Store;
 
 /** Immutable {@link Backend} produced by {@link Backend.Builder#build()}. */
 final class ImmutableBackend implements Backend {

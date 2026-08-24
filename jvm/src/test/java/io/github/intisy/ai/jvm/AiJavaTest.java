@@ -12,9 +12,9 @@ import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.ProxyHandler;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,14 +23,15 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,7 +74,7 @@ class AiJavaTest {
         seedFallbackModelMap(store, new GsonJsonCodec());
 
         AiJava app = AiJava.builder().storage(store).build();
-        AiJava.WiredRouter router = app.router(fallbackProfile(), fakeResolver(), () -> List.of("rl", "ok"));
+        AiJava.WiredRouter router = app.router(fallbackProfile(), fakeResolver(), () -> Arrays.asList("rl", "ok"));
 
         HttpResponse resp = router.route(post("/v1/messages", "{}"));
 
@@ -82,7 +83,7 @@ class AiJavaTest {
         // Storage.memory() takes no path at all, so nothing should have touched this scratch
         // directory - the config lives purely in the ConcurrentHashMap backing InMemoryStore.
         try (java.util.stream.Stream<Path> files = Files.list(tmp)) {
-            assertTrue(files.findAny().isEmpty(), "memory-backed AiJava must not create any file");
+            assertFalse(files.findAny().isPresent(), "memory-backed AiJava must not create any file");
         }
     }
 
@@ -93,7 +94,7 @@ class AiJavaTest {
         seedFallbackModelMap(store, new GsonJsonCodec());
 
         AiJava app = AiJava.builder().storage(store).build();
-        AiJava.WiredRouter router = app.router(fallbackProfile(), fakeResolver(), () -> List.of("rl", "ok"));
+        AiJava.WiredRouter router = app.router(fallbackProfile(), fakeResolver(), () -> Arrays.asList("rl", "ok"));
 
         HttpResponse resp = router.route(post("/v1/messages", "{}"));
 
@@ -168,7 +169,7 @@ class AiJavaTest {
             resp.body = "served " + ctx.model;
             return resp;
         });
-        return HandlerResolvers.fromRegistry(registry);
+        return HandlerResolvers.fromWireHandlers(registry);
     }
 
     private static void seedFallbackModelMap(Store store, GsonJsonCodec json) {
@@ -179,7 +180,7 @@ class AiJavaTest {
         opusFallback.put("provider", "ok");
         opusFallback.put("model", "m-ok");
         Map<String, Object> doc = new HashMap<>();
-        doc.put("modelMap", Collections.singletonMap("opus", List.of(opus, opusFallback)));
+        doc.put("modelMap", Collections.singletonMap("opus", Arrays.asList(opus, opusFallback)));
         store.put(CONFIG_FILE, json.stringify(doc));
     }
 

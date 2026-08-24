@@ -9,8 +9,8 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +25,7 @@ import java.net.URL;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Scanner;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,7 +82,7 @@ class ConfigApiIntegrationTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;

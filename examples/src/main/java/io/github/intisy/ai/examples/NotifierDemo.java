@@ -10,7 +10,7 @@ import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.Store;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

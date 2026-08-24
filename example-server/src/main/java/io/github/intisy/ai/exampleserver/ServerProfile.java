@@ -1,10 +1,10 @@
 package io.github.intisy.ai.exampleserver;
 
-import io.github.intisy.ai.exampleserver.ir.RoutingJsonCodecAdapter;
-import io.github.intisy.ai.ir.translators.anthropic.AnthropicTranslator;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
+import io.github.intisy.ai.ir.spi.Translator;
+import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -16,11 +16,13 @@ import java.util.regex.Pattern;
  * synthesized when a whole tier is exhausted. Mirrors the fixture the {@code :examples} demos use.
  * This is also the ONE profile factory every app-proxy fixture in this repo builds from (the
  * "claude-code" and "opencode" test fixtures in {@code RoutingApiIntegrationTest} both call
- * {@link #echoTiers}, each with their own {@code configFile}) -- both real app-proxies speak the
- * Anthropic wire format, so setting {@link RoutingProfile#translator} here activates the IR
- * front-door for both.
+ * {@link #echoTiers}, each with their own {@code configFile}) -- both fixtures share this same
+ * {@link RoutingProfile#translator} (whichever {@code Translator} the staged translators directory
+ * provides), so setting it here activates the IR front-door for both.
  */
 public final class ServerProfile {
+
+    private static Translator translator;
 
     private ServerProfile() {
     }
@@ -47,11 +49,40 @@ public final class ServerProfile {
                     + "\"message\":\"all models for this tier are rate limited\"}}";
             return synth;
         };
-        // Both app fixtures built from this profile speak the Anthropic wire format, so the SAME
-        // translator activates the IR front-door for either: Router prefers a resolved handler's
-        // handleIr whenever the profile also carries a translator, falling back to legacy handle()
-        // otherwise (see core-proxy's Router#route).
-        profile.translator = new AnthropicTranslator(new RoutingJsonCodecAdapter(new GsonJsonCodec()));
+        // Both app fixtures built from this profile share this SAME translator (whichever
+        // Translator is staged), so the IR front-door activates for either: Router prefers a
+        // resolved handler's handleIr whenever the profile also carries a translator, falling
+        // back to legacy handle() otherwise (see core-proxy's Router#route).
+        profile.translator = translator();
         return profile;
+    }
+
+    /**
+     * @implNote Cached after the first successful load, purely to avoid re-scanning the directory
+     * and opening a fresh {@link TranslatorRegistry} classloader on every {@code echoTiers} call
+     * -- each call's registry is independent, so this is an efficiency choice, not a correctness
+     * requirement. Fails fast rather than leaving {@link RoutingProfile#translator} {@code null}:
+     * a null translator would silently skip the IR front door for every request built from this
+     * profile instead of surfacing the missing jar.
+     */
+    private static synchronized Translator translator() {
+        if (translator == null) {
+            File dir = new File(System.getProperty("exampleserver.translatorsDir", "translators"));
+            List<Translator> found = TranslatorRegistry.fromDirectory(dir.toPath()).translators();
+            if (found.isEmpty()) {
+                throw new IllegalStateException(
+                        "no Translator implementation found in " + dir.getAbsolutePath()
+                                + " -- stage a translator jar (see :examples-translator) before building a RoutingProfile");
+            }
+            if (found.size() > 1) {
+                // File.listFiles order is unspecified -- picking one arbitrarily here would be a
+                // silent, nondeterministic misconfiguration instead of a loud one.
+                throw new IllegalStateException(
+                        "found " + found.size() + " Translator implementations in " + dir.getAbsolutePath()
+                                + " -- stage exactly one translator jar");
+            }
+            translator = found.get(0);
+        }
+        return translator;
     }
 }

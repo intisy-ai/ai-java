@@ -1,7 +1,7 @@
 package io.github.intisy.ai.exampleserver.admin;
 
 import io.github.intisy.ai.shared.model.Account;
-import io.github.intisy.ai.shared.spi.Clock;
+import io.github.intisy.ai.api.seam.Clock;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.util.ArrayList;

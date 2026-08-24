@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm.backend.random;
 
-import io.github.intisy.ai.shared.spi.Random;
+import io.github.intisy.ai.api.seam.Random;
 
 import java.security.SecureRandom;
 

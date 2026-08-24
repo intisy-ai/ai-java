@@ -1,8 +1,8 @@
 package io.github.intisy.ai.examples.support;
 
-import io.github.intisy.ai.shared.spi.HttpClient;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.HttpClient;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

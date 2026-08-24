@@ -14,14 +14,14 @@ import io.github.intisy.ai.shared.manager.ManagerOptions;
 import io.github.intisy.ai.shared.oauth.OAuthConfig;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
-import io.github.intisy.ai.shared.spi.Clock;
-import io.github.intisy.ai.shared.spi.HttpClient;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Logger;
-import io.github.intisy.ai.shared.spi.Random;
-import io.github.intisy.ai.shared.spi.Store;
-import io.github.intisy.ai.shared.spi.http.HttpRequest;
-import io.github.intisy.ai.shared.spi.http.HttpResponse;
+import io.github.intisy.ai.api.seam.Clock;
+import io.github.intisy.ai.api.seam.HttpClient;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Logger;
+import io.github.intisy.ai.api.seam.Random;
+import io.github.intisy.ai.api.seam.Store;
+import io.github.intisy.ai.api.seam.HttpRequest;
+import io.github.intisy.ai.api.seam.HttpResponse;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.io.Closeable;
@@ -48,7 +48,7 @@ import java.util.function.Supplier;
  * {@link AiJava} instance is discarded (e.g. before rebuilding a fresh one to pick up swapped
  * provider jars) so that loader's resources are released. Never call {@link #close()} while a
  * {@link WiredRouter} obtained from this instance might still be routing a request to a
- * jar-provided {@link io.github.intisy.ai.shared.routing.Provider}.
+ * jar-provided {@link io.github.intisy.ai.auth.contracts.Provider}.
  */
 public class AiJava implements Closeable {
 
@@ -154,7 +154,7 @@ public class AiJava implements Closeable {
     /**
      * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier.
      * {@code configDir} is derived from the store when it's a {@link FileStore} (so handlers
-     * that read {@link io.github.intisy.ai.shared.routing.HandlerCtx#configDir} still see the
+     * that read {@link io.github.intisy.ai.ir.spi.HandlerCtx#configDir} still see the
      * right directory); it's empty for non-file backends, which carry no filesystem notion.
      */
     public WiredRouter router(RoutingProfile profile, HandlerResolver resolveHandler,

@@ -1,13 +1,14 @@
 package io.github.intisy.ai.exampleserver;
 
+import io.github.intisy.ai.seam.NoopLogger;
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
 import io.github.intisy.ai.exampleserver.admin.OAuthAdmin;
 import io.github.intisy.ai.exampleserver.discovery.ProviderDiscovery;
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
 import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
-import io.github.intisy.ai.shared.spi.JsonCodec;
-import io.github.intisy.ai.shared.spi.Store;
+import io.github.intisy.ai.api.seam.JsonCodec;
+import io.github.intisy.ai.api.seam.Store;
 import io.github.intisy.ai.shared.store.AccountStore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,7 +55,7 @@ class OAuthAdminTest {
 
         accountStore = new AccountStore(store, json);
         AccountAdmin admin = new AccountAdmin(accountStore, () -> 1000L);
-        oauth = new OAuthAdmin(store, json, holder, msg -> { }, admin);
+        oauth = new OAuthAdmin(store, json, holder, NoopLogger.INSTANCE, admin);
     }
 
     @AfterEach
@@ -66,7 +68,7 @@ class OAuthAdminTest {
     private static void stageProviderJar(Path targetDir) throws IOException {
         String staged = System.getProperty("exampleserver.providersDir");
         assertNotNull(staged, "exampleserver.providersDir must be set by the Gradle test task");
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Path.of(staged), "*.jar")) {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(staged), "*.jar")) {
             for (Path jar : stream) {
                 Files.copy(jar, targetDir.resolve(jar.getFileName()));
                 return;
