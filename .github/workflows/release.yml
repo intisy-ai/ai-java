@@ -34,11 +34,11 @@ jobs:
     secrets:
       envPAT: ${{ secrets.PAT }}
 
+  # No envPAT: GitHub Packages authorises this repository's own GITHUB_TOKEN (permissions above),
+  # while the PAT carries no write:packages and makes the maven PUT a 403.
   publish:
     needs: test
     uses: intisy/workflows/.github/workflows/publish.yml@main
     with:
       tag: ${{ inputs.tag }}
       publish_task: ':jvm:build :jvm:shadowJar publishGithub'
-    secrets:
-      envPAT: ${{ secrets.PAT }}
