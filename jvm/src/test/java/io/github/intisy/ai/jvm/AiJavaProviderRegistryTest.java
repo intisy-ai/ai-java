@@ -1,6 +1,6 @@
 package io.github.intisy.ai.jvm;
 
-import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
+import io.github.intisy.ai.seam.InMemoryStore;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import org.junit.jupiter.api.Test;
 

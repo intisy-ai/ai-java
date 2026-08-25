@@ -1,8 +1,8 @@
 package io.github.intisy.ai.exampleserver;
 
 import io.github.intisy.ai.exampleserver.admin.AccountAdmin;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
-import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
+import io.github.intisy.ai.seam.jvm.GsonJsonCodec;
+import io.github.intisy.ai.seam.InMemoryStore;
 import io.github.intisy.ai.shared.model.Account;
 import io.github.intisy.ai.shared.store.AccountStore;
 import org.junit.jupiter.api.Test;

@@ -1,8 +1,8 @@
 package io.github.intisy.ai.jvm;
 
 import io.github.intisy.ai.jvm.backend.Backend;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
-import io.github.intisy.ai.jvm.backend.store.InMemoryStore;
+import io.github.intisy.ai.seam.jvm.GsonJsonCodec;
+import io.github.intisy.ai.seam.InMemoryStore;
 import io.github.intisy.ai.api.seam.JsonCodec;
 import io.github.intisy.ai.api.seam.Store;
 import org.junit.jupiter.api.Test;

@@ -4,7 +4,7 @@ import io.github.intisy.ai.jvm.backend.Backend;
 import io.github.intisy.ai.jvm.backend.Backends;
 import io.github.intisy.ai.jvm.backend.env.Env;
 import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
-import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.seam.jvm.FileStore;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.shared.logic.Notifier;
 import io.github.intisy.ai.shared.logic.Router;
