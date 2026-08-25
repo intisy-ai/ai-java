@@ -2,7 +2,7 @@ package io.github.intisy.ai.jvm;
 
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
+import io.github.intisy.ai.seam.jvm.GsonJsonCodec;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
 import io.github.intisy.ai.ir.spi.HandlerCtx;
 import io.github.intisy.ai.ir.spi.StreamDecoder;

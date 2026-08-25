@@ -1,7 +1,7 @@
 package io.github.intisy.ai.exampleserver.admin;
 
 import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
-import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.seam.jvm.FileStore;
 import io.github.intisy.ai.shared.routing.ConfigField;
 import io.github.intisy.ai.shared.routing.ConfigGroup;
 import io.github.intisy.ai.shared.routing.ConfigSchema;

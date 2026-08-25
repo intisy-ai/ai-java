@@ -175,7 +175,7 @@ public final class ServerMain {
     /**
      * Minimal {@link javax.sql.DataSource} wrapping {@link java.sql.DriverManager} for a
      * caller-supplied generic JDBC URL (e.g. {@code -Dexampleserver.store=jdbc}). Only
-     * {@link #getConnection()} is exercised by {@link io.github.intisy.ai.jvm.backend.store.JdbcStore};
+     * {@link #getConnection()} is exercised by {@link io.github.intisy.ai.seam.jvm.JdbcStore};
      * the rest of the interface is implemented minimally to satisfy the contract.
      */
     private static final class DriverManagerDataSource implements javax.sql.DataSource {

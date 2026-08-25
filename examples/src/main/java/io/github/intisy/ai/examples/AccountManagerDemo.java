@@ -8,7 +8,7 @@ import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.examples.support.Workspace;
 import io.github.intisy.ai.jvm.AiJava;
 import io.github.intisy.ai.jvm.Storage;
-import io.github.intisy.ai.jvm.backend.http.UrlConnectionHttpClient;
+import io.github.intisy.ai.seam.jvm.UrlConnectionHttpClient;
 import io.github.intisy.ai.shared.manager.AccountManager;
 import io.github.intisy.ai.shared.manager.Acquired;
 import io.github.intisy.ai.shared.manager.ManagerOptions;
@@ -68,7 +68,7 @@ public final class AccountManagerDemo {
     public static void run() throws IOException {
         Result result = execute();
 
-        Section.header("AccountManagerDemo — acquire / cooldown / backoff / refresh / revoke");
+        Section.header("AccountManagerDemo - acquire / cooldown / backoff / refresh / revoke");
         Section.detail("acquired account: " + result.acquiredEmail);
         Section.detail("after reportRateLimit: acquire blocked during cooldown = " + result.acquireBlockedDuringCooldown
                 + ", nextAvailableAt = " + result.nextAvailableAfterRateLimit + " (clock start + " + RATE_LIMIT_MS + "ms)");

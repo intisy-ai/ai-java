@@ -4,60 +4,11 @@ plugins {
 
 rootProject.name = artifact_name
 
-// ai-java composes a single Gradle build across two vendored git submodules (core-proxy,
-// core-auth) plus its own jvm module. Gradle settings don't nest: a submodule's own
-// settings.gradle is never read when it's folded in like this, so THIS file is authoritative and
-// every project below is re-declared here, aliased to its real location via projectDir.
-//
-// Every alias reaching api or core-ir goes through core-proxy's OWN clones rather than
-// core-auth's, so this build carries exactly ONE :ir and ONE api: two projectDirs claiming the
-// same project path is a Gradle collision, and :accounts' project(":ir") has to resolve to the
-// same copy :routing routes over.
-include ":routing"
-project(":routing").projectDir = file("core-proxy/routing")
-
-include ":teavm"
-project(":teavm").projectDir = file("core-proxy/teavm")
-
-// :proxy-contracts - the routing vocabulary a proxy plugin implements, and the front-door key
-// core-proxy mints. Apart from :routing so a plugin implementing it does not link the engine.
-include ":proxy-contracts"
-project(":proxy-contracts").projectDir = file("core-proxy/proxy-contracts")
-
-// :ir - core-ir's canonical IR types and the IrHandler seam the engine routes over.
-include ":ir"
-project(":ir").projectDir = file("core-proxy/core-ir/ir")
-
-// :annotations, :processor, :contract, :seam and :js-base come from api: :ir exports api's seam
-// types in HandlerCtx's public fields, so every module here must resolve api at one coordinate.
-include ":annotations"
-project(":annotations").projectDir = file("core-proxy/core-ir/api/annotations")
-include ":processor"
-project(":processor").projectDir = file("core-proxy/core-ir/api/processor")
-include ":contract"
-project(":contract").projectDir = file("core-proxy/core-ir/api/contract")
-include ":seam"
-project(":seam").projectDir = file("core-proxy/core-ir/api/seam")
-include ":js-base"
-project(":js-base").projectDir = file("core-proxy/core-ir/api/js-base")
-
-// :auth-contracts - the provider vocabulary core-auth mints, which :jvm's ProviderRegistry
-// discovers implementations of.
-include ":auth-contracts"
-project(":auth-contracts").projectDir = file("core-auth/auth-contracts")
-
-include ":accounts"
-project(":accounts").projectDir = file("core-auth/accounts")
-
-include ":auth-teavm"
-project(":auth-teavm").projectDir = file("core-auth/auth-teavm")
+// Every first-party dependency resolves from a published release asset through github-gradle,
+// so this build declares only ai-java's own projects.
 
 include ":jvm"
 
-// The example projects live in ai-java's OWN tree (not a submodule), so, unlike :routing/
-// :teavm/:accounts above, they need no projectDir remap; Gradle finds them at the matching
-// ./examples-provider and ./examples directories by default.
-//
 // :examples-provider is a thin Provider jar (two Provider implementations + META-INF/services),
 // depending compileOnly on :routing exactly like stub-auth's stub-provider: its jar carries NO
 // :routing classes and is discovered by :jvm's ProviderRegistry purely via ServiceLoader.
@@ -73,5 +24,5 @@ include ":examples"
 include ":examples-translator"
 
 // :example-server is a runnable, never-published HTTP server that drives :jvm's WiredRouter over
-// com.sun.net.httpserver. Like :examples it lives in ai-java's own tree, so no projectDir remap.
+// com.sun.net.httpserver.
 include ":example-server"

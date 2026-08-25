@@ -4,7 +4,7 @@ import io.github.intisy.ai.exampleserver.discovery.ProviderRegistryHolder;
 import io.github.intisy.ai.ir.IrRequest;
 import io.github.intisy.ai.ir.IrResponse;
 import io.github.intisy.ai.ir.spi.Translator;
-import io.github.intisy.ai.jvm.backend.store.FileStore;
+import io.github.intisy.ai.seam.jvm.FileStore;
 import io.github.intisy.ai.jvm.translator.TranslatorRegistry;
 import io.github.intisy.ai.ir.spi.HandleIrException;
 import io.github.intisy.ai.ir.spi.HandlerCtx;

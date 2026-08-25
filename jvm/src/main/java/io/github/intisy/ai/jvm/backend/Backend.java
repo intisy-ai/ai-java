@@ -2,11 +2,11 @@ package io.github.intisy.ai.jvm.backend;
 
 import io.github.intisy.ai.jvm.backend.env.Env;
 import io.github.intisy.ai.jvm.backend.env.SystemEnv;
-import io.github.intisy.ai.jvm.backend.clock.SystemClock;
-import io.github.intisy.ai.jvm.backend.http.UrlConnectionHttpClient;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
-import io.github.intisy.ai.jvm.backend.log.SimpleLoggerAdapter;
-import io.github.intisy.ai.jvm.backend.random.SecureRandomAdapter;
+import io.github.intisy.ai.seam.jvm.SystemClock;
+import io.github.intisy.ai.seam.jvm.UrlConnectionHttpClient;
+import io.github.intisy.ai.seam.jvm.GsonJsonCodec;
+import io.github.intisy.ai.seam.jvm.SimpleLoggerAdapter;
+import io.github.intisy.ai.seam.jvm.SecureRandomAdapter;
 import io.github.intisy.ai.shared.logic.Notifier;
 import io.github.intisy.ai.api.seam.Clock;
 import io.github.intisy.ai.api.seam.HttpClient;

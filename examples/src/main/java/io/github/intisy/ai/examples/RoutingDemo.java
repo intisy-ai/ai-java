@@ -50,7 +50,7 @@ public final class RoutingDemo {
     public static void run(Path providersDir) throws IOException {
         Result result = execute(providersDir);
 
-        Section.header("RoutingDemo — tier fallback, model rewrite, exhaustion, /v1/models");
+        Section.header("RoutingDemo - tier fallback, model rewrite, exhaustion, /v1/models");
         Section.detail("(a) normal request  claude-haiku-4  -> requested tier model rewritten to the backend model:");
         Section.detail("    status=" + result.normal.status + " body=" + result.normal.body);
         Section.detail("(b) fallback        claude-opus-4-1 -> primary 'ratelimited' 429s, routing falls back to 'echo':");

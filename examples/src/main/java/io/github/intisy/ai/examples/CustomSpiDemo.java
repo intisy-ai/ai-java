@@ -12,7 +12,7 @@ import io.github.intisy.ai.examples.support.RecordingJsonCodec;
 import io.github.intisy.ai.examples.support.Requests;
 import io.github.intisy.ai.examples.support.Section;
 import io.github.intisy.ai.jvm.AiJava;
-import io.github.intisy.ai.jvm.backend.json.GsonJsonCodec;
+import io.github.intisy.ai.seam.jvm.GsonJsonCodec;
 import io.github.intisy.ai.jvm.Storage;
 import io.github.intisy.ai.shared.manager.AccountManager;
 import io.github.intisy.ai.shared.model.Account;
@@ -62,7 +62,7 @@ public final class CustomSpiDemo {
     public static void run() {
         Result result = execute();
 
-        Section.header("CustomSpiDemo — every SPI injected (logger/clock/random/notifier/env)");
+        Section.header("CustomSpiDemo - every SPI injected (logger/clock/random/notifier/env)");
         Section.detail("custom Env returned APP_REGION=" + result.envValue);
         Section.detail("custom Notifier collected " + result.notices.size() + " notice(s) during routing:");
         for (CollectingNotifier.Notice notice : result.notices) {

@@ -42,7 +42,7 @@ public final class StorageDemo {
     }
 
     public static void run() throws IOException {
-        Section.header("StorageDemo — storage is an explicit, swappable choice");
+        Section.header("StorageDemo - storage is an explicit, swappable choice");
 
         Section.detail("build() with no storage is rejected (storage is never defaulted):");
         try {

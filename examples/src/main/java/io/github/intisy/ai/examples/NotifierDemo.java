@@ -47,7 +47,7 @@ public final class NotifierDemo {
     public static void run() throws IOException {
         Result result = execute();
 
-        Section.header("NotifierDemo — default JsonlNotifier for a file-backed store");
+        Section.header("NotifierDemo - default JsonlNotifier for a file-backed store");
         Section.detail("file-backed AiJava's default notifier is: " + result.notifierType);
         Section.detail("a routing fallback wrote this notification line:");
         Section.detail("  " + result.jsonlContent.trim());
