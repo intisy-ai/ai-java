@@ -6,13 +6,13 @@
 // class inside the jar -- it stays a pure two-Provider + META-INF/services artifact discovered
 // purely via ServiceLoader.
 dependencies {
-    githubCompileOnly "intisy-ai:core-proxy:1.0.0:routing"
+    githubCompileOnly "intisy-ai:core-proxy:2.0.0:routing"
     // The Provider vocabulary these examples implement. compileOnly, like :routing above: the
     // host already has it loaded, so the shipped jar must not carry a copy.
-    githubCompileOnly "intisy-ai:core-auth:1.0.0:auth-contracts"
+    githubCompileOnly "intisy-ai:core-auth:1.3.0:auth-contracts"
     // HandleIrRateLimitedProvider's handleIr override references IrRequest/IrResponse
     // (defined in :ir, not re-exported by :routing's own compileOnly :ir dependency).
-    githubCompileOnly "intisy-ai:core-ir:1.0.2:ir"
+    githubCompileOnly "intisy-ai:core-ir:1.3.0:ir"
 
     // The seam interfaces HandlerCtx names, which a release-asset jar does not export transitively.
     githubCompileOnly "intisy-ai:api:1.2.0:contract"
