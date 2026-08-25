@@ -68,7 +68,7 @@ public final class AccountManagerDemo {
     public static void run() throws IOException {
         Result result = execute();
 
-        Section.header("AccountManagerDemo — acquire / cooldown / backoff / refresh / revoke");
+        Section.header("AccountManagerDemo - acquire / cooldown / backoff / refresh / revoke");
         Section.detail("acquired account: " + result.acquiredEmail);
         Section.detail("after reportRateLimit: acquire blocked during cooldown = " + result.acquireBlockedDuringCooldown
                 + ", nextAvailableAt = " + result.nextAvailableAfterRateLimit + " (clock start + " + RATE_LIMIT_MS + "ms)");

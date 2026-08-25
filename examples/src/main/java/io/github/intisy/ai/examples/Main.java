@@ -17,7 +17,7 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("ai-java :examples — full :jvm API walkthrough");
+        System.out.println("ai-java :examples - full :jvm API walkthrough");
 
         Path providersDir = ProvidersDirectory.locate();
         if (providersDir == null) {

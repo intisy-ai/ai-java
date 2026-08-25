@@ -30,7 +30,7 @@ public final class ProviderRegistryDemo {
     }
 
     public static void run(Path providersDir) throws IOException {
-        Section.header("ProviderRegistryDemo — discover provider jars via ServiceLoader");
+        Section.header("ProviderRegistryDemo - discover provider jars via ServiceLoader");
         Section.detail("scanning providers directory: " + providersDir);
 
         // try-with-resources: AiJava.close() releases the jar URLClassLoader the registry keeps open.
@@ -47,7 +47,7 @@ public final class ProviderRegistryDemo {
             Section.detail("routed a request straight through the jar-loaded echo provider:");
             Section.detail("  status=" + response.status + " body=" + response.body);
         }
-        Section.detail("AiJava closed — jar classloader released.");
+        Section.detail("AiJava closed - jar classloader released.");
 
         // A brand-new instance re-discovers the same jars: proves close() didn't leave anything stuck.
         try (AiJava fresh = AiJava.builder().storage(Storage.memory()).providersDir(providersDir).build()) {

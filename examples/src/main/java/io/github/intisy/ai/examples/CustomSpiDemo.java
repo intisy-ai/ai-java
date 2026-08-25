@@ -62,7 +62,7 @@ public final class CustomSpiDemo {
     public static void run() {
         Result result = execute();
 
-        Section.header("CustomSpiDemo — every SPI injected (logger/clock/random/notifier/env)");
+        Section.header("CustomSpiDemo - every SPI injected (logger/clock/random/notifier/env)");
         Section.detail("custom Env returned APP_REGION=" + result.envValue);
         Section.detail("custom Notifier collected " + result.notices.size() + " notice(s) during routing:");
         for (CollectingNotifier.Notice notice : result.notices) {
