@@ -9,10 +9,10 @@ dependencies {
     // The routing vocabulary :routing exports (RoutingProfile, HandlerResolver), named here because
     // a release-asset jar carries no transitive metadata.
     githubApi "intisy-ai:core-proxy:2.0.0:proxy-contracts"
-    githubApi "intisy-ai:core-auth:1.3.0:accounts"
+    githubApi "intisy-ai:core-auth:1.4.0:accounts"
     // The provider vocabulary ProviderRegistry discovers implementations of. api, not
     // implementation: it appears in this module's own public surface.
-    githubApi "intisy-ai:core-auth:1.3.0:auth-contracts"
+    githubApi "intisy-ai:core-auth:1.4.0:auth-contracts"
     // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
     // them and stay thin, rather than every jar embedding its own copy.
     githubApi "intisy-ai:api:1.2.0:seam"
