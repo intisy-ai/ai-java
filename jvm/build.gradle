@@ -15,13 +15,13 @@ dependencies {
     githubApi "intisy-ai:core-auth:1.4.1:auth-contracts"
     // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
     // them and stay thin, rather than every jar embedding its own copy.
-    githubApi "intisy-ai:api:1.4.0:seam"
+    githubApi "intisy-ai:api:1.5.0:seam"
     // The seam INTERFACES those implement, which a release-asset jar does not export transitively.
     // api for the same reason as the rest: AiJava's own signatures name them.
-    githubApi "intisy-ai:api:1.4.0:contract"
+    githubApi "intisy-ai:api:1.5.0:contract"
     // api's JVM seam implementations (FileStore, JdbcStore, GsonJsonCodec and friends), which this
     // module used to carry itself. api, not implementation: Storage and AiJava.builder() name them.
-    githubApi "intisy-ai:api:1.4.0:jvm-seam"
+    githubApi "intisy-ai:api:1.5.0:jvm-seam"
     // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
@@ -38,7 +38,7 @@ dependencies {
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
     // that the server provides (H2/MySQL/PostgreSQL/SQLite are all supported at runtime).
     // api's seam implementations, for the NoopLogger the router tests inject.
-    githubTestImplementation "intisy-ai:api:1.4.0:seam"
+    githubTestImplementation "intisy-ai:api:1.5.0:seam"
     testImplementation "com.h2database:h2:2.2.224"
     // Test-only: proves JdbcStore's SQLite dialect handling (no FOR UPDATE support) against a
     // real SQLite file DataSource, same rationale as the H2 dependency above.
