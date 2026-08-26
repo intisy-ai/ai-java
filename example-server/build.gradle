@@ -8,7 +8,7 @@ dependencies {
     implementation project(":jvm")
     // core-ir's IR types + the Translator interface, needed directly since :jvm's own :ir
     // dependency is `implementation` (non-transitive); implementations load from jars at runtime.
-    githubImplementation "intisy-ai:core-ir:1.3.0:ir"
+    githubImplementation "intisy-ai:core-ir:1.3.1:ir"
     // The seam interfaces the line above used to export transitively.
     githubImplementation "intisy-ai:api:1.2.0:contract"
     // api's seam implementations, for the NoopLogger the admin tests inject.
