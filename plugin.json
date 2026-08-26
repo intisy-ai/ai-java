@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@intisy-ai/api/schema/plugin.schema.json",
+  "id": "ai-java",
+  "api": 1,
+  "repo": {
+    "role": "Java AI-proxy runtime with IR router and provider SPI",
+    "category": "runtime",
+    "tech": [
+      "java"
+    ]
+  }
+}
