@@ -9,10 +9,10 @@ dependencies {
     // The routing vocabulary :routing exports (RoutingProfile, HandlerResolver), named here because
     // a release-asset jar carries no transitive metadata.
     githubApi "intisy-ai:core-proxy:2.0.1:proxy-contracts"
-    githubApi "intisy-ai:core-auth:1.4.0:accounts"
+    githubApi "intisy-ai:core-auth:1.4.1:accounts"
     // The provider vocabulary ProviderRegistry discovers implementations of. api, not
     // implementation: it appears in this module's own public surface.
-    githubApi "intisy-ai:core-auth:1.4.0:auth-contracts"
+    githubApi "intisy-ai:core-auth:1.4.1:auth-contracts"
     // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
     // them and stay thin, rather than every jar embedding its own copy.
     githubApi "intisy-ai:api:1.2.0:seam"
@@ -32,7 +32,7 @@ dependencies {
     // deliberate opt-in -- a consumer that never touches translators shouldn't inherit :ir
     // transitively just for using ProviderRegistry/handlers. Consumers that DO use
     // TranslatorRegistry declare their own project(":ir"), as example-server does.
-    githubImplementation "intisy-ai:core-ir:1.3.0:ir"
+    githubImplementation "intisy-ai:core-ir:1.3.1:ir"
     api "com.google.code.gson:gson:2.10.1"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
