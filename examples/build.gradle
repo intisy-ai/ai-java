@@ -17,7 +17,7 @@ dependencies {
     // The IR types and seam interfaces this module names directly (DemoProfiles builds a Translator,
     // InProcessProviders a HandlerCtx). They used to arrive along :jvm's api chain; a release-asset
     // jar exports nothing, so they are declared here.
-    githubImplementation "intisy-ai:core-ir:1.3.1:ir"
+    githubImplementation "intisy-ai:core-ir:1.4.0:ir"
     githubImplementation "intisy-ai:api:1.6.0:contract"
 
     // NOTE: :examples deliberately does NOT depend on project(":examples-provider"). The provider

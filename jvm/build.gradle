@@ -32,7 +32,7 @@ dependencies {
     // deliberate opt-in -- a consumer that never touches translators shouldn't inherit :ir
     // transitively just for using ProviderRegistry/handlers. Consumers that DO use
     // TranslatorRegistry declare their own project(":ir"), as example-server does.
-    githubImplementation "intisy-ai:core-ir:1.3.1:ir"
+    githubImplementation "intisy-ai:core-ir:1.4.0:ir"
     api "com.google.code.gson:gson:2.10.1"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
