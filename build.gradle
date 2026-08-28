@@ -50,6 +50,9 @@ subprojects {
         // javadoc stops listing after 100 of each by default, which silently under-reports the gap.
         options.addStringOption("Xmaxwarns", "10000")
         options.addStringOption("Xmaxerrs", "10000")
+        // doclint reports a missing comment as a WARNING, and failOnError only fails on errors, so
+        // without this the task passes over an entirely undocumented module.
+        options.addBooleanOption("Werror", true)
         options.tags = [
             "apiNote:a:API Note:",
             "implSpec:a:Implementation Requirements:",
@@ -57,6 +60,8 @@ subprojects {
         ]
         failOnError = true
     }
+
+    tasks.named("check") { dependsOn tasks.named("javadoc") }
 
     dependencies {
         testImplementation "org.junit.jupiter:junit-jupiter:5.10.1"
