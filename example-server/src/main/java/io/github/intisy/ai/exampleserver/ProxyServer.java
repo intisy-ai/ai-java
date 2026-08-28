@@ -36,6 +36,13 @@ public final class ProxyServer {
         this.executor = executor;
     }
 
+    /**
+     * Binds a loopback port and serves every request through the given router.
+     *
+     * @param router what each request is routed through
+     * @param port the port to bind, or 0 for an ephemeral one
+     * @return the started server
+     */
     public static ProxyServer start(AiJava.WiredRouter router, int port) {
         HttpServer http;
         try {
@@ -58,10 +65,12 @@ public final class ProxyServer {
         return new ProxyServer(http, http.getAddress().getPort(), executor);
     }
 
+    /** {@return the port actually bound, which an ephemeral request only learns from here} */
     public int port() {
         return port;
     }
 
+    /** Stops serving and shuts the request pool down. */
     public void stop() {
         http.stop(0);
         executor.shutdownNow();

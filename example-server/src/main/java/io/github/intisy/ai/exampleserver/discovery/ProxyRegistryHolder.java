@@ -19,24 +19,37 @@ public final class ProxyRegistryHolder {
 
     private volatile ProxyRegistry current;
 
+    /**
+     * @param initial the registry every read sees until the first refresh
+     */
     public ProxyRegistryHolder(ProxyRegistry initial) {
         this.current = initial;
     }
 
+    /** {@return the registry current at this moment} */
     public ProxyRegistry get() {
         return current;
     }
 
+    /** {@return the id of every proxy the current registry holds} */
     public List<String> listProxyIds() {
         return current.listProxyIds();
     }
 
-    /** {@code current.profileFor(id)}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return that proxy's routing profile, or {@code null} when it is not loaded}
+     *
+     * @param id the proxy id to look for
+     */
     public RoutingProfile profileFor(String id) {
         return current.profileFor(id);
     }
 
-    /** {@code current.displayNameFor(id)}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return that proxy's display name, or {@code null} when it is not loaded}
+     *
+     * @param id the proxy id to look for
+     */
     public String displayNameFor(String id) {
         return current.displayNameFor(id);
     }
@@ -49,6 +62,8 @@ public final class ProxyRegistryHolder {
      * {@link NoClassDefFoundError}. The cost is a leaked classloader per install, which is
      * acceptable for a demo server (a long-lived production variant would need a reference-counted
      * or quiesce-then-close strategy instead).
+     *
+     * @param proxiesDir the directory to rebuild the registry from
      */
     public void refresh(Path proxiesDir) {
         this.current = ProxyRegistry.fromDirectory(proxiesDir);
@@ -63,6 +78,10 @@ public final class ProxyRegistryHolder {
      * #refresh} accepts for its leaked-classloader tradeoff, just in the other direction: a request
      * already routing through this proxy when uninstall runs may fail with {@link
      * NoClassDefFoundError}, acceptable for a demo server's explicit, operator-initiated uninstall.
+     *
+     * @param proxyId the proxy to uninstall
+     * @param proxiesDir the directory the registry is rebuilt from afterwards
+     * @return whether the proxy was loaded at all; false is a no-op
      */
     public synchronized boolean uninstall(String proxyId, Path proxiesDir) {
         Path jar = current.jarFor(proxyId);

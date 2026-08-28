@@ -13,6 +13,11 @@ import java.nio.file.Path;
 public final class ProviderDiscovery {
     private ProviderDiscovery() {}
 
+    /**
+     * {@return a registry over whatever provider jars that directory currently holds}
+     *
+     * @param providersDir the directory to scan
+     */
     public static ProviderRegistry resolve(Path providersDir) {
         try {
             Files.createDirectories(providersDir);

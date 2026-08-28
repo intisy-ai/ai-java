@@ -19,30 +19,44 @@ public final class ProviderRegistryHolder {
 
     private volatile ProviderRegistry current;
 
+    /**
+     * @param initial the registry every read sees until the first refresh
+     */
     public ProviderRegistryHolder(ProviderRegistry initial) {
         this.current = initial;
     }
 
+    /** {@return the registry current at this moment} */
     public ProviderRegistry get() {
         return current;
     }
 
+    /** {@return the id of every provider the current registry holds} */
     public List<String> listProviderIds() {
         return current.listProviderIds();
     }
 
+    /** {@return the current registry's providers, adapted into a resolver} */
     public HandlerResolver asHandlerResolver() {
         return current.asHandlerResolver();
     }
 
-    /** The discovered {@link Provider} whose id equals {@code id}, or {@code null}. */
+    /**
+     * {@return the discovered provider with this id, or {@code null} when none has it}
+     *
+     * @param id the provider id to look for
+     */
     public Provider get(String id) {
         return current.get(id);
     }
 
     /** The jar file that registers {@code providerId} in the CURRENT registry, or {@code null}
      *  if no such provider is loaded. Lets a caller (e.g. {@code ManagementApi}) resolve an
-     *  installed provider's on-disk jar without knowing its asset-name convention. */
+     *  installed provider's on-disk jar without knowing its asset-name convention.
+     *
+     * @param providerId the provider whose jar is wanted
+     * @return that jar, or {@code null} when the provider is not loaded
+     */
     public Path jarFor(String providerId) {
         return current.jarFor(providerId);
     }
@@ -58,6 +72,8 @@ public final class ProviderRegistryHolder {
      * registry at the moment of the swap may see a {@link NoClassDefFoundError} once its loader is
      * closed. Acceptable here because install/uninstall/update are explicit, non-concurrent operator
      * actions on this single-user demo console, not high-traffic hot paths.
+     *
+     * @param providersDir the directory to rebuild the registry from
      */
     public void refresh(Path providersDir) {
         ProviderRegistry old = current;
@@ -83,6 +99,10 @@ public final class ProviderRegistryHolder {
      * tradeoff, just in the other direction: a request already routing through this provider when
      * uninstall runs may fail with {@link NoClassDefFoundError}. Acceptable for a demo server's
      * explicit, operator-initiated uninstall.
+     *
+     * @param providerId the provider to uninstall
+     * @param providersDir the directory the registry is rebuilt from afterwards
+     * @return whether the jar is really gone; false is a failed uninstall, never a no-op
      */
     public synchronized boolean uninstall(String providerId, Path providersDir) {
         Path jar = current.jarFor(providerId);
@@ -135,7 +155,13 @@ public final class ProviderRegistryHolder {
      * on Windows), downloads {@code entry}'s jar over the old one via {@code source} (which also
      * rewrites the {@code .version} sidecar -- see {@link GithubOrgScan#download}), then rebuilds
      * the registry. Accounts live in the {@code Store}, not the jar, so they are untouched by this
-     * -- only the provider's classes/jar are replaced. Returns the path written.
+     * -- only the provider's classes/jar are replaced.
+     *
+     * @param source where the new jar is downloaded from
+     * @param entry the release to download
+     * @param providersDir the directory the registry is rebuilt from afterwards
+     * @return the path written
+     * @throws IOException when the download or the write fails
      */
     public synchronized Path update(ProviderSource source, ProviderSource.Entry entry, Path providersDir)
             throws IOException {

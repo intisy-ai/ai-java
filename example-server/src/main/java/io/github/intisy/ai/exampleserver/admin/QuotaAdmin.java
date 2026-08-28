@@ -30,6 +30,12 @@ public final class QuotaAdmin {
     private final String configDir;
     private final Store store;
 
+    /**
+     * @param store where the admin's own documents live
+     * @param json the codec those documents are read and written with
+     * @param holder resolves a provider id to the discovered provider
+     * @param log where the admin reports what it did
+     */
     public QuotaAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
         this.json = json;
@@ -44,6 +50,8 @@ public final class QuotaAdmin {
      * bars (an errored account whose quota couldn't be fetched) -- that's the whole point of the
      * per-account SPI shape.
      *
+     * @param providerId the provider to ask for its quota
+     * @return the built {@code {accounts:[...]}} map
      * @throws IllegalArgumentException if the provider id is unknown
      */
     public Map<String, Object> refresh(String providerId) {
@@ -96,6 +104,9 @@ public final class QuotaAdmin {
      * (error/no-quota accounts are excluded from the mean but still counted in
      * {@code accountCount}). Backward-compatible superset -- the raw {@code accounts} array is
      * untouched.
+     *
+     * @param providerId the provider to ask for its quota
+     * @return the raw accounts array plus the per-label aggregate
      */
     public Map<String, Object> combined(String providerId) {
         Map<String, Object> raw = refresh(providerId);

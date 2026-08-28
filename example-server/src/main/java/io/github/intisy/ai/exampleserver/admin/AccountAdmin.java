@@ -18,6 +18,10 @@ public class AccountAdmin {
     private final AccountStore store;
     private final Clock clock;
 
+    /**
+     * @param store the account store every operation reads and writes
+     * @param clock what a computed status compares an expiry against
+     */
     public AccountAdmin(AccountStore store, Clock clock) {
         this.store = store;
         this.clock = clock;
@@ -25,6 +29,9 @@ public class AccountAdmin {
 
     /**
      * List all accounts for a provider as UI-safe views, including computed status.
+     *
+     * @param providerId the provider whose accounts are wanted
+     * @return one view per account, secrets omitted
      */
     public List<AccountView> list(String providerId) {
         List<Account> accounts = store.list(providerId);
@@ -40,6 +47,10 @@ public class AccountAdmin {
 
     /**
      * Enable or disable an account by id.
+     *
+     * @param providerId the provider the account belongs to
+     * @param accountId the account to change
+     * @param enabled whether routing may choose it
      */
     public void setEnabled(String providerId, String accountId, boolean enabled) {
         store.update(providerId, pool -> {
@@ -54,6 +65,9 @@ public class AccountAdmin {
 
     /**
      * Remove an account by id.
+     *
+     * @param providerId the provider the account belongs to
+     * @param accountId the account to remove
      */
     public void remove(String providerId, String accountId) {
         store.remove(providerId, accountId);
@@ -68,6 +82,13 @@ public class AccountAdmin {
      * (i.e. {@code -Dexampleserver.store=file -Dexampleserver.configDir=<dir>}); under the default
      * {@code sqlite} store (or {@code memory}) the seeded account is admin-visible only.
      *
+     * @param providerId the provider to seed the account under
+     * @param id the account id, which may be blank when an email is given
+     * @param email the account email, which may be blank when an id is given
+     * @param refresh the raw OAuth refresh token, never packed with a project id
+     * @param projectId the project the account belongs to, or blank for none
+     * @param managedProjectId the managed project the account belongs to, or blank for none
+     * @return the seeded account as a UI-safe view
      * @throws IllegalArgumentException if {@code refresh} is blank, or both {@code email} and
      *                                   {@code id} are blank
      */
@@ -156,10 +177,15 @@ public class AccountAdmin {
      * reasons (cooldownReason, disabledReason).
      */
     public static final class AccountView {
+        /** The account's id. */
         public String id;
+        /** The account's email. */
         public String email;
+        /** The status computed from the account's cooldown and expiry. */
         public String status;
+        /** Whether routing may choose this account. */
         public boolean enabled;
-        public Long expires; // non-secret access-token expiry, epoch ms; null when the account carries none
+        /** Access-token expiry in epoch milliseconds, or null when the account carries none. */
+        public Long expires;
     }
 }

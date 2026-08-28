@@ -29,6 +29,13 @@ public final class OAuthAdmin {
     private final String configDir;
     private final Store store;
 
+    /**
+     * @param store where the admin's own documents live
+     * @param json the codec those documents are read and written with
+     * @param holder resolves a provider id to the discovered provider
+     * @param log where the admin reports what it did
+     * @param accounts the account surface a completed login seeds through
+     */
     public OAuthAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log,
                       AccountAdmin accounts) {
         this.holder = holder;
@@ -39,7 +46,12 @@ public final class OAuthAdmin {
         this.store = store;
     }
 
-    /** The provider's {@code {authorizeUrl, completion, state?, loopbackPort?, loopbackPath?}}. */
+    /**
+     * {@return the provider's own {@code {authorizeUrl, completion, state?, loopbackPort?,
+     * loopbackPath?}}}
+     *
+     * @param providerId the provider to start a login against
+     */
     public Map<String, Object> authorize(String providerId) {
         Provider p = holder.get(providerId);
         if (p == null) {
@@ -64,7 +76,13 @@ public final class OAuthAdmin {
         return params;
     }
 
-    /** Relays {@code {code,state}} to the provider's exchange and seeds the returned account. */
+    /**
+     * {@return the account the provider's exchange returned, already seeded}
+     *
+     * @param providerId the provider the login was started against
+     * @param code the authorization code the callback carried
+     * @param state the state the callback carried, for the provider to verify
+     */
     public Map<String, Object> complete(String providerId, String code, String state) {
         Provider p = holder.get(providerId);
         if (p == null) {

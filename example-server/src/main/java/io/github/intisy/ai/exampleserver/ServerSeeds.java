@@ -20,6 +20,13 @@ public final class ServerSeeds {
     private ServerSeeds() {
     }
 
+    /**
+     * Seeds a catalog and model map for the echo provider, so a fresh server routes at once.
+     *
+     * @param store the storage to seed
+     * @param json the codec the seeded documents are written with
+     * @param configFile the store key to write the routing under
+     */
     public static void seedEcho(Store store, JsonCodec json, String configFile) {
         Map<String, Object> catalog = new LinkedHashMap<>();
         catalog.put("echo", providerCatalog(

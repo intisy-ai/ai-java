@@ -45,6 +45,12 @@ public final class MessagesAdmin {
     private final Translator translator;
     private final String translatorError; // set only when MORE THAN ONE translator was found
 
+    /**
+     * @param store where the admin's own documents live
+     * @param json the codec those documents are read and written with
+     * @param holder resolves a provider id to the discovered provider
+     * @param log where the admin reports what it did
+     */
     public MessagesAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
         this.json = json;
@@ -96,6 +102,10 @@ public final class MessagesAdmin {
      * provider id comes from the URL; the concrete model the caller wants is read out of {@code
      * body.model} and threaded through {@link HandlerCtx#model}, exactly like the router does for
      * an already-resolved assignment.
+     *
+     * @param providerId the provider to serve the request, taken from the URL
+     * @param body the wire request, shaped for whichever translator is staged
+     * @return the provider's response, encoded back to wire JSON
      */
     public HttpResponse send(String providerId, String body) {
         // No (or ambiguous) translator staged: fail visibly here rather than silently falling

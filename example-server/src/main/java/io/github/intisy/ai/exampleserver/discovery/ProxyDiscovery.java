@@ -13,6 +13,11 @@ import java.nio.file.Path;
 public final class ProxyDiscovery {
     private ProxyDiscovery() {}
 
+    /**
+     * {@return a registry over whatever proxy jars that directory currently holds}
+     *
+     * @param proxiesDir the directory to scan
+     */
     public static ProxyRegistry resolve(Path proxiesDir) {
         try {
             Files.createDirectories(proxiesDir);

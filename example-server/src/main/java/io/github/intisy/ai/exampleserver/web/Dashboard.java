@@ -23,6 +23,7 @@ public final class Dashboard implements HttpHandler {
 
     private final byte[] html;
 
+    /** Reads the dashboard page off the classpath once, so a request never touches disk. */
     public Dashboard() {
         this.html = loadResource();
     }

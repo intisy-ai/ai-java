@@ -134,6 +134,13 @@ public final class ManagementApi implements HttpHandler {
      * installed provider becomes routable without a restart. No {@link RoutingAdmin}/{@link
      * QuotaAdmin}: the {@code /api/routing/*}, discover, and quota/refresh routes 404 (see the
      * full 8-arg constructor for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder) {
@@ -144,6 +151,15 @@ public final class ManagementApi implements HttpHandler {
      * Adds the quota surface ({@code POST .../quota/refresh}) backed by {@code quota}. No
      * {@link ConfigAdmin}: {@code /api/providers/{id}/config} 404s (see the full 9-arg
      * constructor for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -155,6 +171,16 @@ public final class ManagementApi implements HttpHandler {
      * Adds the provider-config surface ({@code GET/PUT /api/providers/{id}/config}) backed by
      * {@code config}. No {@link OAuthAdmin}: the {@code /oauth/*} routes 404 (see the full 10-arg
      * constructor for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -166,6 +192,17 @@ public final class ManagementApi implements HttpHandler {
      * Adds the OAuth-login surface ({@code POST .../oauth/authorize}, {@code POST
      * .../oauth/complete}) backed by {@code oauth}. No {@link ProxyAdmin}: the
      * {@code /api/proxies*} routes 404 (see the full 11-arg constructor for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
+     * @param oauth the OAuth-login surface, or {@code null} to 404 the {@code /oauth} routes
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -178,6 +215,18 @@ public final class ManagementApi implements HttpHandler {
      * {@link ProxySource}/{@link ProxyRegistryHolder}: the proxy install/available/uninstall
      * routes 404, and an {@code ?app=} query on {@code /api/routing/model-map} always 400s (see the
      * full constructor below for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
+     * @param oauth the OAuth-login surface, or {@code null} to 404 the {@code /oauth} routes
+     * @param proxy the proxy-management surface, or {@code null} to 404 {@code /api/proxies*}
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -194,6 +243,21 @@ public final class ManagementApi implements HttpHandler {
      * {@code proxyHolder.profileFor} instead of a hardcoded per-app table. No {@link MessagesAdmin}:
      * {@code /api/providers/{id}/messages} 404s (see the full 15-arg constructor for the full
      * wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
+     * @param oauth the OAuth-login surface, or {@code null} to 404 the {@code /oauth} routes
+     * @param proxy the proxy-management surface, or {@code null} to 404 {@code /api/proxies*}
+     * @param proxySource lists and downloads installable proxy jars, or {@code null} to 404 those routes
+     * @param proxyHolder resolves an {@code ?app=} query to an installed proxy's routing profile
+     * @param proxiesDir where a downloaded proxy jar lands on disk
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -209,6 +273,22 @@ public final class ManagementApi implements HttpHandler {
      * {@code messages} -- this is how the console reaches a provider for chat: a DIRECT {@code
      * MessagesAdmin.send} call, never through a router. No {@link GithubAuth}/{@link GithubOrgScan}
      * -- the {@code /api/github*} routes 404 (see the full constructor below for the full wiring).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
+     * @param oauth the OAuth-login surface, or {@code null} to 404 the {@code /oauth} routes
+     * @param proxy the proxy-management surface, or {@code null} to 404 {@code /api/proxies*}
+     * @param proxySource lists and downloads installable proxy jars, or {@code null} to 404 those routes
+     * @param proxyHolder resolves an {@code ?app=} query to an installed proxy's routing profile
+     * @param proxiesDir where a downloaded proxy jar lands on disk
+     * @param messages the direct-provider-chat surface, or {@code null} to 404 {@code .../messages}
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,
@@ -225,6 +305,24 @@ public final class ManagementApi implements HttpHandler {
      * backed by {@code githubAuth} (token precedence + login validation) and {@code githubScan}
      * (whose TTL cache is invalidated after any token change so the next org scan picks it up
      * immediately, no restart required).
+     *
+     * @param providerIds every provider id currently routable, read fresh on each request
+     * @param admin the account surface every {@code /accounts} route delegates to
+     * @param json the codec every request and response body is read and written with
+     * @param source lists and downloads installable provider jars
+     * @param providersDir where a downloaded provider jar lands on disk
+     * @param holder refreshed after a download, so a new provider is routable without a restart
+     * @param routing the routing surface, or {@code null} to 404 the {@code /api/routing} routes
+     * @param quota the quota surface, or {@code null} to 404 {@code .../quota/refresh}
+     * @param config the provider-config surface, or {@code null} to 404 {@code .../config}
+     * @param oauth the OAuth-login surface, or {@code null} to 404 the {@code /oauth} routes
+     * @param proxy the proxy-management surface, or {@code null} to 404 {@code /api/proxies*}
+     * @param proxySource lists and downloads installable proxy jars, or {@code null} to 404 those routes
+     * @param proxyHolder resolves an {@code ?app=} query to an installed proxy's routing profile
+     * @param proxiesDir where a downloaded proxy jar lands on disk
+     * @param messages the direct-provider-chat surface, or {@code null} to 404 {@code .../messages}
+     * @param githubAuth the GitHub credential surface, or {@code null} to 404 the {@code /api/github} routes
+     * @param githubScan scans a GitHub owner for installable jars, or {@code null} to 404 those routes
      */
     public ManagementApi(Supplier<List<String>> providerIds, AccountAdmin admin, JsonCodec json,
                           ProviderSource source, Path providersDir, ProviderRegistryHolder holder,

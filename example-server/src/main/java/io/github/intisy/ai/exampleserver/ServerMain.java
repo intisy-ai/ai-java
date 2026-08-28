@@ -53,6 +53,12 @@ public final class ServerMain {
     private ServerMain() {
     }
 
+    /**
+     * Assembles the server from the {@code exampleserver.*} system properties and serves.
+     *
+     * @param args ignored; every choice is a system property
+     * @throws Exception when the chosen storage or the port cannot be worked with
+     */
     public static void main(String[] args) throws Exception {
         int port = Integer.parseInt(System.getProperty("exampleserver.port", "8787"));
         Store store = chooseStore();

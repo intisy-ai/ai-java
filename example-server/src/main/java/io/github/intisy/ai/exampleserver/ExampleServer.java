@@ -44,6 +44,10 @@ public final class ExampleServer {
      * Binds {@code 127.0.0.1:port} ({@code port == 0} picks an ephemeral port) and starts serving
      * {@code /healthz}, {@code /api} (routed to {@code api}), and {@code /} (the dashboard). Pass
      * {@code null} for {@code api} to skip the management context entirely.
+     *
+     * @param port the port to bind, or 0 for an ephemeral one
+     * @param api the management handler, or {@code null} to serve no {@code /api} context
+     * @return the started server
      */
     public static ExampleServer start(int port, HttpHandler api) {
         HttpServer http;
@@ -63,10 +67,12 @@ public final class ExampleServer {
         return new ExampleServer(http, http.getAddress().getPort(), executor);
     }
 
+    /** {@return the port actually bound, which an ephemeral request only learns from here} */
     public int port() {
         return port;
     }
 
+    /** Stops serving and shuts the request pool down. */
     public void stop() {
         http.stop(0);
         executor.shutdownNow();

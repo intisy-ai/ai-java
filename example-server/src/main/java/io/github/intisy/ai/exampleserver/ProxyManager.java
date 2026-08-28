@@ -38,6 +38,14 @@ public final class ProxyManager {
     private final Map<String, ProxyServer> running = new ConcurrentHashMap<>();
     private final Map<String, String> lastError = new ConcurrentHashMap<>();
 
+    /**
+     * @param ai the assembly a started proxy routes through
+     * @param providerHolder resolves the providers a started proxy may choose from
+     * @param proxyHolder resolves an installed proxy's own routing profile
+     * @param store where the per-proxy port and enabled flag live
+     * @param json the codec that document is read and written with
+     * @param log where a failed start is reported
+     */
     public ProxyManager(AiJava ai, ProviderRegistryHolder providerHolder, ProxyRegistryHolder proxyHolder,
                          Store store, JsonCodec json, Logger log) {
         this.ai = ai;
@@ -48,6 +56,7 @@ public final class ProxyManager {
         this.log = log;
     }
 
+    /** {@return the status of every installed proxy, running or not} */
     public List<ProxyStatus> list() {
         List<ProxyStatus> out = new ArrayList<>();
         Map<String, Object> defs = readDefs();
@@ -57,6 +66,12 @@ public final class ProxyManager {
         return out;
     }
 
+    /**
+     * {@return that proxy's status after the change}
+     *
+     * @param id the proxy to change
+     * @param port the port it should listen on next time it starts
+     */
     public ProxyStatus setPort(String id, int port) {
         requireInstalled(id);
         Map<String, Object> defs = readDefs();
@@ -67,6 +82,11 @@ public final class ProxyManager {
         return status(id, defs, lastError.get(id));
     }
 
+    /**
+     * {@return that proxy's status, carrying the reason when the start failed}
+     *
+     * @param id the proxy to start
+     */
     public ProxyStatus start(String id) {
         requireInstalled(id);
         RoutingProfile profile = proxyHolder.profileFor(id);
@@ -104,6 +124,11 @@ public final class ProxyManager {
         }
     }
 
+    /**
+     * {@return that proxy's status after being stopped and marked disabled}
+     *
+     * @param id the proxy to stop
+     */
     public ProxyStatus stop(String id) {
         requireInstalled(id);
         ProxyServer server = running.remove(id);
@@ -117,6 +142,7 @@ public final class ProxyManager {
         return status(id, defs, null);
     }
 
+    /** Starts every proxy marked enabled, best-effort: a failure is captured in its status. */
     public void startEnabledOnBoot() {
         Map<String, Object> defs = readDefs();
         for (String id : proxyHolder.listProxyIds()) {
@@ -127,6 +153,7 @@ public final class ProxyManager {
         }
     }
 
+    /** Stops every running proxy, ignoring a proxy that fails to stop cleanly. */
     public void stopAll() {
         for (ProxyServer s : running.values()) {
             try {
@@ -185,12 +212,19 @@ public final class ProxyManager {
         store.put(STORE_KEY, json.stringify(defs));
     }
 
+    /** What the console shows for one installed proxy. */
     public static final class ProxyStatus {
+        /** The proxy's id. */
         public String id;
+        /** The name the proxy declares for itself. */
         public String displayName;
+        /** The port it listens on, or would listen on. */
         public int port;
+        /** Whether it is serving right now. */
         public boolean running;
-        public boolean routing; // true -> render a tier routing surface for this proxy
+        /** Whether it declares a routing profile, so a tier surface can be rendered for it. */
+        public boolean routing;
+        /** Why the last start failed, or null when nothing has failed. */
         public String error;
     }
 }

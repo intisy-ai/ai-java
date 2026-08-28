@@ -37,6 +37,12 @@ public class RoutingAdmin {
     private final Logger log;
     private final String configDir;
 
+    /**
+     * @param store where the admin's own documents live
+     * @param json the codec those documents are read and written with
+     * @param holder resolves a provider id to the discovered provider
+     * @param log where the admin reports what it did
+     */
     public RoutingAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.store = store;
         this.json = json;
@@ -49,6 +55,8 @@ public class RoutingAdmin {
      * Calls the provider's typed {@link ModelCatalogProvider#models} and merges the result into
      * {@code models.json} under {@code providerId}, preserving every other provider's entry.
      *
+     * @param providerId the provider to ask for its model catalog
+     * @return the discovered catalog, as it was written to the store
      * @throws IllegalArgumentException if the provider id is unknown, or the provider does not
      *                                   implement {@link ModelCatalogProvider} (discover is an
      *                                   explicit user action; erroring is fine)
@@ -105,7 +113,7 @@ public class RoutingAdmin {
         return result;
     }
 
-    /** Raw {@code models.json}, or {@code "{}"} if never populated. */
+    /** {@return the raw stored catalog, or an empty JSON object when nothing has populated it} */
     public String catalogJson() {
         String raw = store.get(CATALOG_KEY);
         return raw != null ? raw : "{}";
@@ -115,6 +123,8 @@ public class RoutingAdmin {
      * Removes {@code providerId}'s entry from the stored catalog ({@code models.json}), no-op if
      * absent. Called after a successful uninstall so a later reinstall discovers a fresh catalog
      * instead of reading back whatever the old install last cached.
+     *
+     * @param providerId the provider whose catalog entry is dropped
      */
     public void removeFromCatalog(String providerId) {
         Map<String, Object> catalog = readCatalog();
@@ -126,6 +136,9 @@ public class RoutingAdmin {
     /**
      * {@code {tiers: <declared union detected tier names>, map: <raw stored tier map>}} for the
      * given profile's config file.
+     *
+     * @param profile whose config file the stored map is read from
+     * @return the declared and detected tiers, with the raw stored map
      */
     public Map<String, Object> modelMapView(RoutingProfile profile) {
         Map<String, Object> view = new LinkedHashMap<>();
@@ -158,6 +171,10 @@ public class RoutingAdmin {
      * Every {@code provider} must be one of {@link ProviderRegistryHolder#listProviderIds()}
      * (unknown -&gt; throws); an unknown {@code model} for an otherwise-known provider is not
      * fatal (the router self-heals it) but is surfaced back as a warning.
+     *
+     * @param profile whose config file the map is written to
+     * @param map the full tier to chain map to persist
+     * @return {@code {ok, warnings}}, the warnings naming every unknown model
      */
     public Map<String, Object> putModelMap(RoutingProfile profile, Map<String, Object> map) {
         List<String> providerIds = holder.listProviderIds();

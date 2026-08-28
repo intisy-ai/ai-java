@@ -50,6 +50,11 @@ public final class GithubAuth {
     /** In-memory only: the last token {@link #detectFromGhCli} read from {@code gh auth token}. */
     private volatile String ghToken;
 
+    /**
+     * Credentials read from the environment and, on demand, from the {@code gh} CLI.
+     *
+     * @param json the codec the GitHub responses are read with
+     */
     public GithubAuth(JsonCodec json) {
         this(json, GithubAuth::envToken, GithubAuth::realGhAuthToken, GithubAuth::realHttpGet);
     }
@@ -69,8 +74,10 @@ public final class GithubAuth {
         }
     }
 
-    /** The current effective token per the manual &gt; env &gt; gh precedence, or {@code null} if
-     *  none of the three tiers currently supplies one. */
+    /**
+     * {@return the effective token per the manual &gt; env &gt; gh precedence, or {@code null}
+     * when none of the three tiers supplies one}
+     */
     public String token() {
         String manual = manualToken;
         if (isSet(manual)) return manual;
@@ -80,8 +87,10 @@ public final class GithubAuth {
         return isSet(gh) ? gh : null;
     }
 
-    /** Which precedence tier is currently supplying {@link #token()}: {@code "manual"}, {@code
-     *  "env"}, {@code "gh"}, or {@code "none"}. */
+    /**
+     * {@return which tier supplies {@link #token()}: {@code "manual"}, {@code "env"},
+     * {@code "gh"} or {@code "none"}}
+     */
     public String source() {
         if (isSet(manualToken)) return "manual";
         if (isSet(envTokenSupplier.get())) return "env";
@@ -89,8 +98,11 @@ public final class GithubAuth {
         return "none";
     }
 
-    /** Sets/replaces the in-memory manual token. A null/blank value clears it, falling back to the
-     *  env/gh tiers. Never written to disk. */
+    /**
+     * Sets or replaces the in-memory manual token. Never written to disk.
+     *
+     * @param t the token, or null or blank to clear it and fall back to the env and gh tiers
+     */
     public void setManualToken(String t) {
         manualToken = isSet(t) ? t.trim() : null;
     }
@@ -100,6 +112,8 @@ public final class GithubAuth {
      * token. Handles {@code gh} missing or the process erroring/timing out gracefully: returns
      * {@code false}, never throws, never logs the attempted output. Returns {@code true} only when
      * the command produced a non-empty token.
+     *
+     * @return whether a non-empty token was detected
      */
     public boolean detectFromGhCli() {
         String out = ghCliRunner.get();
@@ -116,6 +130,8 @@ public final class GithubAuth {
      * and returns the {@code login} field -- this both validates the token and yields the username
      * for status display. Returns {@code null} when there is no token, on a 401/error response, or
      * on any network/parse failure. Never logs the token or the raw response body.
+     *
+     * @return the authenticated login, or {@code null} when the token is absent or rejected
      */
     public String validateLogin() {
         String t = token();

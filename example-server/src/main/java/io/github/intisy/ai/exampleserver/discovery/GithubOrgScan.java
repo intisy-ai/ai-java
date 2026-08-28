@@ -42,12 +42,24 @@ public final class GithubOrgScan {
      *  {@code "v1.5.1"} -> {@code "1.5.1"}), or {@code null} when the release carried no
      *  {@code tag_name}. */
     public static final class Asset {
+        /** The repo the release belongs to. */
         public final String repoName;
+        /** The asset's file name. */
         public final String assetName;
+        /** Where the asset is fetched from. */
         public final String downloadUrl;
+        /** What the asset is: {@code "provider"} or {@code "proxy"}. */
         public final String kind;
+        /** The release tag with a leading {@code v} stripped, or null when it carried none. */
         public final String version;
 
+        /**
+         * @param repoName the repo the release belongs to
+         * @param assetName the asset's file name
+         * @param downloadUrl where the asset is fetched from
+         * @param kind {@code "provider"} or {@code "proxy"}
+         * @param version the release tag with a leading {@code v} stripped, or null
+         */
         public Asset(String repoName, String assetName, String downloadUrl, String kind, String version) {
             this.repoName = repoName;
             this.assetName = assetName;
@@ -76,6 +88,11 @@ public final class GithubOrgScan {
     private volatile List<Asset> cached;
     private volatile long cachedAt = Long.MIN_VALUE;
 
+    /**
+     * A scan authenticated from the environment.
+     *
+     * @param json the codec the GitHub responses are read with
+     */
     public GithubOrgScan(JsonCodec json) {
         this(json, GithubOrgScan::realHttpGet, System::currentTimeMillis, GithubOrgScan::envToken);
     }
@@ -85,6 +102,9 @@ public final class GithubOrgScan {
      * the plain env-var lookup -- read fresh at the start of every scan/find (see {@link
      * #httpGet}), so connecting/changing a token from the console takes effect on the very next
      * scan, no restart required.
+     *
+     * @param json the codec the GitHub responses are read with
+     * @param tokenSupplier read fresh at the start of every scan
      */
     public GithubOrgScan(JsonCodec json, Supplier<String> tokenSupplier) {
         this(json, GithubOrgScan::realHttpGet, System::currentTimeMillis, tokenSupplier);
@@ -109,6 +129,8 @@ public final class GithubOrgScan {
      * is treated the same as a failure -- it does NOT overwrite a still-fresh good cache, since an
      * empty result is far more often a transient rate-limit/network hiccup than an org that
      * genuinely dropped every asset.
+     *
+     * @return every classified asset, or an empty list when nothing is known
      */
     public List<Asset> scan() {
         long now = clock.getAsLong();
@@ -142,6 +164,9 @@ public final class GithubOrgScan {
      * Targeted, uncached lookup of a single repo's latest release -- backs {@code find(name)} on
      * both sources so an install still works even when the cached org-wide scan is empty or
      * stale. Never throws; yields an empty list on any failure.
+     *
+     * @param repoName the repo whose latest release is read
+     * @return its classified assets, or an empty list on any failure
      */
     public List<Asset> scanRepo(String repoName) {
         try {
@@ -158,6 +183,11 @@ public final class GithubOrgScan {
      * maliciously-named asset (e.g. {@code ../evil.jar}) can't escape {@code dir}. Also records
      * {@code asset.version} in a {@code <jar>.version} sidecar file next to it (see {@link
      * InstalledVersions}) -- a no-op when the release carried no {@code tag_name} (version null).
+     *
+     * @param asset the asset to download
+     * @param dir where the jar is written
+     * @return the path written
+     * @throws IOException when the download or the write fails
      */
     public Path download(Asset asset, Path dir) throws IOException {
         Path target = dir.resolve(java.nio.file.Paths.get(asset.assetName).getFileName().toString());

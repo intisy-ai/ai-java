@@ -17,11 +17,20 @@ public final class GithubOrgProxySource implements ProxySource {
 
     private final GithubOrgScan scan;
 
+    /**
+     * A source that scans the GitHub owner for installable proxy jars.
+     *
+     * @param json the codec the GitHub responses are read with
+     */
     public GithubOrgProxySource(JsonCodec json) {
         this(new GithubOrgScan(json));
     }
 
-    /** Shares one scan instance so the org is scanned once for both providers and proxies. */
+    /**
+     * Shares one scan instance so the owner is scanned once for both providers and proxies.
+     *
+     * @param scan the scan to read this source's assets out of
+     */
     public GithubOrgProxySource(GithubOrgScan scan) {
         this.scan = scan;
     }

@@ -32,6 +32,12 @@ public final class ConfigAdmin {
     private final String configDir;
     private final Store store;
 
+    /**
+     * @param store where the admin's own documents live
+     * @param json the codec those documents are read and written with
+     * @param holder resolves a provider id to the discovered provider
+     * @param log where the admin reports what it did
+     */
     public ConfigAdmin(Store store, JsonCodec json, ProviderRegistryHolder holder, Logger log) {
         this.holder = holder;
         this.json = json;
@@ -40,7 +46,12 @@ public final class ConfigAdmin {
         this.store = store;
     }
 
-    /** {@code {groups,values}}, or {@code null} if the provider has no config surface. */
+    /**
+     * {@return the provider's {@code {groups,values}}, or {@code null} when it has no config
+     * surface}
+     *
+     * @param providerId the provider to ask
+     */
     public Map<String, Object> getConfig(String providerId) {
         ConfigurableProvider cp = resolveConfigurable(providerId);
         if (cp == null) return null;
@@ -52,7 +63,12 @@ public final class ConfigAdmin {
         return result;
     }
 
-    /** Persists {@code values} via the provider and returns its re-read {@code {values}}. */
+    /**
+     * {@return the provider's own re-read {@code {values}} after the write}
+     *
+     * @param providerId the provider to write through
+     * @param values the settings to persist
+     */
     public Map<String, Object> putConfig(String providerId, Map<String, Object> values) {
         Provider p = holder.get(providerId);
         if (p == null) {

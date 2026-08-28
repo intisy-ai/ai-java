@@ -27,6 +27,11 @@ public final class ServerProfile {
     private ServerProfile() {
     }
 
+    /**
+     * {@return a profile whose tiers are the ones the echo provider's catalog names}
+     *
+     * @param configFile the store key the profile reads its routing from
+     */
     public static RoutingProfile echoTiers(String configFile) {
         RoutingProfile profile = new RoutingProfile();
         profile.configFile = configFile;
