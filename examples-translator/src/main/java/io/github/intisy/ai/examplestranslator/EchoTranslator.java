@@ -25,6 +25,7 @@ import java.util.List;
  */
 public final class EchoTranslator implements Translator {
 
+    /** The model this translator reports when a wire request names none. */
     public static final String MODEL = "echo-model";
 
     @Override

@@ -25,14 +25,21 @@ public final class HandleIrPresetRetryHeaderProvider implements Provider {
     /** The provider id this instance serves. */
     public static final String ID = "handleir-retry-header-preset";
 
+    /** The status the thrown exception carries. */
     public static final int STATUS = 429;
+    /** The retry header this provider sets itself, which nothing downstream may clobber. */
     public static final String PRESET_HEADER_VALUE = "999";
+    /** The body the thrown exception carries. */
     public static final String BODY = "{"
             + "\"type\":\"error\","
             + "\"error\":{\"type\":\"rate_limit_error\",\"message\":\"already has a retry header\"}"
             + "}";
-    // Deliberately different from PRESET_HEADER_VALUE, so a clobber would be caught by a test
-    // asserting the header still reads PRESET_HEADER_VALUE.
+    /**
+     * The retry hint the thrown exception carries, in milliseconds.
+     *
+     * @implNote Deliberately different from {@link #PRESET_HEADER_VALUE}, so a clobber is
+     * caught by a test asserting the header still reads that value.
+     */
     public static final long RETRY_AFTER_MS = 123_456L;
 
     @Override

@@ -24,13 +24,18 @@ public final class HandleIrRateLimitedProvider implements Provider {
     /** The provider id this instance serves. */
     public static final String ID = "handleir-ratelimited";
 
+    /** The status the thrown exception carries. */
     public static final int STATUS = 429;
+    /** The header name the thrown exception carries. */
     public static final String HEADER_NAME = "retry-after";
+    /** The header value the thrown exception carries. */
     public static final String HEADER_VALUE = "7";
+    /** The body the thrown exception carries. */
     public static final String BODY = "{"
             + "\"type\":\"error\","
             + "\"error\":{\"type\":\"rate_limit_error\",\"message\":\"handleIr rate limited\"}"
             + "}";
+    /** The retry hint the thrown exception carries, in milliseconds. */
     public static final long RETRY_AFTER_MS = 45_000L;
 
     @Override
