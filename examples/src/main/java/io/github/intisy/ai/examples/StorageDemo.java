@@ -30,10 +30,18 @@ public final class StorageDemo {
 
     /** The observable outcome of the shared routine, so all three backends can be compared for parity. */
     public static final class Result {
+        /** What the store answered for the key the demo wrote. */
         public final String storedValue;
+        /** The status a request routed against that store produced. */
         public final int routedStatus;
+        /** The body that request produced. */
         public final String routedBody;
 
+        /**
+         * @param storedValue what the store answered
+         * @param routedStatus the routed request's status
+         * @param routedBody the routed request's body
+         */
         public Result(String storedValue, int routedStatus, String routedBody) {
             this.storedValue = storedValue;
             this.routedStatus = routedStatus;
@@ -41,6 +49,11 @@ public final class StorageDemo {
         }
     }
 
+    /**
+     * Runs the same round trip against each storage backend and prints every outcome.
+     *
+     * @throws IOException when a temp directory cannot be worked with
+     */
     public static void run() throws IOException {
         Section.header("StorageDemo - storage is an explicit, swappable choice");
 
@@ -71,6 +84,12 @@ public final class StorageDemo {
      * The backend-agnostic routine both the demo and the parity test run: a put/update/get round
      * trip plus a routed request. Nothing here mentions a specific backend, only the {@link Store}
      * passed in differs.
+     */
+    /**
+     * One write-read-route round trip, which every storage backend must answer identically.
+     *
+     * @param store the storage to exercise
+     * @return what that storage answered
      */
     public static Result roundTrip(Store store) {
         AiJava app = AiJava.builder().storage(store).build();

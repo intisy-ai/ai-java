@@ -26,6 +26,10 @@ public final class DemoProfiles {
      * Anthropic-shaped {@code rate_limit_error} body, what a client sees when the whole tier is
      * rate-limited. The store's model map (see {@link DemoSeeds}) decides which providers back each
      * tier; this profile only describes the tier vocabulary and the exhaustion response.
+     *
+     * @param configFile the store key the profile reads its routing from
+     * @param tierSourceProvider the provider whose catalog names the tiers
+     * @return the profile
      */
     public static RoutingProfile multiTier(String configFile, String tierSourceProvider) {
         RoutingProfile profile = new RoutingProfile();

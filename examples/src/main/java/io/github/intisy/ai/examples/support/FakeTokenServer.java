@@ -45,6 +45,13 @@ public final class FakeTokenServer implements Closeable {
     /**
      * Starts a server on an ephemeral port. {@code revokedRefreshToken} refresh attempts get an
      * {@code invalid_grant} 400; any other refresh token gets {@code issuedAccessToken} back.
+     *
+     * @param issuedAccessToken the access token a successful refresh returns
+     * @param issuedRefreshToken the rotated refresh token it returns with it
+     * @param expiresInSeconds the lifetime it reports for the issued access token
+     * @param revokedRefreshToken the one refresh token that is answered {@code invalid_grant}
+     * @return the started server, which must be closed
+     * @throws IOException when the ephemeral port cannot be bound
      */
     public static FakeTokenServer start(String issuedAccessToken, String issuedRefreshToken,
                                         long expiresInSeconds, String revokedRefreshToken) throws IOException {
@@ -75,11 +82,12 @@ public final class FakeTokenServer implements Closeable {
         respond(exchange, 200, body);
     }
 
+    /** {@return the endpoint a provider's OAuth configuration should point at} */
     public String tokenUrl() {
         return tokenUrl;
     }
 
-    /** How many refresh POSTs the endpoint received, lets a test assert the real network call happened. */
+    /** {@return how many refresh POSTs the endpoint received, proving the call was real} */
     public int refreshRequestCount() {
         return refreshRequestCount;
     }

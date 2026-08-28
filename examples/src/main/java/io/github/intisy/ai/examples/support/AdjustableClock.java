@@ -13,6 +13,11 @@ public final class AdjustableClock implements Clock {
 
     private long nowMs;
 
+    /**
+     * A clock a demo moves by hand, so a cooldown can be crossed without waiting.
+     *
+     * @param startMs the instant the clock starts at
+     */
     public AdjustableClock(long startMs) {
         this.nowMs = startMs;
     }
@@ -23,6 +28,11 @@ public final class AdjustableClock implements Clock {
     }
 
     /** Moves the clock forward by {@code deltaMs} (e.g. to step past a rate-limit reset time). */
+    /**
+     * Moves the clock forward.
+     *
+     * @param deltaMs how far forward, in milliseconds
+     */
     public void advanceBy(long deltaMs) {
         this.nowMs += deltaMs;
     }

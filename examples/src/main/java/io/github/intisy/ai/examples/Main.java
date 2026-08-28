@@ -16,6 +16,12 @@ public final class Main {
     private Main() {
     }
 
+    /**
+     * Runs every demo in turn.
+     *
+     * @param args ignored; each demo stages its own temp directories
+     * @throws Exception when any demo cannot complete its walk
+     */
     public static void main(String[] args) throws Exception {
         System.out.println("ai-java :examples - full :jvm API walkthrough");
 

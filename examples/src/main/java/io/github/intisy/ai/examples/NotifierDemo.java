@@ -28,6 +28,7 @@ public final class NotifierDemo {
 
     private static final String CONFIG_FILE = "examples-notifier.json";
     /** The path (relative to the store's config folder) the JsonlNotifier appends to. */
+    /** Where the store-derived notifier writes, relative to the config directory. */
     public static final String NOTIFICATIONS_RELATIVE_PATH = "../cache/auth-notifications.jsonl";
 
     private NotifierDemo() {
@@ -35,15 +36,26 @@ public final class NotifierDemo {
 
     /** What the default notifier produced, captured before the temp store is deleted. */
     public static final class Result {
+        /** The notifier class the host resolved from the chosen storage. */
         public final String notifierType;
+        /** Everything that notifier wrote. */
         public final String jsonlContent;
 
+        /**
+         * @param notifierType the notifier class the host resolved
+         * @param jsonlContent everything it wrote
+         */
         public Result(String notifierType, String jsonlContent) {
             this.notifierType = notifierType;
             this.jsonlContent = jsonlContent;
         }
     }
 
+    /**
+     * Runs the walk and prints every outcome.
+     *
+     * @throws IOException when the temp store cannot be worked with
+     */
     public static void run() throws IOException {
         Result result = execute();
 
@@ -53,6 +65,12 @@ public final class NotifierDemo {
         Section.detail("  " + result.jsonlContent.trim());
     }
 
+    /**
+     * Runs the walk without printing, so a test can assert on what was written.
+     *
+     * @return the resolved notifier and what it wrote
+     * @throws IOException when the temp store cannot be worked with
+     */
     public static Result execute() throws IOException {
         try (Workspace workspace = Workspace.create("examples-notifier-")) {
             Path configFolder = workspace.resolve("config");

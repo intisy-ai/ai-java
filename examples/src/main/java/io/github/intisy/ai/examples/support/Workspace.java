@@ -20,14 +20,27 @@ public final class Workspace implements Closeable {
         this.root = root;
     }
 
+    /**
+     * A temp directory that deletes itself, so a demo never writes into a real home.
+     *
+     * @param prefix the temp directory's name prefix
+     * @return the workspace, which must be closed
+     * @throws IOException when the directory cannot be created
+     */
     public static Workspace create(String prefix) throws IOException {
         return new Workspace(Files.createTempDirectory(prefix));
     }
 
+    /** {@return the workspace's own directory} */
     public Path root() {
         return root;
     }
 
+    /**
+     * {@return one path inside the workspace}
+     *
+     * @param name the entry to resolve
+     */
     public Path resolve(String name) {
         return root.resolve(name);
     }

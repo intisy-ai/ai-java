@@ -16,6 +16,11 @@ public final class RecordingJsonCodec implements JsonCodec {
     private final AtomicInteger parseCount = new AtomicInteger();
     private final AtomicInteger stringifyCount = new AtomicInteger();
 
+    /**
+     * A JSON codec that counts calls and otherwise changes nothing.
+     *
+     * @param delegate the codec every call is passed to
+     */
     public RecordingJsonCodec(JsonCodec delegate) {
         this.delegate = delegate;
     }
@@ -32,10 +37,12 @@ public final class RecordingJsonCodec implements JsonCodec {
         return delegate.stringify(value);
     }
 
+    /** {@return how many documents have been parsed through this codec} */
     public int parseCount() {
         return parseCount.get();
     }
 
+    /** {@return how many values have been stringified through this codec} */
     public int stringifyCount() {
         return stringifyCount.get();
     }

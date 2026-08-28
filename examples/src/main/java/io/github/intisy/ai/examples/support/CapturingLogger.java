@@ -17,6 +17,11 @@ public final class CapturingLogger implements Logger {
     private final String prefix;
     private final List<String> lines = new ArrayList<>();
 
+    /**
+     * A logger that keeps every line instead of printing it.
+     *
+     * @param prefix prepended to each captured line
+     */
     public CapturingLogger(String prefix) {
         this.prefix = prefix;
     }
@@ -47,6 +52,7 @@ public final class CapturingLogger implements Logger {
     }
 
     /** The captured lines (already prefixed), in order. */
+    /** {@return every line this logger captured, in order} */
     public List<String> lines() {
         return Collections.unmodifiableList(lines);
     }

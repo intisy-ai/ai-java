@@ -11,6 +11,12 @@ public final class Requests {
     }
 
     /** A POST whose JSON body names the requested {@code model} (what the router classifies into a tier). */
+    /**
+     * A messages request for one model, in the wire shape a demo's translator decodes.
+     *
+     * @param model the model to ask for
+     * @return the request
+     */
     public static HttpRequest messages(String model) {
         HttpRequest request = new HttpRequest();
         request.method = "POST";
@@ -20,6 +26,12 @@ public final class Requests {
         return request;
     }
 
+    /**
+     * A plain GET.
+     *
+     * @param url what to fetch
+     * @return the request
+     */
     public static HttpRequest get(String url) {
         HttpRequest request = new HttpRequest();
         request.method = "GET";

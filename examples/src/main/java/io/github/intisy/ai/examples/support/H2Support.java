@@ -17,6 +17,7 @@ public final class H2Support {
     private H2Support() {
     }
 
+    /** {@return an in-memory H2 data source, so the JDBC storage demo needs no server} */
     public static DataSource inMemoryDataSource() {
         JdbcDataSource dataSource = new JdbcDataSource();
         dataSource.setURL("jdbc:h2:mem:examples-" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");

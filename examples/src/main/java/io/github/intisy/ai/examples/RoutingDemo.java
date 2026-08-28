@@ -34,11 +34,21 @@ public final class RoutingDemo {
 
     /** The four routed responses, so a test can assert each behavior without parsing stdout. */
     public static final class Result {
+        /** The response a request served by its first-choice provider produced. */
         public final HttpResponse normal;
+        /** The response produced once the first choice answered a rate limit. */
         public final HttpResponse fallback;
+        /** The response produced once every provider in the chain was exhausted. */
         public final HttpResponse exhaustion;
+        /** The model listing the router answered. */
         public final HttpResponse models;
 
+        /**
+         * @param normal the first-choice response
+         * @param fallback the response after a rate limit moved the request on
+         * @param exhaustion the response once the whole chain was exhausted
+         * @param models the model listing
+         */
         public Result(HttpResponse normal, HttpResponse fallback, HttpResponse exhaustion, HttpResponse models) {
             this.normal = normal;
             this.fallback = fallback;
@@ -47,6 +57,12 @@ public final class RoutingDemo {
         }
     }
 
+    /**
+     * Runs the walk and prints every outcome.
+     *
+     * @param providersDir the directory the provider jars are staged in
+     * @throws IOException when the staged jars or the temp store cannot be read
+     */
     public static void run(Path providersDir) throws IOException {
         Result result = execute(providersDir);
 
@@ -62,6 +78,13 @@ public final class RoutingDemo {
     }
 
     /** Routes the four scenarios through jar-loaded providers and returns their responses. */
+    /**
+     * Runs the walk without printing, so a test can assert on each response.
+     *
+     * @param providersDir the directory the provider jars are staged in
+     * @return the four responses the walk produced
+     * @throws IOException when the staged jars or the temp store cannot be read
+     */
     public static Result execute(Path providersDir) throws IOException {
         try (AiJava app = AiJava.builder().storage(Storage.memory()).providersDir(providersDir).build()) {
             Store store = app.store();

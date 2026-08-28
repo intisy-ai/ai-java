@@ -22,6 +22,7 @@ public final class InProcessProviders {
     private InProcessProviders() {
     }
 
+    /** {@return a resolver over providers written here, needing no jar on disk} */
     public static HandlerResolver resolver() {
         Map<String, ProxyHandler> registry = new HashMap<>();
         registry.put("rl", (request, ctx) -> {
@@ -41,6 +42,7 @@ public final class InProcessProviders {
         return HandlerResolvers.fromWireHandlers(registry);
     }
 
+    /** {@return the id of every in-process provider, in the order the resolver offers them} */
     public static List<String> ids() {
         return Arrays.asList("rl", "ok");
     }

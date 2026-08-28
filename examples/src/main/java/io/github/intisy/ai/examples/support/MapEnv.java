@@ -15,6 +15,11 @@ public final class MapEnv implements Env {
 
     private final Map<String, String> values;
 
+    /**
+     * An environment lookup backed by a map, so nothing reads the real process.
+     *
+     * @param values the variables this environment knows
+     */
     public MapEnv(Map<String, String> values) {
         this.values = new HashMap<>(values);
     }

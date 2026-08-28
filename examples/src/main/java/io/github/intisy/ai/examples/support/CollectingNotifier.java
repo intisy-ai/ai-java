@@ -16,9 +16,15 @@ public final class CollectingNotifier implements Notifier {
 
     /** One collected notice: the message and the level the engine tagged it with. */
     public static final class Notice {
+        /** What was announced. */
         public final String message;
+        /** How urgent the announcement was. */
         public final String level;
 
+        /**
+         * @param message what was announced
+         * @param level how urgent it was
+         */
         public Notice(String message, String level) {
             this.message = message;
             this.level = level;
@@ -32,6 +38,7 @@ public final class CollectingNotifier implements Notifier {
         notices.add(new Notice(message, level));
     }
 
+    /** {@return every notice this notifier collected, in order} */
     public List<Notice> notices() {
         return Collections.unmodifiableList(notices);
     }

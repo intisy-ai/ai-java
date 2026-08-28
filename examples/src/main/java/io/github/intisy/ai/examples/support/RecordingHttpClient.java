@@ -18,6 +18,11 @@ public final class RecordingHttpClient implements HttpClient {
     private final HttpClient delegate;
     private final AtomicInteger sendCount = new AtomicInteger();
 
+    /**
+     * An HTTP client that counts calls and otherwise changes nothing.
+     *
+     * @param delegate the client every call is passed to
+     */
     public RecordingHttpClient(HttpClient delegate) {
         this.delegate = delegate;
     }
@@ -28,6 +33,7 @@ public final class RecordingHttpClient implements HttpClient {
         return delegate.send(request);
     }
 
+    /** {@return how many requests have been sent through this client} */
     public int sendCount() {
         return sendCount.get();
     }

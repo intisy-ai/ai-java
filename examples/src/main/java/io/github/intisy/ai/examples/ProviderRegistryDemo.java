@@ -29,6 +29,12 @@ public final class ProviderRegistryDemo {
     private ProviderRegistryDemo() {
     }
 
+    /**
+     * Discovers the staged jars twice and prints what each pass found.
+     *
+     * @param providersDir the directory the provider jars are staged in
+     * @throws IOException when the staged jars cannot be read
+     */
     public static void run(Path providersDir) throws IOException {
         Section.header("ProviderRegistryDemo - discover provider jars via ServiceLoader");
         Section.detail("scanning providers directory: " + providersDir);
@@ -56,6 +62,13 @@ public final class ProviderRegistryDemo {
     }
 
     /** Discovers the provider ids from a fresh AiJava over the given directory (used by tests). */
+    /**
+     * One discovery pass, closing the instance so the jar class loader is released.
+     *
+     * @param providersDir the directory the provider jars are staged in
+     * @return the id of every provider discovered, in discovery order
+     * @throws IOException when the staged jars cannot be read
+     */
     public static List<String> discover(Path providersDir) throws IOException {
         try (AiJava app = AiJava.builder().storage(Storage.memory()).providersDir(providersDir).build()) {
             return app.providerRegistry().listProviderIds();

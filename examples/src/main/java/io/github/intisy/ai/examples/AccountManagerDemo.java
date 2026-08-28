@@ -36,7 +36,9 @@ public final class AccountManagerDemo {
     private static final String LANE = "chat";
     private static final String STICKY_PROVIDER = "sticky-provider";
     private static final String STICKY_LANE = "sticky";
+    /** Where the demo's adjustable clock starts, so every printed timestamp is reproducible. */
     public static final long CLOCK_START_MS = 1_700_000_000_000L;
+    /** How long the demo's simulated rate limit lasts. */
     public static final long RATE_LIMIT_MS = 60_000L;
     private static final long ONE_DAY_MS = 86_400_000L;
 
@@ -45,26 +47,47 @@ public final class AccountManagerDemo {
 
     /** Every observable outcome of the walk, captured before the temp store is deleted. */
     public static final class Result {
+        /** The account the first acquire chose. */
         public String acquiredEmail;
+        /** Whether a second acquire was refused while the account was cooling down. */
         public boolean acquireBlockedDuringCooldown;
+        /** When the account became available again after the rate limit was recorded. */
         public long nextAvailableAfterRateLimit;
+        /** Whether an acquire succeeded once the clock passed the cooldown. */
         public boolean acquireSucceededAfterReset;
+        /** When the account became available again after a transient-error backoff. */
         public long nextAvailableAfterBackoff;
+        /** When the account became available again after a success cleared the backoff. */
         public long nextAvailableAfterSuccess;
+        /** The access token a stored-refresh-token round trip returned. */
         public String refreshedAccessToken;
+        /** The rotated refresh token that round trip returned. */
         public String refreshedRefreshToken;
+        /** How many times the demo asked the token server to refresh. */
         public int refreshRequestCount;
+        /** Whether the revoked account is still enabled; null when it was never read. */
         public Boolean revokedAccountEnabled;
+        /** The reason a revoked refresh recorded when it disabled the account. */
         public String revokedDisabledReason;
+        /** The account store's raw contents, captured before the temp store is deleted. */
         public String accountsJson;
+        /** How many HTTP calls the whole walk made. */
         public int httpSendCount;
-        // STICKY selection, proven against a real 2-account pool.
+        /** The account STICKY selection chose first, against a real two-account pool. */
         public String stickyFirstAcquire;
+        /** The account the next STICKY acquire chose, which must be the same one. */
         public String stickySecondAcquire;
+        /** The account STICKY moved to once its first choice was rate-limited. */
         public String stickyAfterPrimaryRateLimited;
+        /** Whether STICKY refused to choose once both accounts were rate-limited. */
         public boolean stickyBlockedWhenAllRateLimited;
     }
 
+    /**
+     * Runs the walk and prints every outcome.
+     *
+     * @throws IOException when the temp store or the token server cannot be worked with
+     */
     public static void run() throws IOException {
         Result result = execute();
 
@@ -87,6 +110,12 @@ public final class AccountManagerDemo {
                 + "then returned null when both were rate-limited = " + result.stickyBlockedWhenAllRateLimited);
     }
 
+    /**
+     * Runs the walk without printing, so a test can assert on what it observed.
+     *
+     * @return every outcome, captured before the temp store is deleted
+     * @throws IOException when the temp store or the token server cannot be worked with
+     */
     public static Result execute() throws IOException {
         Result result = new Result();
         try (FakeTokenServer tokenServer = FakeTokenServer.start(

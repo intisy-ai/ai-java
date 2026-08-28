@@ -12,6 +12,11 @@ public final class FixedRandom implements Random {
 
     private final double value;
 
+    /**
+     * A randomness source with no randomness, so backoff jitter is reproducible.
+     *
+     * @param value the one value it ever returns
+     */
     public FixedRandom(double value) {
         this.value = value;
     }

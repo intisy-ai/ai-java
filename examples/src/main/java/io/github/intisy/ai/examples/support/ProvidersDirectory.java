@@ -13,12 +13,14 @@ import java.nio.file.Paths;
  */
 public final class ProvidersDirectory {
 
+    /** The system property the Gradle tasks set to where they staged the provider jars. */
     public static final String PROPERTY = "examples.providersDir";
 
     private ProvidersDirectory() {
     }
 
     /** The staged providers directory, or {@code null} if it cannot be found. */
+    /** {@return where the provider jars are staged, from the system property or a fallback} */
     public static Path locate() {
         String configured = System.getProperty(PROPERTY);
         if (configured != null && !configured.isEmpty()) {

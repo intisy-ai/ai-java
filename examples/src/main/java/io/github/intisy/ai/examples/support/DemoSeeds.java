@@ -35,6 +35,10 @@ public final class DemoSeeds {
      * </ul>
      * Every model id referenced by the map also exists in the catalog, so the map resolves without
      * self-healing, the chains route exactly as written.
+     *
+     * @param store the storage to seed
+     * @param json the codec the seeded documents are written with
+     * @param configFile the store key to write under
      */
     public static void seedJarRouting(Store store, JsonCodec json, String configFile) {
         Map<String, Object> catalog = new LinkedHashMap<>();
@@ -62,6 +66,10 @@ public final class DemoSeeds {
      * {@code HandlerResolver} (rl always 429, ok always serves) rather than the provider jar, used
      * where the point is storage/SPI swappability, not jar discovery. No catalog is written, so the
      * chain passes through untouched (its providers are unknown to the empty catalog).
+     *
+     * @param store the storage to seed
+     * @param json the codec the seeded documents are written with
+     * @param configFile the store key to write under
      */
     public static void seedInProcessFallback(Store store, JsonCodec json, String configFile) {
         Map<String, Object> modelMap = new LinkedHashMap<>();

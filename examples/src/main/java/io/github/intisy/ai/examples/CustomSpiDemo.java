@@ -35,7 +35,9 @@ public final class CustomSpiDemo {
     private static final String CONFIG_FILE = "examples-custom-spi.json";
 
     /** Fixed clock origin and random draw, chosen so the deterministic backoff below is reproducible. */
+    /** Where the demo's fixed clock starts, so every printed timestamp is reproducible. */
     public static final long CLOCK_START_MS = 1_700_000_000_000L;
+    /** The one value the demo's fixed randomness source ever returns. */
     public static final double RANDOM_VALUE = 0.5d;
 
     private CustomSpiDemo() {
@@ -43,12 +45,24 @@ public final class CustomSpiDemo {
 
     /** Everything the injected SPIs let us observe, so a test can assert on it without parsing stdout. */
     public static final class Result {
+        /** Every line the capturing logger saw. */
         public final List<String> logLines;
+        /** Every notice the collecting notifier saw. */
         public final List<CollectingNotifier.Notice> notices;
+        /** What the injected environment answered, proving nothing read the process. */
         public final String envValue;
+        /** When a backoff computed from the fixed randomness source resumes. */
         public final long backoffResumeAt;
+        /** How many times the recording codec was asked to parse, proving it was used. */
         public final int jsonParseCount;
 
+        /**
+         * @param logLines every line the capturing logger saw
+         * @param notices every notice the collecting notifier saw
+         * @param envValue what the injected environment answered
+         * @param backoffResumeAt when the computed backoff resumes
+         * @param jsonParseCount how many times the recording codec parsed
+         */
         public Result(List<String> logLines, List<CollectingNotifier.Notice> notices, String envValue,
                       long backoffResumeAt, int jsonParseCount) {
             this.logLines = logLines;
@@ -59,6 +73,7 @@ public final class CustomSpiDemo {
         }
     }
 
+    /** Runs the walk and prints every outcome. */
     public static void run() {
         Result result = execute();
 
@@ -78,6 +93,7 @@ public final class CustomSpiDemo {
     }
 
     /** Builds an AiJava with all SPIs swapped, exercises routing + backoff, and returns what they captured. */
+    /** {@return every outcome of the walk, so a test can assert on what the injected SPIs saw} */
     public static Result execute() {
         Store store = Storage.memory();
         CapturingLogger logger = new CapturingLogger("[router] ");
