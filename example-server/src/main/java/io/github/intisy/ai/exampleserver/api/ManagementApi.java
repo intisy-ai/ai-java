@@ -57,9 +57,9 @@ import java.util.function.Supplier;
  * POST   /api/providers/{id}/models/discover              -> 200 {"provider":..,"models":[...]}
  * POST   /api/providers/{id}/quota/refresh                -> 200 {"accounts":[...]}
  * POST   /api/providers/{id}/messages    {model,...}       -> &lt;provider's HttpResponse, verbatim&gt;
- * GET    /api/routing/catalog                            -> 200 <models.json>
- * GET    /api/routing/model-map          ?app=<app>       -> 200 {"tiers":[...],"map":{...}}
- * PUT    /api/routing/model-map          ?app=<app>       -> 200 {"ok":true,"warnings":[...]}
+ * GET    /api/routing/catalog                            -> 200 &lt;models.json&gt;
+ * GET    /api/routing/model-map          ?app=&lt;app&gt;       -> 200 {"tiers":[...],"map":{...}}
+ * PUT    /api/routing/model-map          ?app=&lt;app&gt;       -> 200 {"ok":true,"warnings":[...]}
  *                                        {"map":{...}}
  * (app is REQUIRED -- routing is per-installed-proxy only, there is no default/built-in profile;
  * a missing/blank/unknown ?app= 400s with "select a proxy for routing")

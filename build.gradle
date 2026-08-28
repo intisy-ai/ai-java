@@ -42,6 +42,22 @@ subprojects {
         options.release = 8
     }
 
+    // `@apiNote`, `@implSpec` and `@implNote` are reserved for the JDK's own build, so the standard
+    // doclet rejects them until a project registers them. CLAUDE.md requires @implNote for internal
+    // rationale, so without this every such comment is a javadoc error rather than documentation.
+    tasks.withType(Javadoc).configureEach {
+        options.addBooleanOption("Xdoclint:all", true)
+        // javadoc stops listing after 100 of each by default, which silently under-reports the gap.
+        options.addStringOption("Xmaxwarns", "10000")
+        options.addStringOption("Xmaxerrs", "10000")
+        options.tags = [
+            "apiNote:a:API Note:",
+            "implSpec:a:Implementation Requirements:",
+            "implNote:a:Implementation Note:",
+        ]
+        failOnError = true
+    }
+
     dependencies {
         testImplementation "org.junit.jupiter:junit-jupiter:5.10.1"
     }

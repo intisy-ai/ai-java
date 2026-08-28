@@ -33,10 +33,8 @@ import java.util.Map;
  * wire format is whichever {@link Translator} the staged translators directory provides, not a
  * per-app concern), calls the resolved provider's {@link Provider#handleIr}, and encodes the
  * result back to wire JSON -- mirroring core-proxy's Router#route one level up, without a router
- * in between. A provider with no IR path (the {@link Provider#handleIr} default) throws {@link
- * UnsupportedOperationException}; that specific exception falls back to the legacy {@link
- * Provider#handle} call unchanged, exactly like Router's own fallback -- so a provider (or
- * in-tree fixture) without an IR implementation keeps working with zero changes here.
+ * in between. {@link Provider#handleIr} is the only entry a provider has, so a provider that cannot
+ * serve the request signals it by throwing.
  */
 public final class MessagesAdmin {
     private final ProviderRegistryHolder holder;

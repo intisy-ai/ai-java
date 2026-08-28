@@ -12,9 +12,8 @@ import java.util.Collections;
  * An example {@link Provider} whose {@link #handleIr} always throws {@link HandleIrException}
  * carrying a distinctive status/header/body/{@code retryAfterMs} -- the "it works" half of
  * {@link AlwaysRateLimitedProvider} for the IR path, proving a thrown {@code HandleIrException}'s
- * structured payload survives a caller that only sees the exception (unlike a legacy provider,
- * which returns its 429 as an ordinary {@code HttpResponse}). Never overrides {@link #handle}, so
- * the router/admin only reaches this provider's 429 via the IR path.
+ * structured payload survives a caller that only sees the exception rather than a response object
+ * carrying the status.
  *
  * <p>Packaged in the SAME jar as {@link EchoProvider}/{@link AlwaysRateLimitedProvider}/{@link
  * CtxCapturingProvider}/{@link ThrowingProvider} (all listed in

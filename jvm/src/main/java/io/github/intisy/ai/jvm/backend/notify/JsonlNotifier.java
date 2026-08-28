@@ -31,8 +31,11 @@ public class JsonlNotifier implements Notifier {
     private final Map<String, Long> lastNotified = new ConcurrentHashMap<>();
 
     /**
-     * @param configFolder the SAME base directory passed to {@link FileStore}; notifications
-     *                      are written to its sibling {@code cache} directory.
+     * A notifier writing beside the account store it reports on.
+     *
+     * @param configFolder the SAME base directory passed to
+     *                      {@link io.github.intisy.ai.seam.jvm.FileStore}; notifications are
+     *                      written to its sibling {@code cache} directory.
      */
     public JsonlNotifier(Path configFolder) {
         this.cacheDir = configFolder.resolveSibling("cache");
