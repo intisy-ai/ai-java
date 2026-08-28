@@ -26,22 +26,38 @@ public final class Storage {
     private Storage() {
     }
 
-    /** Durable, nio-backed storage rooted at the given directory. Never guessed: {@code configFolder} is explicit. */
+    /**
+     * Durable, nio-backed storage rooted at the given directory.
+     *
+     * @param configFolder the root, which is always explicit and never guessed
+     * @return storage writing one JSON-string file per key under that root
+     */
     public static Store file(Path configFolder) {
         return new FileStore(configFolder);
     }
 
-    /** Ephemeral, in-process storage. All state is lost when the process exits. */
+    /** {@return ephemeral, in-process storage, whose state is lost when the process exits} */
     public static Store memory() {
         return new InMemoryStore();
     }
 
-    /** SQL-backed storage against the caller-supplied {@link DataSource}, using the default {@code ai_kv} table. */
+    /**
+     * SQL-backed storage using the default {@code ai_kv} table.
+     *
+     * @param dataSource a database the caller already provisioned
+     * @return storage reading and writing that database
+     */
     public static Store jdbc(DataSource dataSource) {
         return new JdbcStore(dataSource);
     }
 
-    /** SQL-backed storage against the caller-supplied {@link DataSource} and table name. */
+    /**
+     * SQL-backed storage against a named table.
+     *
+     * @param dataSource a database the caller already provisioned
+     * @param table the table to keep keys and values in
+     * @return storage reading and writing that table
+     */
     public static Store jdbc(DataSource dataSource, String table) {
         return new JdbcStore(dataSource, table);
     }

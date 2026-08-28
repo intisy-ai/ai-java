@@ -25,23 +25,31 @@ import io.github.intisy.ai.api.seam.Store;
  */
 public interface Backend {
 
+    /** {@return where accounts and settings live; the one member with no default} */
     Store store();
 
+    /** {@return the HTTP client every wired object shares} */
     HttpClient httpClient();
 
+    /** {@return the JSON codec every wired object shares} */
     JsonCodec jsonCodec();
 
+    /** {@return the clock every wired object reads time from} */
     Clock clock();
 
+    /** {@return the randomness source token generation and backoff jitter draw from} */
     Random random();
 
+    /** {@return the logger every wired object writes to} */
     Logger logger();
 
-    /** May be {@code null}; the host then applies its store-derived default notifier. */
+    /** {@return the notifier, or {@code null} to let the host apply its store-derived default} */
     Notifier notifier();
 
+    /** {@return the environment lookup, so nothing reads process state directly} */
     Env env();
 
+    /** {@return a fresh builder, which requires a store and defaults everything else} */
     static Builder builder() {
         return new Builder();
     }
@@ -63,15 +71,62 @@ public interface Backend {
         private Builder() {
         }
 
+        /**
+         * REQUIRED: storage is never chosen for the caller.
+         *
+         * @param store where accounts and settings live
+         * @return this builder
+         */
         public Builder store(Store store) { this.store = store; return this; }
+
+        /**
+         * @param httpClient the client every wired object shares
+         * @return this builder
+         */
         public Builder httpClient(HttpClient httpClient) { this.httpClient = httpClient; return this; }
+
+        /**
+         * @param jsonCodec the codec every wired object shares
+         * @return this builder
+         */
         public Builder jsonCodec(JsonCodec jsonCodec) { this.jsonCodec = jsonCodec; return this; }
+
+        /**
+         * @param clock the clock every wired object reads time from
+         * @return this builder
+         */
         public Builder clock(Clock clock) { this.clock = clock; return this; }
+
+        /**
+         * @param random the source token generation and backoff jitter draw from
+         * @return this builder
+         */
         public Builder random(Random random) { this.random = random; return this; }
+
+        /**
+         * @param logger the logger every wired object writes to
+         * @return this builder
+         */
         public Builder logger(Logger logger) { this.logger = logger; return this; }
+
+        /**
+         * @param notifier the notifier, or {@code null} to keep the store-derived default
+         * @return this builder
+         */
         public Builder notifier(Notifier notifier) { this.notifier = notifier; return this; }
+
+        /**
+         * @param env the environment lookup
+         * @return this builder
+         */
         public Builder env(Env env) { this.env = env; return this; }
 
+        /**
+         * Composes the backend, defaulting every unset SPI to its JVM implementation.
+         *
+         * @return the composed backend
+         * @throws IllegalStateException when no store was set
+         */
         public Backend build() {
             if (store == null) {
                 throw new IllegalStateException(

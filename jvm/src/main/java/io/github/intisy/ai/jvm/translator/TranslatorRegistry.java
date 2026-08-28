@@ -42,6 +42,9 @@ public final class TranslatorRegistry implements Closeable {
      * Scans {@code directory} for {@code *.jar} files and discovers every {@link Translator} they
      * register via {@code ServiceLoader}. A missing or empty directory yields an empty registry
      * (not an error): zero translators installed is a valid, common state.
+     *
+     * @param directory the directory to scan
+     * @return the registry, empty when the directory holds no jars
      */
     public static TranslatorRegistry fromDirectory(Path directory) {
         File dir = directory.toFile();
@@ -71,12 +74,12 @@ public final class TranslatorRegistry implements Closeable {
         return new TranslatorRegistry(loaded, classLoader);
     }
 
-    /** No translators directory configured (or none found yet): a valid, zero-translator state. */
+    /** {@return a registry with no translators, the valid state before any jar is installed} */
     public static TranslatorRegistry empty() {
         return new TranslatorRegistry(Collections.emptyList(), null);
     }
 
-    /** Every {@link Translator} this registry discovered, in discovery order. */
+    /** {@return every translator this registry discovered, in discovery order} */
     public List<Translator> translators() {
         return translators;
     }

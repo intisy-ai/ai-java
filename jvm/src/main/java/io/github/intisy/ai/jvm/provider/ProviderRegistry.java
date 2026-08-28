@@ -62,6 +62,9 @@ public final class ProviderRegistry implements Closeable {
      * they register via {@code ServiceLoader}. A missing or empty directory yields an empty
      * registry (not an error): zero providers installed is a valid, common state (e.g. a
      * fresh install before any provider jar has been dropped in).
+     *
+     * @param providersDir the directory to scan
+     * @return the registry, empty when the directory holds no jars
      */
     public static ProviderRegistry fromDirectory(Path providersDir) {
         File dir = providersDir.toFile();
@@ -122,22 +125,26 @@ public final class ProviderRegistry implements Closeable {
         return jarById;
     }
 
-    /** No providers directory configured (or none found yet): a valid, zero-provider state. */
+    /** {@return a registry with no providers, the valid state before any jar is installed} */
     public static ProviderRegistry empty() {
         return new ProviderRegistry(Collections.emptyList(), null, Collections.emptyMap());
     }
 
-    /** Adapts the discovered providers into a {@link HandlerResolver}. */
+    /** {@return the discovered providers, adapted into a {@link HandlerResolver}} */
     public HandlerResolver asHandlerResolver() {
         return HandlerResolvers.fromHandlers(new ArrayList<IrHandler>(providers));
     }
 
-    /** The ids of every discovered provider, in discovery order. */
+    /** {@return the id of every discovered provider, in discovery order} */
     public List<String> listProviderIds() {
         return providers.stream().map(Provider::id).collect(Collectors.toList());
     }
 
-    /** The discovered {@link Provider} whose {@link Provider#id()} equals {@code id}, or {@code null}. */
+    /**
+     * {@return the discovered provider with this id, or {@code null} when none has it}
+     *
+     * @param id the provider id to look for
+     */
     public Provider get(String id) {
         for (Provider provider : providers) {
             if (provider.id().equals(id)) return provider;
@@ -145,7 +152,11 @@ public final class ProviderRegistry implements Closeable {
         return null;
     }
 
-    /** The jar file that registers {@code providerId}, or {@code null} if no such provider is loaded. */
+    /**
+     * {@return the jar registering this provider, or {@code null} when it is not loaded}
+     *
+     * @param providerId the provider whose jar is wanted
+     */
     public Path jarFor(String providerId) {
         return jars.get(providerId);
     }

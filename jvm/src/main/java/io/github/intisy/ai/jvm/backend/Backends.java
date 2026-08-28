@@ -16,6 +16,9 @@ public final class Backends {
      * A {@link Backend} with the given store and every platform SPI defaulted to its JVM
      * implementation. Its {@link Backend#notifier()} is {@code null} so the host resolves the
      * store-derived default (a {@code JsonlNotifier} for a file store, a no-op otherwise).
+     *
+     * @param store where accounts and settings live
+     * @return the backend
      */
     public static Backend defaults(Store store) {
         return Backend.builder().store(store).build();

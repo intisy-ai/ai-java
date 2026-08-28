@@ -9,5 +9,10 @@ package io.github.intisy.ai.jvm.backend.env;
  * etc. are, which is also why it belongs here rather than in a TeaVM-transpiled module.
  */
 public interface Env {
+    /**
+     * {@return the value of one environment variable, or {@code null} when it is unset}
+     *
+     * @param name the variable to read
+     */
     String get(String name);
 }

@@ -59,6 +59,9 @@ public final class ProxyRegistry implements Closeable {
      * they register via {@code ServiceLoader}. A missing or empty directory yields an empty
      * registry (not an error): zero proxies installed is a valid, common state (e.g. a
      * fresh install before any proxy jar has been dropped in).
+     *
+     * @param proxiesDir the directory to scan
+     * @return the registry, empty when the directory holds no jars
      */
     public static ProxyRegistry fromDirectory(Path proxiesDir) {
         File dir = proxiesDir.toFile();
@@ -119,17 +122,21 @@ public final class ProxyRegistry implements Closeable {
         return jarById;
     }
 
-    /** No proxies directory configured (or none found yet): a valid, zero-proxy state. */
+    /** {@return a registry with no proxies, the valid state before any jar is installed} */
     public static ProxyRegistry empty() {
         return new ProxyRegistry(Collections.emptyList(), null, Collections.emptyMap());
     }
 
-    /** The ids of every discovered proxy, in discovery order. */
+    /** {@return the id of every discovered proxy, in discovery order} */
     public List<String> listProxyIds() {
         return plugins.stream().map(ProxyPlugin::id).collect(Collectors.toList());
     }
 
-    /** The {@link ProxyPlugin} registering {@code id}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return the plugin registering this id, or {@code null} when none is loaded}
+     *
+     * @param id the proxy id to look for
+     */
     public ProxyPlugin pluginFor(String id) {
         for (ProxyPlugin p : plugins) {
             if (p.id().equals(id)) return p;
@@ -137,19 +144,31 @@ public final class ProxyRegistry implements Closeable {
         return null;
     }
 
-    /** {@code pluginFor(id).profile()}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return that proxy's routing profile, or {@code null} when none is loaded}
+     *
+     * @param id the proxy id to look for
+     */
     public RoutingProfile profileFor(String id) {
         ProxyPlugin p = pluginFor(id);
         return p != null ? p.profile() : null;
     }
 
-    /** {@code pluginFor(id).displayName()}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return that proxy's display name, or {@code null} when none is loaded}
+     *
+     * @param id the proxy id to look for
+     */
     public String displayNameFor(String id) {
         ProxyPlugin p = pluginFor(id);
         return p != null ? p.displayName() : null;
     }
 
-    /** The jar file that registers {@code id}, or {@code null} if no such proxy is loaded. */
+    /**
+     * {@return the jar registering this proxy, or {@code null} when it is not loaded}
+     *
+     * @param id the proxy whose jar is wanted
+     */
     public Path jarFor(String id) {
         return jars.get(id);
     }

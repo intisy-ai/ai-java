@@ -79,47 +79,56 @@ public class AiJava implements Closeable {
                 : (b.providersDir != null ? ProviderRegistry.fromDirectory(b.providersDir) : ProviderRegistry.empty());
     }
 
+    /** {@return a fresh builder, whose only hard requirement is a storage choice} */
     public static Builder builder() {
         return new Builder();
     }
 
     // -- plain accessors, in case a caller wants the chosen SPIs directly -----
 
+    /** {@return the storage the caller chose, which never defaults} */
     public Store store() {
         return store;
     }
 
+    /** {@return the HTTP client every wired object shares} */
     public HttpClient httpClient() {
         return httpClient;
     }
 
+    /** {@return the JSON codec every wired object shares} */
     public JsonCodec jsonCodec() {
         return json;
     }
 
+    /** {@return the clock every wired object reads time from} */
     public Clock clock() {
         return clock;
     }
 
+    /** {@return the logger every wired object writes to} */
     public Logger logger() {
         return logger;
     }
 
+    /** {@return the randomness source token generation and backoff jitter draw from} */
     public Random random() {
         return random;
     }
 
+    /** {@return the environment lookup, so a caller never reads process state directly} */
     public Env env() {
         return env;
     }
 
+    /** {@return the notifier, which is the storage-derived default when none was supplied} */
     public Notifier notifier() {
         return notifier;
     }
 
     /**
-     * The {@link ProviderRegistry} discovered from {@link Builder#providersDir}, injected directly
-     * via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one.
+     * {@return the registry discovered from {@link Builder#providersDir}, injected directly via
+     * {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one}
      */
     public ProviderRegistry providerRegistry() {
         return providerRegistry;
@@ -130,6 +139,8 @@ public class AiJava implements Closeable {
      * no-op when {@link Builder#providersDir} was never set, since {@link ProviderRegistry#close}
      * itself is a no-op for {@link ProviderRegistry#empty()}). See the class javadoc for when
      * it's safe to call this.
+     *
+     * @throws IOException when the registry's class loader cannot be released
      */
     @Override
     public void close() throws IOException {
@@ -146,6 +157,9 @@ public class AiJava implements Closeable {
      * callers don't need to hand-assemble a resolver themselves. Use the three-argument
      * {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead when a caller
      * needs to supply its own {@link HandlerResolver} (e.g. a test double).
+     *
+     * @param profile the routing profile the wired router routes against
+     * @return a router wired to this instance's own dependencies
      */
     public WiredRouter router(RoutingProfile profile) {
         return router(profile, providerRegistry.asHandlerResolver(), providerRegistry::listProviderIds);
@@ -156,6 +170,11 @@ public class AiJava implements Closeable {
      * {@code configDir} is derived from the store when it's a {@link FileStore} (so handlers
      * that read {@link io.github.intisy.ai.ir.spi.HandlerCtx#configDir} still see the
      * right directory); it's empty for non-file backends, which carry no filesystem notion.
+     *
+     * @param profile the routing profile the wired router routes against
+     * @param resolveHandler how a request's chosen provider id becomes a handler
+     * @param listProviders every provider id routing may choose from; null reads as none
+     * @return a router wired to this instance's own dependencies
      */
     public WiredRouter router(RoutingProfile profile, HandlerResolver resolveHandler,
                                Supplier<List<String>> listProviders) {
@@ -178,6 +197,10 @@ public class AiJava implements Closeable {
      * it's layered onto a copy of the builder's {@link ManagerOptions} rather than mutating it:
      * calling this repeatedly for different providers never lets one provider's oauth config
      * leak into another's.
+     *
+     * @param providerId the provider whose accounts the manager owns
+     * @param oauth that provider's own OAuth configuration
+     * @return a manager wired to this instance's own dependencies
      */
     public AccountManager accountManager(String providerId, OAuthConfig oauth) {
         AccountStore accountStore = new AccountStore(store, json);
@@ -223,11 +246,20 @@ public class AiJava implements Closeable {
             this.options = options;
         }
 
+        /**
+         * Routes one request through the options this instance wired up.
+         *
+         * @param request the inbound request
+         * @return the response the routed handler produced
+         */
         public HttpResponse route(HttpRequest request) {
             return Router.route(request, options);
         }
 
-        /** Escape hatch for callers that need the raw options (e.g. to pass to {@link Router#routeJson}). */
+        /**
+         * {@return the raw wired options, an escape hatch for a caller that needs to pass them on,
+         * for example to {@link Router#routeJson}}
+         */
         public RouterOptions options() {
             return options;
         }
@@ -255,53 +287,111 @@ public class AiJava implements Closeable {
         private Builder() {
         }
 
-        /** Hand ai-java one object that IS the entire platform; per-SPI setters still override it. */
+        /**
+         * Hand ai-java one object that IS the entire platform; per-SPI setters still override it.
+         *
+         * @param backend the object carrying every SPI at once
+         * @return this builder
+         */
         public Builder backend(Backend backend) {
             this.backend = backend;
             return this;
         }
 
-        /** REQUIRED unless a {@link #backend(Backend)} carrying a store is supplied. */
+        /**
+         * REQUIRED unless a {@link #backend(Backend)} carrying a store is supplied.
+         *
+         * @param store where accounts and settings live
+         * @return this builder
+         */
         public Builder storage(Store store) {
             this.store = store;
             return this;
         }
 
+        /**
+         * Overrides the HTTP client a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param httpClient the client every wired object shares
+         * @return this builder
+         */
         public Builder httpClient(HttpClient httpClient) {
             this.httpClient = httpClient;
             return this;
         }
 
+        /**
+         * Overrides the JSON codec a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param json the codec every wired object shares
+         * @return this builder
+         */
         public Builder jsonCodec(JsonCodec json) {
             this.json = json;
             return this;
         }
 
+        /**
+         * Overrides the clock a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param clock the clock every wired object reads time from
+         * @return this builder
+         */
         public Builder clock(Clock clock) {
             this.clock = clock;
             return this;
         }
 
+        /**
+         * Overrides the logger a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param logger the logger every wired object writes to
+         * @return this builder
+         */
         public Builder logger(Logger logger) {
             this.logger = logger;
             return this;
         }
 
+        /**
+         * Overrides the randomness source a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param random the source token generation and backoff jitter draw from
+         * @return this builder
+         */
         public Builder random(Random random) {
             this.random = random;
             return this;
         }
 
+        /**
+         * Overrides the environment lookup a {@link #backend(Backend)} would otherwise supply.
+         *
+         * @param env the lookup, so nothing reads process state directly
+         * @return this builder
+         */
         public Builder env(Env env) {
             this.env = env;
             return this;
         }
 
+        /**
+         * Overrides the notifier, which otherwise follows the chosen storage.
+         *
+         * @param notifier the notifier to use instead of the storage-derived default
+         * @return this builder
+         */
         public Builder notifier(Notifier notifier) {
             this.notifier = notifier;
             return this;
         }
 
+        /**
+         * Sets the account-manager options every {@link AiJava#accountManager} call starts from.
+         *
+         * @param managerOptions the options a per-provider OAuth config is layered onto
+         * @return this builder
+         */
         public Builder managerOptions(ManagerOptions managerOptions) {
             this.managerOptions = managerOptions;
             return this;
@@ -311,6 +401,9 @@ public class AiJava implements Closeable {
          * Directory {@link ProviderRegistry#fromDirectory} scans for provider {@code *.jar}s at
          * {@link #build()} time, backing the zero-arg {@link AiJava#router(RoutingProfile)}.
          * Unset (default) yields an empty registry; no directory is guessed or forced.
+         *
+         * @param providersDir the directory to scan for provider jars
+         * @return this builder
          */
         public Builder providersDir(Path providersDir) {
             this.providersDir = providersDir;
@@ -321,12 +414,22 @@ public class AiJava implements Closeable {
          * Inject a pre-built {@link ProviderRegistry} instead of discovering one from a directory. Use
          * this for in-process providers or a custom discovery strategy. Mutually exclusive with
          * {@link #providersDir(Path)}.
+         *
+         * @param providerRegistry the registry to use instead of discovering one
+         * @return this builder
          */
         public Builder providerRegistry(ProviderRegistry providerRegistry) {
             this.providerRegistry = providerRegistry;
             return this;
         }
 
+        /**
+         * Assembles the instance, resolving every unset dependency to its JVM default.
+         *
+         * @return the assembled instance, which owns the provider registry it built
+         * @throws IllegalStateException when no storage was chosen, or when both a providers
+         *                               directory and a pre-built registry were
+         */
         public AiJava build() {
             Store resolvedStore = store != null ? store : (backend != null ? backend.store() : null);
             if (resolvedStore == null) {
