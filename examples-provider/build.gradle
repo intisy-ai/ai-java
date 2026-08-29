@@ -15,7 +15,7 @@ dependencies {
     githubCompileOnly "intisy-ai:core-ir:1.4.0:ir"
 
     // The seam interfaces HandlerCtx names, which a release-asset jar does not export transitively.
-    githubCompileOnly "intisy-ai:api:1.6.0:contract"
+    githubCompileOnly "intisy-ai:api:1.7.0:contract"
 }
 
 // Windows javac defaults to windows-1252, which corrupts non-ASCII string literals; pin UTF-8.

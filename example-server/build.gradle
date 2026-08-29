@@ -10,9 +10,9 @@ dependencies {
     // dependency is `implementation` (non-transitive); implementations load from jars at runtime.
     githubImplementation "intisy-ai:core-ir:1.4.0:ir"
     // The seam interfaces the line above used to export transitively.
-    githubImplementation "intisy-ai:api:1.6.0:contract"
+    githubImplementation "intisy-ai:api:1.7.0:contract"
     // api's seam implementations, for the NoopLogger the admin tests inject.
-    githubTestImplementation "intisy-ai:api:1.6.0:seam"
+    githubTestImplementation "intisy-ai:api:1.7.0:seam"
     // A provider jar declares its first-party deps compileOnly so it stays thin, which makes
     // supplying them the HOST's job (the same reason :ir is declared above). The org provider
     // jars the e2e test stages name a vendor translator directly, and a ServiceLoader entry on
