@@ -6,7 +6,7 @@
 // io/github/intisy/ai/ir/** class inside the jar -- it stays a pure one-Translator +
 // META-INF/services artifact discovered purely via ServiceLoader.
 dependencies {
-    githubCompileOnly "intisy-ai:core-ir:1.4.0:ir"
+    githubCompileOnly "intisy-ai:basekit:4.0.0:ir"
     // The seam interfaces the line above used to export transitively.
     githubCompileOnly "intisy-ai:api:1.7.0:contract"
 }

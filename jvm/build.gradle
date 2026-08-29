@@ -1,17 +1,17 @@
 dependencies {
-    // core-proxy's routing engine (SPIs, Router/ModelMap/RateLimit, Provider SPI,
-    // HandlerResolver/HandlerResolvers) and core-auth's account engine (AccountManager,
+    // basekit/proxy's routing engine (SPIs, Router/ModelMap/RateLimit, Provider SPI,
+    // HandlerResolver/HandlerResolvers) and basekit/auth's account engine (AccountManager,
     // OAuthConfig, AccountStore), each resolved through github-gradle as a release-asset jar.
     // api (not implementation): AiJava's own public API exposes these types directly
     // (router(RoutingProfile, HandlerResolver, ...), accountManager(...) -> AccountManager).
-    githubApi "intisy-ai:core-proxy:2.1.0:routing"
+    githubApi "intisy-ai:basekit:4.0.0:routing"
     // The routing vocabulary :routing exports (RoutingProfile, HandlerResolver), named here because
     // a release-asset jar carries no transitive metadata.
-    githubApi "intisy-ai:core-proxy:2.1.0:proxy-contracts"
-    githubApi "intisy-ai:core-auth:2.0.0:accounts"
+    githubApi "intisy-ai:basekit:4.0.0:proxy-contracts"
+    githubApi "intisy-ai:basekit:4.0.0:accounts"
     // The provider vocabulary ProviderRegistry discovers implementations of. api, not
     // implementation: it appears in this module's own public surface.
-    githubApi "intisy-ai:core-auth:2.0.0:auth-contracts"
+    githubApi "intisy-ai:basekit:4.0.0:auth-contracts"
     // api's portable seam implementations. The HOST carries them so a provider jar can compileOnly
     // them and stay thin, rather than every jar embedding its own copy.
     githubApi "intisy-ai:api:1.7.0:seam"
@@ -21,7 +21,7 @@ dependencies {
     // api's JVM seam implementations (FileStore, JdbcStore, GsonJsonCodec and friends).
     // api, not implementation: Storage and AiJava.builder() name them.
     githubApi "intisy-ai:api:1.7.0:jvm-seam"
-    // core-ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
+    // basekit/ir's IR types, on the RUNTIME classpath (not compileOnly like :routing's own
     // dependency on it). :jvm is the HOST -- ProviderRegistry loads thin provider jars (compileOnly
     // :ir, no ir.* classes bundled) on a URLClassLoader parented to this module's own classloader
     // (see ProviderRegistry#fromDirectory), so a provider's handleIr resolving io.github.intisy.
@@ -31,7 +31,7 @@ dependencies {
     // deliberate opt-in -- a consumer that never touches translators shouldn't inherit :ir
     // transitively just for using ProviderRegistry/handlers. Consumers that DO use
     // TranslatorRegistry declare their own project(":ir"), as example-server does.
-    githubImplementation "intisy-ai:core-ir:1.4.0:ir"
+    githubImplementation "intisy-ai:basekit:4.0.0:ir"
     api "com.google.code.gson:gson:2.10.1"
     // Test-only: JdbcStoreTest exercises JdbcStore against a real H2 in-memory DataSource.
     // H2 is NOT a runtime dependency of the library - JdbcStore takes a javax.sql.DataSource
