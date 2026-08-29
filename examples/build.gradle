@@ -18,7 +18,7 @@ dependencies {
     // InProcessProviders a HandlerCtx). They used to arrive along :jvm's api chain; a release-asset
     // jar exports nothing, so they are declared here.
     githubImplementation "intisy-ai:basekit:4.2.0:ir"
-    githubImplementation "intisy-ai:api:1.7.0:contract"
+    githubImplementation "intisy:bayonet:1.7.0:contract"
 
     // NOTE: :examples deliberately does NOT depend on project(":examples-provider"). The provider
     // must be discovered from its JAR on disk via ServiceLoader (see ProviderRegistryDemo), so its
