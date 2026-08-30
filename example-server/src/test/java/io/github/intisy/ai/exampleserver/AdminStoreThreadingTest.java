@@ -52,7 +52,7 @@ class AdminStoreThreadingTest {
         json = new GsonJsonCodec();
 
         stageProviderJar(providersDir);
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("ctx-capture"), holder.listProviderIds().toString());
     }
 

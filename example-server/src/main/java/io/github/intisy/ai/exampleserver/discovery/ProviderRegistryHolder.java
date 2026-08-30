@@ -1,8 +1,14 @@
 package io.github.intisy.ai.exampleserver.discovery;
 
+import io.github.intisy.ai.auth.contracts.AuthContracts;
+import io.github.intisy.ai.jvm.plugin.Plugins;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
+import io.github.intisy.ai.shared.logic.HandlerResolvers;
 import io.github.intisy.ai.shared.routing.HandlerResolver;
 import io.github.intisy.ai.auth.contracts.Provider;
+import io.github.intisy.ai.ir.spi.IrHandler;
+
+import java.util.ArrayList;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,20 +16,40 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Makes the server's {@link ProviderRegistry} swappable at runtime: a provider installed on disk
+ * Makes the server's discovered providers swappable at runtime: a provider installed on disk
  * after startup becomes usable without a restart via {@link #refresh(Path)}. The router is wired
  * with lambdas that delegate through this holder (see {@code ServerMain}), so every request reads
- * whatever registry is current at dispatch time.
+ * whatever is current at dispatch time.
+ *
+ * @implNote Discovery stays here, because {@code ServiceLoader} needs the SPI class. Resolution does
+ * not: every read below goes through the {@link Plugins} host by capability id, so nothing outside
+ * this class needs to know a provider is a {@code Provider} rather than some other plugin kind.
  */
 public final class ProviderRegistryHolder {
 
+    private final Plugins plugins;
     private volatile ProviderRegistry current;
 
     /**
-     * @param initial the registry every read sees until the first refresh
+     * @param plugins the host every discovered provider is registered with and resolved through
+     * @param initial the registry discovery starts from
      */
-    public ProviderRegistryHolder(ProviderRegistry initial) {
+    public ProviderRegistryHolder(Plugins plugins, ProviderRegistry initial) {
+        this.plugins = plugins;
         this.current = initial;
+        registerAll();
+    }
+
+    private void registerAll() {
+        for (Provider provider : current.providers()) {
+            plugins.register(AuthContracts.PROVIDER_ID, provider.id(), provider);
+        }
+    }
+
+    private void releaseAll() {
+        for (String id : plugins.providerIds(AuthContracts.PROVIDER_ID)) {
+            plugins.release(id);
+        }
     }
 
     /** {@return the registry current at this moment} */
@@ -31,14 +57,15 @@ public final class ProviderRegistryHolder {
         return current;
     }
 
-    /** {@return the id of every provider the current registry holds} */
+    /** {@return the id of every provider the host currently resolves} */
     public List<String> listProviderIds() {
-        return current.listProviderIds();
+        return plugins.providerIds(AuthContracts.PROVIDER_ID);
     }
 
-    /** {@return the current registry's providers, adapted into a resolver} */
+    /** {@return the providers the host currently resolves, adapted into a resolver} */
     public HandlerResolver asHandlerResolver() {
-        return current.asHandlerResolver();
+        return HandlerResolvers.fromHandlers(new ArrayList<IrHandler>(
+                plugins.resolve(AuthContracts.PROVIDER_ID, Provider.class)));
     }
 
     /**
@@ -47,7 +74,7 @@ public final class ProviderRegistryHolder {
      * @param id the provider id to look for
      */
     public Provider get(String id) {
-        return current.get(id);
+        return plugins.resolveOne(AuthContracts.PROVIDER_ID, id, Provider.class);
     }
 
     /** The jar file that registers {@code providerId} in the CURRENT registry, or {@code null}
@@ -77,7 +104,9 @@ public final class ProviderRegistryHolder {
      */
     public void refresh(Path providersDir) {
         ProviderRegistry old = current;
+        releaseAll();
         current = ProviderRegistry.fromDirectory(providersDir);
+        registerAll();
         if (old != null) {
             try {
                 old.close();

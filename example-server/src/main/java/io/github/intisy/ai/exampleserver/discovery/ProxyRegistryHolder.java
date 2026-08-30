@@ -1,6 +1,9 @@
 package io.github.intisy.ai.exampleserver.discovery;
 
+import io.github.intisy.ai.jvm.plugin.Plugins;
 import io.github.intisy.ai.jvm.proxy.ProxyRegistry;
+import io.github.intisy.ai.shared.routing.ProxyContracts;
+import io.github.intisy.ai.shared.routing.ProxyPlugin;
 import io.github.intisy.ai.shared.routing.RoutingProfile;
 
 import java.io.IOException;
@@ -9,21 +12,42 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Makes the server's {@link ProxyRegistry} swappable at runtime: a proxy installed on disk after
+ * Makes the server's discovered proxies swappable at runtime: a proxy installed on disk after
  * startup becomes usable without a restart via {@link #refresh(Path)}. Proxy-side mirror of
- * {@code ProviderRegistryHolder}: same volatile-swap discipline, keyed by proxy id instead of
- * provider id. Proxies don't resolve handlers, so unlike its provider counterpart this holder has
- * no {@code asHandlerResolver()}.
+ * {@code ProviderRegistryHolder}: same volatile-swap discipline, same registration with the
+ * {@link Plugins} host, keyed by proxy id instead of provider id. Proxies don't resolve handlers,
+ * so unlike its provider counterpart this holder has no {@code asHandlerResolver()}.
+ *
+ * @implNote The two differ in ONE deliberate way, and both javadocs argue for their own side:
+ * {@link #refresh} here does NOT close the previous registry, accepting a leaked classloader per
+ * install, while the provider holder does close it so a later delete cannot fail on Windows. That
+ * disagreement is preserved rather than settled, because settling it changes behaviour on one side.
  */
 public final class ProxyRegistryHolder {
 
+    private final Plugins plugins;
     private volatile ProxyRegistry current;
 
     /**
-     * @param initial the registry every read sees until the first refresh
+     * @param plugins the host every discovered proxy is registered with and resolved through
+     * @param initial the registry discovery starts from
      */
-    public ProxyRegistryHolder(ProxyRegistry initial) {
+    public ProxyRegistryHolder(Plugins plugins, ProxyRegistry initial) {
+        this.plugins = plugins;
         this.current = initial;
+        registerAll();
+    }
+
+    private void registerAll() {
+        for (String id : current.listProxyIds()) {
+            plugins.register(ProxyContracts.APP_PROXY_ID, id, current.pluginFor(id));
+        }
+    }
+
+    private void releaseAll() {
+        for (String id : plugins.providerIds(ProxyContracts.APP_PROXY_ID)) {
+            plugins.release(id);
+        }
     }
 
     /** {@return the registry current at this moment} */
@@ -31,9 +55,9 @@ public final class ProxyRegistryHolder {
         return current;
     }
 
-    /** {@return the id of every proxy the current registry holds} */
+    /** {@return the id of every proxy the host currently resolves} */
     public List<String> listProxyIds() {
-        return current.listProxyIds();
+        return plugins.providerIds(ProxyContracts.APP_PROXY_ID);
     }
 
     /**
@@ -42,7 +66,8 @@ public final class ProxyRegistryHolder {
      * @param id the proxy id to look for
      */
     public RoutingProfile profileFor(String id) {
-        return current.profileFor(id);
+        ProxyPlugin plugin = plugins.resolveOne(ProxyContracts.APP_PROXY_ID, id, ProxyPlugin.class);
+        return plugin != null ? plugin.profile() : null;
     }
 
     /**
@@ -51,7 +76,8 @@ public final class ProxyRegistryHolder {
      * @param id the proxy id to look for
      */
     public String displayNameFor(String id) {
-        return current.displayNameFor(id);
+        ProxyPlugin plugin = plugins.resolveOne(ProxyContracts.APP_PROXY_ID, id, ProxyPlugin.class);
+        return plugin != null ? plugin.displayName() : null;
     }
 
     /**
@@ -66,7 +92,9 @@ public final class ProxyRegistryHolder {
      * @param proxiesDir the directory to rebuild the registry from
      */
     public void refresh(Path proxiesDir) {
+        releaseAll();
         this.current = ProxyRegistry.fromDirectory(proxiesDir);
+        registerAll();
     }
 
     /**

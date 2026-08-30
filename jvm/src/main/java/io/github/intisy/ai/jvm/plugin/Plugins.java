@@ -62,6 +62,15 @@ public final class Plugins {
     }
 
     /**
+     * Forgets everything one plugin provided, so a reload registers it afresh.
+     *
+     * @param pluginId the plugin to release
+     */
+    public void release(String pluginId) {
+        host.release(pluginId);
+    }
+
+    /**
      * Every implementation of one capability, in registration order.
      *
      * @param capabilityId the capability to resolve

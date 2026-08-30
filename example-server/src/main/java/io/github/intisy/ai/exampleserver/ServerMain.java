@@ -65,15 +65,17 @@ public final class ServerMain {
         Backend backend = Backend.builder().store(store).build();
 
         Path providersDir = providersDir();
-        ProviderRegistry registry = ProviderDiscovery.resolve(providersDir);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(registry);
-
         Path proxiesDir = proxiesDir();
-        ProxyRegistryHolder proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
 
         try (AiJava ai = AiJava.builder()
                 .backend(backend)
                 .build()) {
+
+            // Both holders register what they discover with this one host, so every lookup below is
+            // by capability id rather than by plugin category.
+            ProviderRegistry registry = ProviderDiscovery.resolve(providersDir);
+            ProviderRegistryHolder holder = new ProviderRegistryHolder(ai.plugins(), registry);
+            ProxyRegistryHolder proxyHolder = new ProxyRegistryHolder(ai.plugins(), ProxyDiscovery.resolve(proxiesDir));
 
             AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
             RoutingAdmin routing = new RoutingAdmin(ai.store(), ai.jsonCodec(), holder, ai.logger());

@@ -203,7 +203,7 @@ class ProviderUpdateIntegrationTest {
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
@@ -232,7 +232,7 @@ class ProviderUpdateIntegrationTest {
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
@@ -262,7 +262,7 @@ class ProviderUpdateIntegrationTest {
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new FakeVersionedProviderSource(Paths.get(System.getProperty("exampleserver.providersDir")),
                 "echo-provider.jar", "1.1.0");
@@ -294,7 +294,7 @@ class ProviderUpdateIntegrationTest {
         Store store = ai.store();
         JsonCodec json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"));
         ProviderRegistry registryBeforeUpdate = holder.get();
 
@@ -344,7 +344,7 @@ class ProviderUpdateIntegrationTest {
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"),
                 "provider id is read from the jar content, not its file name");
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
@@ -372,7 +372,7 @@ class ProviderUpdateIntegrationTest {
     void updateOnNotInstalledProviderIs404(@TempDir Path providersDir) throws Exception {
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().isEmpty(), "no jar staged -- nothing installed");
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new NoEntriesProviderSource();
@@ -395,7 +395,7 @@ class ProviderUpdateIntegrationTest {
 
         AiJava ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), "echo must be installed for this to be a real 404 case");
         AccountAdmin admin = new AccountAdmin(new AccountStore(ai.store(), ai.jsonCodec()), ai.clock());
         ProviderSource source = new NoEntriesProviderSource(); // simulates the repo vanishing upstream

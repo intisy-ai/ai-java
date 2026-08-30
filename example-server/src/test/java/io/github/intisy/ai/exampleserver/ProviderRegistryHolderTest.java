@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProviderRegistryHolderTest {
     @Test
     void getByIdPassesThroughToTheCurrentRegistry(@TempDir Path dir) throws Exception {
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(dir));
         assertNull(holder.get("echo"), "no jar staged yet -- nothing discovered");
 
         String staged = System.getProperty("exampleserver.providersDir");
@@ -40,7 +40,7 @@ class ProviderRegistryHolderTest {
 
     @Test
     void refreshPicksUpNewlyAddedJar(@TempDir Path dir) throws Exception {
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(dir));
         assertTrue(holder.listProviderIds().isEmpty());
 
         String staged = System.getProperty("exampleserver.providersDir");
@@ -64,7 +64,7 @@ class ProviderRegistryHolderTest {
     @Test
     void refreshClosesThePreviousRegistrySoItsJarCanBeDeletedAfterward(@TempDir Path dir, @TempDir Path otherDir)
             throws Exception {
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(dir));
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path srcJar = null;
@@ -93,7 +93,7 @@ class ProviderRegistryHolderTest {
 
     @Test
     void uninstallClosesRegistryBeforeDeletingJar_thenRebuildsWithoutIt(@TempDir Path dir) throws Exception {
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(dir));
 
         String staged = System.getProperty("exampleserver.providersDir");
         Path srcJar = null;
@@ -119,7 +119,7 @@ class ProviderRegistryHolderTest {
 
     @Test
     void uninstallUnknownProviderIdIsANoOp(@TempDir Path dir) {
-        ProviderRegistryHolder holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(dir));
+        ProviderRegistryHolder holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(dir));
         assertFalse(holder.uninstall("does-not-exist", dir));
     }
 }

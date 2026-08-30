@@ -57,8 +57,8 @@ class ProxyManagerTest {
         stageProviderJar(providersDir);
         stageProxyJar(proxiesDir);
         ai = AiJava.builder().storage(Storage.file(configDir)).build();
-        providerHolder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
-        proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
+        providerHolder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
+        proxyHolder = new ProxyRegistryHolder(TestPlugins.create(), ProxyDiscovery.resolve(proxiesDir));
         mgr = new ProxyManager(ai, providerHolder, proxyHolder, ai.store(), ai.jsonCodec(), ai.logger());
     }
 
@@ -80,7 +80,7 @@ class ProxyManagerTest {
 
     @Test
     void emptyProxyHolderYieldsNoProxies(@TempDir Path emptyProxiesDir) {
-        ProxyRegistryHolder empty = new ProxyRegistryHolder(ProxyDiscovery.resolve(emptyProxiesDir));
+        ProxyRegistryHolder empty = new ProxyRegistryHolder(TestPlugins.create(), ProxyDiscovery.resolve(emptyProxiesDir));
         ProxyManager emptyMgr = new ProxyManager(ai, providerHolder, empty, ai.store(), ai.jsonCodec(), ai.logger());
         assertTrue(emptyMgr.list().isEmpty(), "no proxies installed -> no hardcoded claude-code row");
     }

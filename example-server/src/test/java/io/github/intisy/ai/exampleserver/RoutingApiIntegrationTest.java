@@ -82,9 +82,9 @@ class RoutingApiIntegrationTest {
         json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
-        proxyHolder = new ProxyRegistryHolder(ProxyDiscovery.resolve(proxiesDir));
+        proxyHolder = new ProxyRegistryHolder(TestPlugins.create(), ProxyDiscovery.resolve(proxiesDir));
         assertTrue(proxyHolder.listProxyIds().contains(APP_PROXY_ID), proxyHolder.listProxyIds().toString());
         assertTrue(proxyHolder.listProxyIds().contains(SECOND_APP_PROXY_ID), proxyHolder.listProxyIds().toString());
 

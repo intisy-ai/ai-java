@@ -63,7 +63,7 @@ class ProviderInstallIntegrationTest {
         json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().isEmpty(), "must start with zero providers loaded");
 
         AccountStore accountStore = new AccountStore(store, json);

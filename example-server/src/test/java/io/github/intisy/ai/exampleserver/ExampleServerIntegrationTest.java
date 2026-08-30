@@ -57,7 +57,7 @@ class ExampleServerIntegrationTest {
         JsonCodec json = ai.jsonCodec();
         ServerSeeds.seedEcho(store, json, CONFIG_FILE);
 
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
 
         AccountStore accountStore = new AccountStore(store, json);

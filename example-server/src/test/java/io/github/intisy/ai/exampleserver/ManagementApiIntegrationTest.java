@@ -59,7 +59,7 @@ class ManagementApiIntegrationTest {
         accountStore.add("echo", account("acc1", "acc1@example.com"));
         accountStore.add("echo", account("acc2", "acc2@example.com"));
 
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         assertTrue(holder.listProviderIds().contains("echo"), holder.listProviderIds().toString());
 
         AccountAdmin admin = new AccountAdmin(accountStore, ai.clock());

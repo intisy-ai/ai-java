@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProxyRegistryHolderTest {
     @Test
     void emptyDirYieldsEmptyHolder(@TempDir Path dir) {
-        ProxyRegistryHolder holder = new ProxyRegistryHolder(ProxyDiscovery.resolve(dir));
+        ProxyRegistryHolder holder = new ProxyRegistryHolder(TestPlugins.create(), ProxyDiscovery.resolve(dir));
         assertTrue(holder.listProxyIds().isEmpty());
         assertNull(holder.profileFor("claude-code"));
         assertNull(holder.displayNameFor("claude-code"));

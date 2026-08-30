@@ -37,7 +37,7 @@ class ProxyServerTest {
         stageProviderJar(providersDir);
         ai = AiJava.builder().storage(Storage.memory()).build();
         ServerSeeds.seedEcho(ai.store(), ai.jsonCodec(), CONFIG_FILE);
-        holder = new ProviderRegistryHolder(ProviderDiscovery.resolve(providersDir));
+        holder = new ProviderRegistryHolder(TestPlugins.create(), ProviderDiscovery.resolve(providersDir));
         RoutingProfile profile = ServerProfile.echoTiers(CONFIG_FILE);
         AiJava.WiredRouter router = ai.router(profile,
                 id -> holder.asHandlerResolver().resolve(id), holder::listProviderIds);
