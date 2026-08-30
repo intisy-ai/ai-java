@@ -18,6 +18,9 @@ dependencies {
     // The seam INTERFACES those implement, which a release-asset jar does not export transitively.
     // api for the same reason as the rest: AiJava's own signatures name them.
     githubApi "intisy:bayonet:1.8.0:contract"
+    // The plugin model itself: PluginHost, sessions, the ledger, capability records and the service
+    // hub. api, not implementation: this host's own surface hands a PluginHost and its records back.
+    githubApi "intisy:bayonet:1.8.0:engine"
     // api's JVM seam implementations (FileStore, JdbcStore, GsonJsonCodec and friends).
     // api, not implementation: Storage and AiJava.builder() name them.
     githubApi "intisy:bayonet:1.8.0:jvm-seam"
