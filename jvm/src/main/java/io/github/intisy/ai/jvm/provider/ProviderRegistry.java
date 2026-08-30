@@ -55,6 +55,11 @@ public final class ProviderRegistry implements Closeable {
         return new ProviderRegistry(JarServices.<Provider>empty());
     }
 
+    /** {@return the discovered providers, in discovery order} */
+    public List<Provider> providers() {
+        return discovered.all();
+    }
+
     /** {@return the discovered providers, adapted into a {@link HandlerResolver}} */
     public HandlerResolver asHandlerResolver() {
         return HandlerResolvers.fromHandlers(new ArrayList<IrHandler>(discovered.all()));

@@ -5,7 +5,14 @@ import io.github.intisy.ai.jvm.backend.Backends;
 import io.github.intisy.ai.jvm.backend.env.Env;
 import io.github.intisy.ai.jvm.backend.notify.JsonlNotifier;
 import io.github.intisy.ai.seam.jvm.FileStore;
+import io.github.intisy.ai.auth.contracts.AuthContracts;
+import io.github.intisy.ai.auth.contracts.Provider;
+import io.github.intisy.ai.ir.IrContracts;
+import io.github.intisy.ai.ir.spi.IrHandler;
+import io.github.intisy.ai.jvm.plugin.Plugins;
 import io.github.intisy.ai.jvm.provider.ProviderRegistry;
+import io.github.intisy.ai.shared.logic.HandlerResolvers;
+import io.github.intisy.ai.shared.routing.ProxyContracts;
 import io.github.intisy.ai.shared.logic.Notifier;
 import io.github.intisy.ai.shared.logic.Router;
 import io.github.intisy.ai.shared.logic.RouterOptions;
@@ -25,6 +32,8 @@ import io.github.intisy.ai.api.seam.HttpResponse;
 import io.github.intisy.ai.shared.store.AccountStore;
 
 import java.io.Closeable;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -52,6 +61,9 @@ import java.util.function.Supplier;
  */
 public class AiJava implements Closeable {
 
+    /** What this host calls itself to the plugin model. */
+    private static final String APP_ID = "ai-java";
+
     private final Store store;
     private final HttpClient httpClient;
     private final JsonCodec json;
@@ -62,6 +74,7 @@ public class AiJava implements Closeable {
     private final Notifier notifier;
     private final ManagerOptions managerOptions;
     private final ProviderRegistry providerRegistry;
+    private final Plugins plugins;
 
     private AiJava(Builder b, Store resolvedStore, Backend base) {
         this.store = resolvedStore;
@@ -77,6 +90,25 @@ public class AiJava implements Closeable {
         this.providerRegistry = b.providerRegistry != null
                 ? b.providerRegistry
                 : (b.providersDir != null ? ProviderRegistry.fromDirectory(b.providersDir) : ProviderRegistry.empty());
+        this.plugins = new Plugins(APP_ID, Arrays.asList(
+                AuthContracts.PROVIDER_ID, ProxyContracts.APP_PROXY_ID, IrContracts.TRANSLATOR_ID));
+        for (Provider provider : providerRegistry.providers()) {
+            plugins.register(AuthContracts.PROVIDER_ID, provider.id(), provider);
+        }
+    }
+
+    /**
+     * The plugin host every discovered plugin registers with, and the one thing a caller resolves
+     * a plugin through.
+     *
+     * @implNote Exposed so a caller that discovers a kind this class does not itself hold, a proxy
+     * or a translator, registers it here rather than growing a registry of its own. That is what
+     * makes a fourth kind of plugin cost no host code.
+     *
+     * @return this host's plugin model
+     */
+    public Plugins plugins() {
+        return plugins;
     }
 
     /** {@return a fresh builder, whose only hard requirement is a storage choice} */
@@ -152,9 +184,8 @@ public class AiJava implements Closeable {
     /**
      * A {@link Router} pre-wired with this {@link AiJava}'s store/json/clock/logger/notifier,
      * whose handlers come from this {@link AiJava}'s {@link #providerRegistry()} (the
-     * {@link ProviderRegistry} discovered from {@link Builder#providersDir(Path)}, injected
-     * directly via {@link Builder#providerRegistry(ProviderRegistry)}, or an empty one), so
-     * callers don't need to hand-assemble a resolver themselves. Use the three-argument
+     * providers registered with {@link #plugins()}, resolved by capability id rather than by
+     * their Java type), so callers don't need to hand-assemble a resolver themselves. Use the three-argument
      * {@link #router(RoutingProfile, HandlerResolver, Supplier)} overload instead when a caller
      * needs to supply its own {@link HandlerResolver} (e.g. a test double).
      *
@@ -162,7 +193,10 @@ public class AiJava implements Closeable {
      * @return a router wired to this instance's own dependencies
      */
     public WiredRouter router(RoutingProfile profile) {
-        return router(profile, providerRegistry.asHandlerResolver(), providerRegistry::listProviderIds);
+        List<IrHandler> handlers = new ArrayList<IrHandler>(
+                plugins.resolve(AuthContracts.PROVIDER_ID, Provider.class));
+        return router(profile, HandlerResolvers.fromHandlers(handlers),
+                () -> plugins.providerIds(AuthContracts.PROVIDER_ID));
     }
 
     /**
